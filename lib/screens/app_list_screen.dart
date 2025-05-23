@@ -18,10 +18,8 @@ class _AppListScreenState extends State<AppListScreen> {
   bool _showSystemApps = false;
   String _searchQuery = '';
   String? _error;
+  String _lastUpdateDate = 'Desconocido';
   
-  // Set para almacenar los paquetes habilitados
-  final Set<String> _enabledPackages = {};
-
   @override
   void initState() {
     super.initState();
@@ -35,8 +33,11 @@ class _AppListScreenState extends State<AppListScreen> {
         _error = null;
       });
 
-      // Obtener la lista de aplicaciones desde el código nativo
+      // Obtener la lista de aplicaciones desde el código nativo (primero intenta desde SharedPreferences)
       final List<dynamic> result = await platform.invokeMethod('getInstalledApps');
+      
+      // Obtener la fecha de última actualización
+      final String lastUpdateDate = await platform.invokeMethod('getLastUpdateDate');
       
       // Convertir correctamente cada elemento a Map<String, dynamic>
       final List<Map<String, dynamic>> apps = result.map((item) {
@@ -48,6 +49,7 @@ class _AppListScreenState extends State<AppListScreen> {
       // Actualizar el estado con las aplicaciones cargadas
       setState(() {
         _apps = apps;
+        _lastUpdateDate = lastUpdateDate;
         _filterApps();
         _isLoading = false;
       });
@@ -61,6 +63,72 @@ class _AppListScreenState extends State<AppListScreen> {
         _error = "Error inesperado: $e";
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _reloadAppsFromSystem() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      // Forzar la carga de aplicaciones desde el sistema
+      final List<dynamic> result = await platform.invokeMethod('loadAppsFromSystem');
+      
+      // Obtener la fecha de última actualización
+      final String lastUpdateDate = await platform.invokeMethod('getLastUpdateDate');
+      
+      // Convertir correctamente cada elemento a Map<String, dynamic>
+      final List<Map<String, dynamic>> apps = result.map((item) {
+        final Map<String, dynamic> app = Map<String, dynamic>.from(item as Map);
+        return app;
+      }).toList();
+      
+      // Actualizar el estado con las aplicaciones cargadas
+      setState(() {
+        _apps = apps;
+        _lastUpdateDate = lastUpdateDate;
+        _filterApps();
+        _isLoading = false;
+      });
+    } on PlatformException catch (e) {
+      setState(() {
+        _error = "Error al recargar aplicaciones: ${e.message}";
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = "Error inesperado: $e";
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _updateAppState(String packageName, bool isEnabled) async {
+    try {
+      // Llamar al método nativo para actualizar el estado
+      await platform.invokeMethod('updateAppState', {
+        'packageName': packageName,
+        'isEnabled': isEnabled,
+      });
+      
+      // Actualizar el estado local
+      setState(() {
+        for (var i = 0; i < _apps.length; i++) {
+          if (_apps[i]['packageName'] == packageName) {
+            _apps[i] = {..._apps[i], 'isEnabled': isEnabled};
+            break;
+          }
+        }
+        _filterApps();
+      });
+    } on PlatformException catch (e) {
+      print("Error al actualizar estado de la aplicación: ${e.message}");
+      // Mostrar un snackbar con el error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al actualizar estado: ${e.message}")),
+      );
     }
   }
 
@@ -84,13 +152,16 @@ class _AppListScreenState extends State<AppListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Contar aplicaciones habilitadas
+    final enabledAppsCount = _apps.where((app) => app['isEnabled'] == true).length;
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lista de Aplicaciones'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadApps,
+            onPressed: _reloadAppsFromSystem,
           ),
         ],
       ),
@@ -126,6 +197,18 @@ class _AppListScreenState extends State<AppListScreen> {
             },
           ),
           
+          // Información de última actualización
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              'Última actualización: $_lastUpdateDate',
+              style: const TextStyle(
+                fontStyle: FontStyle.italic,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          
           // Contador de aplicaciones
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -137,7 +220,7 @@ class _AppListScreenState extends State<AppListScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  'Habilitadas: ${_enabledPackages.length}',
+                  'Habilitadas: $enabledAppsCount',
                   style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
                 ),
               ],
@@ -157,7 +240,7 @@ class _AppListScreenState extends State<AppListScreen> {
                             itemBuilder: (context, index) {
                               final app = _filteredApps[index];
                               final packageName = app['packageName'] as String? ?? '';
-                              final isEnabled = _enabledPackages.contains(packageName);
+                              final isEnabled = app['isEnabled'] as bool? ?? false;
                               
                               return ListTile(
                                 leading: _buildAppIcon(app['icon'] as String?),
@@ -166,13 +249,7 @@ class _AppListScreenState extends State<AppListScreen> {
                                 trailing: Switch(
                                   value: isEnabled,
                                   onChanged: (value) {
-                                    setState(() {
-                                      if (value) {
-                                        _enabledPackages.add(packageName);
-                                      } else {
-                                        _enabledPackages.remove(packageName);
-                                      }
-                                    });
+                                    _updateAppState(packageName, value);
                                   },
                                 ),
                               );

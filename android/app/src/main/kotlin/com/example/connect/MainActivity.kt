@@ -120,6 +120,54 @@ class MainActivity: FlutterActivity() {
                         result.error("ERROR", "Error al obtener aplicaciones: ${e.message}", null)
                     }
                 }
+                "loadAppsFromSystem" -> {
+                    try {
+                        val apps = appListService.loadAppsFromSystem()
+                        result.success(apps)
+                        Log.d("MainActivity", "Forzada carga de ${apps.size} aplicaciones desde el sistema")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al obtener aplicaciones desde el sistema", e)
+                        result.error("ERROR", "Error al obtener aplicaciones: ${e.message}", null)
+                    }
+                }
+                "getLastUpdateDate" -> {
+                    try {
+                        val date = appListService.getLastUpdateDate()
+                        result.success(date)
+                        Log.d("MainActivity", "Fecha de última actualización: $date")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al obtener fecha de actualización", e)
+                        result.error("ERROR", "Error al obtener fecha: ${e.message}", null)
+                    }
+                }
+                "updateAppState" -> {
+                    try {
+                        val packageName = call.argument<String>("packageName")
+                        val isEnabled = call.argument<Boolean>("isEnabled")
+                        
+                        if (packageName != null && isEnabled != null) {
+                            appListService.updateAppState(packageName, isEnabled)
+                            result.success(true)
+                            Log.d("MainActivity", "Estado de la aplicación $packageName actualizado a $isEnabled")
+                        } else {
+                            result.error("INVALID_ARGS", "Argumentos inválidos", null)
+                            Log.e("MainActivity", "Argumentos inválidos para updateAppState")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al actualizar estado de la aplicación", e)
+                        result.error("ERROR", "Error al actualizar estado: ${e.message}", null)
+                    }
+                }
+                "getEnabledPackages" -> {
+                    try {
+                        val enabledPackages = appListService.getEnabledPackages()
+                        result.success(enabledPackages.toList())
+                        Log.d("MainActivity", "Obtenidos ${enabledPackages.size} paquetes habilitados")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al obtener paquetes habilitados", e)
+                        result.error("ERROR", "Error al obtener paquetes habilitados: ${e.message}", null)
+                    }
+                }
                 else -> {
                     result.notImplemented()
                     Log.w("MainActivity", "Llamada a método no implementado en app_list: ${call.method}")
