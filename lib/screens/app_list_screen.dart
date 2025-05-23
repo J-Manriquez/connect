@@ -288,6 +288,44 @@ class _AppListScreenState extends State<AppListScreen> {
           ),
         ],
       ),
+      // Agregar el Bottom Navigation Bar
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 2, // Índice actual (Aplicaciones - ahora a la derecha)
+        onTap: (index) {
+          // Navegar a la pantalla correspondiente según el índice
+          switch (index) {
+            case 0:
+              // Navegar a la pantalla de configuración
+              Navigator.pushReplacementNamed(context, '/settings');
+              break;
+            case 1:
+              // Navegar a la pantalla Emisor
+              Navigator.pushReplacementNamed(context, '/');
+              break;
+            case 2:
+              // Ya estamos en la pantalla de lista de apps
+              break;
+          }
+        },
+        selectedFontSize: 14.0,
+        unselectedFontSize: 12.0,
+        selectedIconTheme: const IconThemeData(size: 37.5), // 2.5 veces el tamaño normal (15*2.5)
+        unselectedIconTheme: const IconThemeData(size: 22.5), // 1.5 veces el tamaño normal (15*1.5)
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Configuración',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.send), // Icono que refleja emisión
+            label: 'Emisor',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.apps),
+            label: 'Aplicaciones',
+          ),
+        ],
+      ),
     );
   }
   

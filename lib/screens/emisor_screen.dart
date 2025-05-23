@@ -119,26 +119,6 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
     return Scaffold(
       appBar: AppBar(
         title: const Text('Emisor de Notificaciones'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.apps),
-            onPressed: () {
-              Navigator.pushNamed(context, '/app_list').then((_) {
-                // Actualizar el filtro cuando regrese de la pantalla de apps
-                _filterNotifications();
-              });
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.pushNamed(context, '/settings').then((_) {
-                // Actualizar cuando regrese de la pantalla de configuración
-                _filterNotifications();
-              });
-            },
-          ),
-        ],
       ),
       body: Column(
         children: [
@@ -185,6 +165,7 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
               ),
             ),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Icon(
                   _isLinked ? Icons.link : Icons.link_off,
@@ -234,13 +215,20 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredNotifications.isEmpty
-                    ? const Center(child: Text('No hay notificaciones'))
+                    ? const Center(
+                        child: Text(
+                          'No hay notificaciones de las apps seleccionadas',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      )
                     : ListView.builder(
                         itemCount: _filteredNotifications.length,
                         itemBuilder: (context, index) {
                           final notification = _filteredNotifications[index];
                           return ListTile(
-                            leading: const Icon(Icons.notifications),
                             title: Text(notification['title'] ?? 'Sin título'),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -258,6 +246,47 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
                           );
                         },
                       ),
+          ),
+        ],
+      ),
+      // Agregar el Bottom Navigation Bar
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 1, // Índice actual (Emisor - ahora en el centro)
+        onTap: (index) {
+          // Navegar a la pantalla correspondiente según el índice
+          switch (index) {
+            case 0:
+              // Navegar a la pantalla de configuración
+              Navigator.pushNamed(context, '/settings');
+              break;
+            case 1:
+              // Ya estamos en la pantalla Emisor
+              break;
+            case 2:
+              // Navegar a la pantalla de lista de apps
+              Navigator.pushNamed(context, '/app_list').then((_) {
+                // Actualizar el filtro cuando regrese de la pantalla de apps
+                _filterNotifications();
+              });
+              break;
+          }
+        },
+        selectedFontSize: 14.0,
+        unselectedFontSize: 12.0,
+        selectedIconTheme: const IconThemeData(size: 37.5), // 2.5 veces el tamaño normal (15*2.5)
+        unselectedIconTheme: const IconThemeData(size: 22.5), // 1.5 veces el tamaño normal (15*1.5)
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Configuración',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.send), // Icono que refleja emisión
+            label: 'Emisor',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.apps),
+            label: 'Aplicaciones',
           ),
         ],
       ),

@@ -164,6 +164,44 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
       ),
+      // Agregar el Bottom Navigation Bar
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0, // Índice actual (Configuración - ahora a la izquierda)
+        onTap: (index) {
+          // Navegar a la pantalla correspondiente según el índice
+          switch (index) {
+            case 0:
+              // Ya estamos en la pantalla de configuración
+              break;
+            case 1:
+              // Navegar a la pantalla Emisor
+              Navigator.pushReplacementNamed(context, '/');
+              break;
+            case 2:
+              // Navegar a la pantalla de lista de apps
+              Navigator.pushReplacementNamed(context, '/app_list');
+              break;
+          }
+        },
+        selectedFontSize: 14.0,
+        unselectedFontSize: 12.0,
+        selectedIconTheme: const IconThemeData(size: 37.5), // 2.5 veces el tamaño normal (15*2.5)
+        unselectedIconTheme: const IconThemeData(size: 22.5), // 1.5 veces el tamaño normal (15*1.5)
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Configuración',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.send), // Icono que refleja emisión
+            label: 'Emisor',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.apps),
+            label: 'Aplicaciones',
+          ),
+        ],
+      ),
     );
   }
 }
