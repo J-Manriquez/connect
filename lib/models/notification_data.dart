@@ -45,7 +45,8 @@ class NotificationData {
 
   factory NotificationData.fromNotificationMap(Map<String, dynamic> notification) {
     final DateTime now = DateTime.now();
-    final String uniqueId = '${now.hour}${now.minute}${now.second}_${_generateRandomCode()}';
+    // Usar el timestamp como ID en formato de milisegundos desde la época
+    final String uniqueId = now.millisecondsSinceEpoch.toString();
     
     return NotificationData(
       id: uniqueId,
@@ -58,12 +59,13 @@ class NotificationData {
     );
   }
   
-  static String _generateRandomCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    String result = '';
-    for (int i = 0; i < 4; i++) {
-      result += chars[DateTime.now().microsecond % chars.length];
-    }
-    return result;
-  }
+  // Este método ya no es necesario ya que no generamos códigos aleatorios
+  // static String _generateRandomCode() {
+  //   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  //   String result = '';
+  //   for (int i = 0; i < 4; i++) {
+  //     result += chars[DateTime.now().microsecond % chars.length];
+  //   }
+  //   return result;
+  // }
 }

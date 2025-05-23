@@ -108,7 +108,7 @@ class NotificationListener : NotificationListenerService() {
         }
 
         val notificationData = mapOf(
-            "id" to sbn.id,
+            "id" to time.toString(), // Usar el timestamp como ID
             "packageName" to packageName,
             "appName" to appName,
             "title" to title,
