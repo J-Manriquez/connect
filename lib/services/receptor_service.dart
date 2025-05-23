@@ -1,24 +1,31 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/services/firebase_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ReceptorService {
   final FirebaseService _firebaseService = FirebaseService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // Clave para almacenar el ID del dispositivo emisor vinculado
+  static const String KEY_LINKED_DEVICE_ID = 'linked_device_id';
 
   // Verificar si un código de vinculación existe en Firestore
   Future<String?> verifyLinkCode(String code) async {
     try {
-      // Buscar el documento con el ID igual al código ingresado
+      // Buscar en todos los documentos de la colección 'dispositivos'
       final QuerySnapshot querySnapshot = await _firestore
           .collection('dispositivos')
-          .where('id', isEqualTo: code)
-          .limit(1)
           .get();
-
-      // Si encontramos un documento, devolver su ID
-      if (querySnapshot.docs.isNotEmpty) {
-        return querySnapshot.docs.first.id;
+      
+      // Recorrer todos los documentos para encontrar el que coincida con el código
+      for (var doc in querySnapshot.docs) {
+        if (doc.id == code) {
+          print('Dispositivo encontrado con ID: ${doc.id}');
+          return doc.id;
+        }
       }
+      
+      print('No se encontró ningún dispositivo con el código: $code');
       return null;
     } catch (e) {
       print('Error al verificar código de vinculación: $e');
@@ -26,23 +33,42 @@ class ReceptorService {
     }
   }
 
-  // Actualizar el estado de vinculación a true
-  Future<bool> updateLinkStatus(String deviceId) async {
+  // Guardar el ID del dispositivo emisor vinculado en SharedPreferences
+  Future<bool> saveLinkedDeviceId(String deviceId) async {
     try {
-      // Actualizar el estado de vinculación en Firebase
-      await _firebaseService.updateLinkStatus(true);
-      print('Estado de vinculación actualizado a true para el dispositivo: $deviceId');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(KEY_LINKED_DEVICE_ID, deviceId);
+      print('ID del dispositivo emisor guardado: $deviceId');
       return true;
     } catch (e) {
-      print('Error al actualizar estado de vinculación: $e');
+      print('Error al guardar ID del dispositivo emisor: $e');
       return false;
+    }
+  }
+
+  // Obtener el ID del dispositivo emisor vinculado
+  Future<String?> getLinkedDeviceId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(KEY_LINKED_DEVICE_ID);
+    } catch (e) {
+      print('Error al obtener ID del dispositivo emisor: $e');
+      return null;
     }
   }
 
   // Iniciar escucha de notificaciones desde Firebase
   Stream<List<Map<String, dynamic>>> listenForNotifications() async* {
     try {
-      final deviceId = await _firebaseService.getDeviceId();
+      // Obtener el ID del dispositivo emisor vinculado
+      final deviceId = await getLinkedDeviceId();
+      
+      if (deviceId == null) {
+        print('No hay dispositivo emisor vinculado');
+        yield [];
+        return;
+      }
+      
       final DateTime now = DateTime.now();
       final String dateId = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
       
@@ -82,7 +108,6 @@ class ReceptorService {
     }
   }
 
-
   // Obtener el estado del dispositivo emisor
   Future<Map<String, dynamic>> getDeviceStatus(String deviceId) async {
     try {
@@ -96,31 +121,11 @@ class ReceptorService {
       final data = deviceDoc.data() ?? {};
       
       return {
-        'isServiceRunning': data['service-running'] ?? false,
+        'isServiceRunning': data['status-servicio'] ?? false,
         'isLinked': data['status-vinculacion'] ?? false,
       };
     } catch (e) {
       throw Exception('Error al obtener estado del dispositivo: $e');
-    }
-  }
-
-  // Obtener las notificaciones del dispositivo emisor
-  Future<List<Map<String, dynamic>>> getNotifications(String deviceId) async {
-    try {
-      // Obtener la colección de notificaciones del dispositivo
-      final notificationsSnapshot = await _firestore
-          .collection('dispositivos')
-          .doc(deviceId)
-          .collection('notificaciones')
-          .orderBy('timestamp', descending: true)
-          .get();
-      
-      // Convertir los documentos a una lista de mapas
-      return notificationsSnapshot.docs
-          .map((doc) => doc.data())
-          .toList();
-    } catch (e) {
-      throw Exception('Error al obtener notificaciones: $e');
     }
   }
 }
