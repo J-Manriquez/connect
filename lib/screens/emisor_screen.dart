@@ -17,6 +17,12 @@ class EmisorScreen extends StatelessWidget {
         title: const Text('Emisor de Notificaciones'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.apps),
+            onPressed: () {
+              Navigator.pushNamed(context, '/app_list');
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
               Navigator.pushNamed(context, '/settings');

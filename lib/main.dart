@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
 import 'screens/emisor_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/app_list_screen.dart';
 
 void main() {
   runApp(const MainApp());
@@ -161,6 +162,7 @@ class _MainAppState extends State<MainApp> {
               startService: _startService,
               stopService: _stopService,
             ),
+        '/app_list': (context) => const AppListScreen(),
       },
     );
   }

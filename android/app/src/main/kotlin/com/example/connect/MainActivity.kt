@@ -12,7 +12,10 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.example.connect/notifications"
+    private val APP_LIST_CHANNEL = "com.example.connect/app_list"
     private lateinit var channel: MethodChannel
+    private lateinit var appListChannel: MethodChannel
+    private lateinit var appListService: AppListService
 
     // Puedes mantener esta instancia si la necesitas en otras partes de tu app nativa
     companion object {
@@ -23,11 +26,18 @@ class MainActivity: FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
 
         instance = this
+        
+        // Inicializar el servicio de lista de aplicaciones
+        appListService = AppListService(this)
 
+        // Canal para notificaciones
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         // Asignar el MethodChannel al servicio tan pronto como se crea
         NotificationListener.methodChannel = channel
         Log.d("MainActivity", "MethodChannel assigned to NotificationListener")
+        
+        // Canal para lista de aplicaciones
+        appListChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_LIST_CHANNEL)
 
         // Iniciar automáticamente el servicio si el permiso está concedido
         if (isNotificationServiceEnabled()) {
@@ -40,6 +50,7 @@ class MainActivity: FlutterActivity() {
             }
         }
 
+        // Configurar el manejador para el canal de notificaciones
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startNotificationService" -> {
@@ -83,16 +94,35 @@ class MainActivity: FlutterActivity() {
                     result.success(isNotificationServiceEnabled())
                     Log.d("MainActivity", "¿Permiso de escucha de notificaciones concedido? ${isNotificationServiceEnabled()}")
                 }
-                 "openNotificationSettings" -> {
+                "openNotificationSettings" -> {
                     // Abrir la pantalla de configuración de escucha de notificaciones
                     openNotificationListenerSettings()
                     result.success(null) // No esperamos un resultado de esta acción
                     Log.d("MainActivity", "Abriendo configuración de escucha de notificaciones.")
                 }
-                // Se eliminan los manejadores getInstalledApps y updateEnabledApps
                 else -> {
                     result.notImplemented()
                     Log.w("MainActivity", "Llamada a método no implementado: ${call.method}")
+                }
+            }
+        }
+        
+        // Configurar el manejador para el canal de lista de aplicaciones
+        appListChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getInstalledApps" -> {
+                    try {
+                        val apps = appListService.getInstalledApps()
+                        result.success(apps)
+                        Log.d("MainActivity", "Obtenidas ${apps.size} aplicaciones instaladas")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al obtener aplicaciones instaladas", e)
+                        result.error("ERROR", "Error al obtener aplicaciones: ${e.message}", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                    Log.w("MainActivity", "Llamada a método no implementado en app_list: ${call.method}")
                 }
             }
         }
@@ -123,6 +153,4 @@ class MainActivity: FlutterActivity() {
             Log.e("MainActivity", "Error al abrir configuración de notificaciones", e)
         }
     }
-
-    // Se elimina la función getInstalledApplications
 }
