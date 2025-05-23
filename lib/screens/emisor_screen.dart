@@ -193,6 +193,20 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
       ),
       body: Column(
         children: [
+          // Botón para navegar a la pantalla Receptor
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pushNamed(context, '/receptor');
+              },
+              icon: const Icon(Icons.watch),
+              label: const Text('Ver en Receptor'),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(40),
+              ),
+            ),
+          ),
           // Contenedor para el estado del servicio
           Container(
             margin: const EdgeInsets.all(8.0),

@@ -1,3 +1,4 @@
+import 'package:connect/screens/receptor_screen.dart';
 import 'package:connect/services/notification_filter_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
@@ -248,6 +249,7 @@ class _MainAppState extends State<MainApp> {
           toggleSaveToFirebase: _toggleSaveToFirebase,
         ),
         '/app_list': (context) => const AppListScreen(),
+        '/receptor': (context) => const ReceptorScreen(), // Añadir la nueva ruta
       },
     );
   }
