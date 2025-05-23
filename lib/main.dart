@@ -12,12 +12,10 @@ import 'screens/app_list_screen.dart';
 void main() async {
   // Asegurar que Flutter esté inicializado
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Inicializar Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(const MainApp());
 }
 
@@ -31,7 +29,7 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   // Define the MethodChannel
   static const platform = MethodChannel('com.example.connect/notifications');
-  
+
   // Servicio de Firebase
   final FirebaseService _firebaseService = FirebaseService();
 
@@ -49,25 +47,25 @@ class _MainAppState extends State<MainApp> {
     // Verificar el estado inicial del servicio y el permiso
     _checkServiceStatus();
     _checkPermissionStatus();
-    
+
     // Inicializar la estructura de datos en Firebase
     _initializeFirebaseData();
-    
+
     // Intentar iniciar el servicio automáticamente si no está corriendo
     // y el permiso está concedido
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoStartServiceIfNeeded();
     });
   }
-  
+
   // Método para inicializar la estructura de datos en Firebase
   Future<void> _initializeFirebaseData() async {
     try {
       await _firebaseService.initializeFirebaseData(_isServiceRunning);
-      
+
       // Obtener el estado de guardado desde Firebase
       _isSavingToFirebase = await _firebaseService.getSaveStatus();
-      
+
       print('Estructura de datos inicializada en Firebase');
     } catch (e) {
       print('Error al inicializar datos en Firebase: $e');
@@ -90,7 +88,7 @@ class _MainAppState extends State<MainApp> {
           _notifications.add(notificationData);
         });
         print('Received notification: $notificationData');
-        
+
         // Si está habilitado el guardado en Firebase, guardar la notificación
         if (_isSavingToFirebase) {
           try {
@@ -105,7 +103,7 @@ class _MainAppState extends State<MainApp> {
           _isServiceRunning = true;
         });
         print('Notification service connected.');
-        
+
         // Actualizar el estado del servicio en Firebase
         try {
           await _firebaseService.updateServiceStatus(true);
@@ -118,7 +116,7 @@ class _MainAppState extends State<MainApp> {
           _isServiceRunning = false;
         });
         print('Notification service disconnected.');
-        
+
         // Actualizar el estado del servicio en Firebase
         try {
           await _firebaseService.updateServiceStatus(false);
@@ -134,7 +132,9 @@ class _MainAppState extends State<MainApp> {
   // Método para verificar si el permiso está concedido
   Future<void> _checkPermissionStatus() async {
     try {
-      final bool isEnabled = await platform.invokeMethod('isNotificationServiceEnabled');
+      final bool isEnabled = await platform.invokeMethod(
+        'isNotificationServiceEnabled',
+      );
       setState(() {
         _isPermissionGranted = isEnabled;
       });
@@ -161,7 +161,9 @@ class _MainAppState extends State<MainApp> {
   Future<void> _startService() async {
     try {
       // La llamada nativa verificará el permiso y abrirá la configuración si es necesario
-      final bool started = await platform.invokeMethod('startNotificationService');
+      final bool started = await platform.invokeMethod(
+        'startNotificationService',
+      );
       if (started) {
         print('Service start intent sent.');
         // El estado _isServiceRunning se actualizará cuando el servicio llame a serviceConnected
@@ -195,7 +197,7 @@ class _MainAppState extends State<MainApp> {
       print("Failed to open settings: '${e.message}'.");
     }
   }
-  
+
   // Método para cambiar el estado de guardado en Firebase
   Future<void> _toggleSaveToFirebase(bool isSaving) async {
     try {
@@ -203,15 +205,15 @@ class _MainAppState extends State<MainApp> {
       setState(() {
         _isSavingToFirebase = isSaving;
       });
-      
+
       // Actualizar el estado en Firebase
       await _firebaseService.updateSaveStatus(isSaving);
-      
+
       // Si se activa el guardado, sincronizar la lista de apps
       if (isSaving) {
         await NotificationFilterService.syncEnabledAppsWithFirebase();
       }
-      
+
       print('Estado de guardado en Firebase actualizado: $isSaving');
     } catch (e) {
       print('Error al actualizar estado de guardado en Firebase: $e');
@@ -226,26 +228,25 @@ class _MainAppState extends State<MainApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Connect',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
       initialRoute: '/',
       routes: {
         '/': (context) => EmisorScreen(
-              notifications: _notifications,
-              isServiceRunning: _isServiceRunning,
-            ),
+          notifications: _notifications,
+          isServiceRunning: _isServiceRunning,
+          isSavingToFirebase: _isSavingToFirebase, // Pasar el estado
+          toggleSaveToFirebase: _toggleSaveToFirebase, // Pasar la función
+        ),
         '/settings': (context) => SettingsScreen(
-              isServiceRunning: _isServiceRunning,
-              isPermissionGranted: _isPermissionGranted,
-              isSavingToFirebase: _isSavingToFirebase,
-              checkPermissionStatus: _checkPermissionStatus,
-              openNotificationSettings: _openNotificationSettings,
-              startService: _startService,
-              stopService: _stopService,
-              toggleSaveToFirebase: _toggleSaveToFirebase,
-            ),
+          isServiceRunning: _isServiceRunning,
+          isPermissionGranted: _isPermissionGranted,
+          isSavingToFirebase: _isSavingToFirebase,
+          checkPermissionStatus: _checkPermissionStatus,
+          openNotificationSettings: _openNotificationSettings,
+          startService: _startService,
+          stopService: _stopService,
+          toggleSaveToFirebase: _toggleSaveToFirebase,
+        ),
         '/app_list': (context) => const AppListScreen(),
       },
     );

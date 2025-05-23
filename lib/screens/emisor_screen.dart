@@ -8,11 +8,15 @@ import 'package:connect/services/notification_filter_service.dart';  // Add this
 class EmisorScreen extends StatefulWidget {
   final List<Map<String, dynamic>> notifications;
   final bool isServiceRunning;
+  final bool isSavingToFirebase; // Añadir este parámetro
+  final Function(bool) toggleSaveToFirebase; // Añadir esta función
 
   const EmisorScreen({
     super.key, 
     required this.notifications,
     required this.isServiceRunning,
+    required this.isSavingToFirebase, // Requerido
+    required this.toggleSaveToFirebase, // Requerido
   });
 
   @override
@@ -90,6 +94,7 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
     // Cuando la app vuelve al primer plano, actualizar las notificaciones
     if (state == AppLifecycleState.resumed) {
       _filterNotifications();
+      _checkLinkStatus();
     }
   }
 
@@ -114,11 +119,77 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
     super.dispose();
   }
 
+  // Verificar el estado de guardado desde Firebase
+  // Future<void> _checkSaveStatus() async {
+  //   try {
+  //     final isSaving = await _firebaseService.getSaveStatus();
+  //     setState(() {
+  //       _isSavingToFirebase = isSaving;
+  //     });
+  //   } catch (e) {
+  //     print('Error al verificar estado de guardado: $e');
+  //   }
+  // }
+  
+  // // Cambiar el estado de guardado
+  // Future<void> _toggleSaveToFirebase() async {
+  //   try {
+  //     final newStatus = !_isSavingToFirebase;
+  //     await _firebaseService.updateSaveStatus(newStatus);
+      
+  //     // Si se activa el guardado, sincronizar la lista de apps
+  //     if (newStatus) {
+  //       await NotificationFilterService.syncEnabledAppsWithFirebase();
+  //     }
+      
+  //     setState(() {
+  //       _isSavingToFirebase = newStatus;
+  //     });
+      
+  //     // Mostrar un mensaje de confirmación
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text(newStatus 
+  //             ? 'Guardado en Firebase activado' 
+  //             : 'Guardado en Firebase desactivado'),
+  //           duration: const Duration(seconds: 2),
+  //         ),
+  //       );
+  //     }
+  //   } catch (e) {
+  //     print('Error al cambiar estado de guardado: $e');
+  //     // Mostrar mensaje de error
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text('Error al cambiar estado de guardado: $e'),
+  //           backgroundColor: Colors.red,
+  //           duration: const Duration(seconds: 3),
+  //         ),
+  //       );
+  //     }
+  //   }
+  // }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Emisor de Notificaciones'),
+        actions: [
+          // Icono para activar/desactivar guardado en Firebase
+          IconButton(
+            icon: Icon(
+              widget.isSavingToFirebase ? Icons.cloud_done : Icons.cloud_off,
+              color: widget.isSavingToFirebase ? Colors.green : Colors.grey,
+            ),
+            tooltip: widget.isSavingToFirebase 
+              ? 'Desactivar guardado en Firebase' 
+              : 'Activar guardado en Firebase',
+            onPressed: () => widget.toggleSaveToFirebase(!widget.isSavingToFirebase),
+          ),
+        ],
       ),
       body: Column(
         children: [
