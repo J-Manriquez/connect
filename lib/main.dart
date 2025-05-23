@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
+import 'screens/emisor_screen.dart';
+import 'screens/settings_screen.dart';
 
 void main() {
   runApp(const MainApp());
@@ -137,118 +139,29 @@ class _MainAppState extends State<MainApp> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Notification Listener'),
-        ),
-        body: Column( // Use a Column to stack the Card and the ListView
-          children: [
-            Card( // Add the Card widget here
-              margin: const EdgeInsets.all(16.0),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Estado del Servicio:',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _isServiceRunning ? 'Corriendo' : 'Detenido',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: _isServiceRunning ? Colors.green : Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                     const Text(
-                      'Permiso de Notificaciones:',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _isPermissionGranted ? 'Concedido' : 'No concedido',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: _isPermissionGranted ? Colors.green : Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton(
-                          onPressed: _checkPermissionStatus,
-                          child: const Text('Verificar Permiso'),
-                        ),
-                         ElevatedButton(
-                          onPressed: _openNotificationSettings,
-                          child: const Text('Abrir Configuración'),
-                        ),
-                      ],
-                    ),
-                     const SizedBox(height: 8),
-                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton(
-                          onPressed: _isServiceRunning ? null : _startService,
-                          child: const Text('Iniciar Servicio'),
-                        ),
-                        ElevatedButton(
-                          onPressed: _isServiceRunning ? _stopService : null,
-                          child: const Text('Detener Servicio'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                'Notificaciones Recibidas:',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            Expanded( // Use Expanded to make the ListView take the remaining space
-              child: ListView.builder(
-                itemCount: _notifications.length,
-                itemBuilder: (context, index) {
-                  final notification = _notifications[index];
-                  return ListTile(
-                    title: Text(notification['title'] ?? 'Sin título'),
-                    subtitle: Text('${notification['appName'] ?? notification['packageName'] ?? 'Desconocido'}\n${notification['text'] ?? 'Sin texto'}'),
-                    // Puedes añadir más detalles o formato aquí
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-        // Se elimina el FloatingActionButton para abrir settings, ahora hay un botón en el Card
-        // floatingActionButton: FloatingActionButton(
-        //   onPressed: _openNotificationListenerSettings,
-        //   tooltip: 'Open Notification Settings',
-        //   child: const Icon(Icons.settings),
-        // ),
+      title: 'Connect',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
       ),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => EmisorScreen(
+              notifications: _notifications,
+              isServiceRunning: _isServiceRunning,
+            ),
+        '/settings': (context) => SettingsScreen(
+              isServiceRunning: _isServiceRunning,
+              isPermissionGranted: _isPermissionGranted,
+              checkPermissionStatus: _checkPermissionStatus,
+              openNotificationSettings: _openNotificationSettings,
+              startService: _startService,
+              stopService: _stopService,
+            ),
+      },
     );
   }
 }
