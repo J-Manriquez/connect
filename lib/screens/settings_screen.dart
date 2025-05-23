@@ -3,19 +3,23 @@ import 'package:flutter/material.dart';
 class SettingsScreen extends StatelessWidget {
   final bool isServiceRunning;
   final bool isPermissionGranted;
+  final bool isSavingToFirebase;
   final Function() checkPermissionStatus;
   final Function() openNotificationSettings;
   final Function() startService;
   final Function() stopService;
+  final Function(bool) toggleSaveToFirebase;
 
   const SettingsScreen({
     super.key,
     required this.isServiceRunning,
     required this.isPermissionGranted,
+    required this.isSavingToFirebase,
     required this.checkPermissionStatus,
     required this.openNotificationSettings,
     required this.startService,
     required this.stopService,
+    required this.toggleSaveToFirebase,
   });
 
   @override
@@ -100,6 +104,34 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              Card(
+                margin: const EdgeInsets.only(bottom: 16.0),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Opciones de Firebase:',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SwitchListTile(
+                        title: const Text('Guardar notificaciones en Firebase'),
+                        subtitle: const Text(
+                          'Las notificaciones se guardarán automáticamente en la base de datos',
+                        ),
+                        value: isSavingToFirebase,
+                        onChanged: toggleSaveToFirebase,
+                        activeColor: Colors.green,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const Text(
                 'Acerca de',
                 style: TextStyle(
@@ -124,7 +156,8 @@ class SettingsScreen extends StatelessWidget {
               const Text(
                 '1. Concede el permiso de acceso a notificaciones.\n'
                 '2. Inicia el servicio de monitoreo.\n'
-                '3. Las notificaciones recibidas aparecerán en la pantalla principal.',
+                '3. Las notificaciones recibidas aparecerán en la pantalla principal.\n'
+                '4. Activa la opción de guardar en Firebase para mantener un historial.',
                 style: TextStyle(fontSize: 16),
               ),
             ],

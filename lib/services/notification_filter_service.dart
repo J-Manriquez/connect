@@ -1,4 +1,6 @@
 import 'package:flutter/services.dart';
+import 'package:connect/models/device_data.dart';
+import 'package:connect/services/firebase_service.dart';
 
 class NotificationFilterService {
   static const platform = MethodChannel('com.example.connect/app_list');
@@ -6,6 +8,7 @@ class NotificationFilterService {
   // Cache para almacenar los paquetes habilitados y reducir llamadas nativas
   static List<dynamic>? _cachedEnabledPackages;
   static DateTime _lastCacheUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+  static final FirebaseService _firebaseService = FirebaseService();
   
   // Método para filtrar notificaciones según las apps habilitadas
   static Future<List<Map<String, dynamic>>> filterNotifications(
@@ -62,7 +65,27 @@ class NotificationFilterService {
       return _cachedEnabledPackages!;
     }
     
-    // Si no hay caché o está obsoleta, obtener los paquetes del código nativo
+    // Intentar obtener la lista de apps desde Firebase
+    try {
+      final List<AppData> appList = await _firebaseService.getAppList();
+      if (appList.isNotEmpty) {
+        // Filtrar solo las apps activas y obtener sus packageNames
+        final List<String> enabledPackages = appList
+            .where((app) => app.activa)
+            .map((app) => app.packageName)
+            .toList();
+        
+        // Actualizar la caché
+        _cachedEnabledPackages = enabledPackages;
+        _lastCacheUpdate = now;
+        
+        return enabledPackages;
+      }
+    } catch (e) {
+      print('Error al obtener lista de apps desde Firebase: $e');
+    }
+    
+    // Si no hay datos en Firebase o hubo un error, usar el método nativo
     try {
       final List<dynamic> enabledPackages = await platform.invokeMethod('getEnabledPackages');
       
@@ -80,5 +103,34 @@ class NotificationFilterService {
   // Método para limpiar la caché (útil cuando se cambian las apps habilitadas)
   static void clearCache() {
     _cachedEnabledPackages = null;
+  }
+  
+  // Método para sincronizar las apps habilitadas con Firebase
+  static Future<void> syncEnabledAppsWithFirebase() async {
+    try {
+      final List<dynamic> nativeEnabledPackages = await platform.invokeMethod('getEnabledPackages');
+      final List<dynamic> allPackages = await platform.invokeMethod('getAllPackages');
+      
+      // Convertir a lista de AppData
+      final List<AppData> appList = [];
+      for (final package in allPackages) {
+        final Map<String, dynamic> packageData = Map<String, dynamic>.from(package);
+        appList.add(AppData(
+          nombre: packageData['appName'] ?? '',
+          packageName: packageData['packageName'] ?? '',
+          activa: nativeEnabledPackages.contains(packageData['packageName']),
+        ));
+      }
+      
+      // Guardar en Firebase
+      await _firebaseService.updateAppList(appList);
+      
+      // Actualizar la caché
+      _cachedEnabledPackages = nativeEnabledPackages;
+      _lastCacheUpdate = DateTime.now();
+      
+    } catch (e) {
+      print('Error al sincronizar apps con Firebase: $e');
+    }
   }
 }

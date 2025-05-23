@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
+import 'package:firebase_core/firebase_core.dart';
+import 'package:connect/firebase_options.dart';
+import 'package:connect/services/firebase_service.dart';
 import 'screens/emisor_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/app_list_screen.dart';
 
-void main() {
+void main() async {
+  // Asegurar que Flutter esté inicializado
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inicializar Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const MainApp());
 }
 
@@ -18,11 +29,15 @@ class MainApp extends StatefulWidget {
 class _MainAppState extends State<MainApp> {
   // Define the MethodChannel
   static const platform = MethodChannel('com.example.connect/notifications');
+  
+  // Servicio de Firebase
+  final FirebaseService _firebaseService = FirebaseService();
 
   // List to hold received notifications
   List<Map<String, dynamic>> _notifications = [];
   bool _isServiceRunning = false;
   bool _isPermissionGranted = false;
+  bool _isSavingToFirebase = false;
 
   @override
   void initState() {
@@ -33,11 +48,28 @@ class _MainAppState extends State<MainApp> {
     _checkServiceStatus();
     _checkPermissionStatus();
     
+    // Inicializar la estructura de datos en Firebase
+    _initializeFirebaseData();
+    
     // Intentar iniciar el servicio automáticamente si no está corriendo
     // y el permiso está concedido
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoStartServiceIfNeeded();
     });
+  }
+  
+  // Método para inicializar la estructura de datos en Firebase
+  Future<void> _initializeFirebaseData() async {
+    try {
+      await _firebaseService.initializeFirebaseData(_isServiceRunning);
+      
+      // Obtener el estado de guardado desde Firebase
+      _isSavingToFirebase = await _firebaseService.getSaveStatus();
+      
+      print('Estructura de datos inicializada en Firebase');
+    } catch (e) {
+      print('Error al inicializar datos en Firebase: $e');
+    }
   }
 
   // Método para iniciar automáticamente el servicio si es necesario
@@ -56,18 +88,41 @@ class _MainAppState extends State<MainApp> {
           _notifications.add(notificationData);
         });
         print('Received notification: $notificationData');
+        
+        // Si está habilitado el guardado en Firebase, guardar la notificación
+        if (_isSavingToFirebase) {
+          try {
+            await _firebaseService.saveNotification(notificationData);
+          } catch (e) {
+            print('Error al guardar notificación en Firebase: $e');
+          }
+        }
         break;
       case 'serviceConnected':
         setState(() {
           _isServiceRunning = true;
         });
         print('Notification service connected.');
+        
+        // Actualizar el estado del servicio en Firebase
+        try {
+          await _firebaseService.updateServiceStatus(true);
+        } catch (e) {
+          print('Error al actualizar estado del servicio en Firebase: $e');
+        }
         break;
       case 'serviceDisconnected':
         setState(() {
           _isServiceRunning = false;
         });
         print('Notification service disconnected.');
+        
+        // Actualizar el estado del servicio en Firebase
+        try {
+          await _firebaseService.updateServiceStatus(false);
+        } catch (e) {
+          print('Error al actualizar estado del servicio en Firebase: $e');
+        }
         break;
       default:
         print('Unknown method ${call.method}');
@@ -111,7 +166,6 @@ class _MainAppState extends State<MainApp> {
       } else {
         print('Permission not granted, opened settings.');
         // El estado _isPermissionGranted se actualizará después de que el usuario regrese de settings
-        // Puedes añadir un listener para cuando la app vuelve a primer plano si necesitas verificar inmediatamente
       }
     } on PlatformException catch (e) {
       print("Failed to start service: '${e.message}'.");
@@ -139,6 +193,20 @@ class _MainAppState extends State<MainApp> {
       print("Failed to open settings: '${e.message}'.");
     }
   }
+  
+  // Método para cambiar el estado de guardado en Firebase
+  Future<void> _toggleSaveToFirebase(bool value) async {
+    setState(() {
+      _isSavingToFirebase = value;
+    });
+    
+    try {
+      await _firebaseService.updateSaveStatus(value);
+      print('Estado de guardado en Firebase actualizado: $value');
+    } catch (e) {
+      print('Error al actualizar estado de guardado en Firebase: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -157,10 +225,12 @@ class _MainAppState extends State<MainApp> {
         '/settings': (context) => SettingsScreen(
               isServiceRunning: _isServiceRunning,
               isPermissionGranted: _isPermissionGranted,
+              isSavingToFirebase: _isSavingToFirebase,
               checkPermissionStatus: _checkPermissionStatus,
               openNotificationSettings: _openNotificationSettings,
               startService: _startService,
               stopService: _stopService,
+              toggleSaveToFirebase: _toggleSaveToFirebase,
             ),
         '/app_list': (context) => const AppListScreen(),
       },
