@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/services/firebase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/notification_filter_service.dart';  // Add this import
 
@@ -20,26 +22,58 @@ class EmisorScreen extends StatefulWidget {
 class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _filteredNotifications = [];
   bool _isLoading = true;
+  bool _isLinked = false; // Estado de vinculación
+  String _deviceId = ''; // ID del dispositivo
   
   // Añadir un timer para actualizar periódicamente
   late final Stream _updateStream;
   late final StreamSubscription _updateSubscription;
+  final FirebaseService _firebaseService = FirebaseService();
 
   @override
   void initState() {
     super.initState();
     _filterNotifications();
+    _loadDeviceId();
+    _checkLinkStatus();
     
     // Crear un stream que se ejecute cada 2 segundos para actualizar las notificaciones
     _updateStream = Stream.periodic(const Duration(seconds: 2));
     _updateSubscription = _updateStream.listen((_) {
       if (mounted) {
         _filterNotifications();
+        _checkLinkStatus();
       }
     });
     
     // Registrar el observer para detectar cuando la app vuelve al primer plano
     WidgetsBinding.instance.addObserver(this);
+  }
+  
+  // Cargar el ID del dispositivo desde SharedPreferences
+  Future<void> _loadDeviceId() async {
+    final deviceId = await _firebaseService.getDeviceId();
+    setState(() {
+      _deviceId = deviceId;
+    });
+  }
+  
+  // Verificar el estado de vinculación desde Firebase
+  Future<void> _checkLinkStatus() async {
+    try {
+      final deviceId = await _firebaseService.getDeviceId();
+      final docRef = FirebaseFirestore.instance.collection('dispositivos').doc(deviceId);
+      final docSnapshot = await docRef.get();
+      
+      if (docSnapshot.exists) {
+        final data = docSnapshot.data();
+        setState(() {
+          _isLinked = data?['status-vinculacion'] ?? false;
+        });
+      }
+    } catch (e) {
+      print('Error al verificar estado de vinculación: $e');
+    }
   }
 
   @override
@@ -98,104 +132,129 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {
-              Navigator.pushNamed(context, '/settings');
+              Navigator.pushNamed(context, '/settings').then((_) {
+                // Actualizar cuando regrese de la pantalla de configuración
+                _filterNotifications();
+              });
             },
           ),
         ],
       ),
       body: Column(
         children: [
-          // Contenedor de estado del servicio
+          // Contenedor para el estado del servicio
           Container(
-            width: double.infinity,
+            margin: const EdgeInsets.all(8.0),
             padding: const EdgeInsets.all(12.0),
-            margin: const EdgeInsets.all(16.0),
             decoration: BoxDecoration(
-              color: widget.isServiceRunning ? Colors.green.shade100 : Colors.red.shade100,
+              color: widget.isServiceRunning ? Colors.green[100] : Colors.red[100],
               borderRadius: BorderRadius.circular(8.0),
               border: Border.all(
                 color: widget.isServiceRunning ? Colors.green : Colors.red,
-                width: 2.0,
+                width: 1.0,
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   widget.isServiceRunning ? Icons.check_circle : Icons.error,
                   color: widget.isServiceRunning ? Colors.green : Colors.red,
                 ),
                 const SizedBox(width: 8.0),
-                RichText(
-                  text: TextSpan(
-                    style: TextStyle(
-                      fontSize: 16.0,
-                      color: Colors.black87,
-                    ),
-                    children: [
-                      const TextSpan(text: 'El servicio está '),
-                      TextSpan(
-                        text: widget.isServiceRunning ? 'ACTIVO' : 'INACTIVO',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Título de notificaciones
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Notificaciones Recibidas:',
+                Text(
+                  'Estado del Servicio: ${widget.isServiceRunning ? 'Activo' : 'Inactivo'}',
                   style: TextStyle(
-                    fontSize: 18,
+                    color: widget.isServiceRunning ? Colors.green[800] : Colors.red[800],
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                if (_isLoading)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                    ),
-                  ),
               ],
             ),
           ),
           
-          // Lista de notificaciones filtradas
+          // Contenedor para el estado de vinculación
+          Container(
+            margin: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(12.0),
+            decoration: BoxDecoration(
+              color: _isLinked ? Colors.green[100] : Colors.red[100],
+              borderRadius: BorderRadius.circular(8.0),
+              border: Border.all(
+                color: _isLinked ? Colors.green : Colors.red,
+                width: 1.0,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _isLinked ? Icons.link : Icons.link_off,
+                  color: _isLinked ? Colors.green : Colors.red,
+                ),
+                const SizedBox(width: 8.0),
+                Text(
+                  'Estado de Vinculación: ${_isLinked ? 'Vinculado' : 'No Vinculado'}',
+                  style: TextStyle(
+                    color: _isLinked ? Colors.green[800] : Colors.red[800],
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Tarjeta para mostrar el ID del dispositivo
+          Card(
+            margin: const EdgeInsets.all(8.0),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  Text(
+                    _deviceId,
+                    style: const TextStyle(
+                      fontSize: 50,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8.0),
+                  const Text(
+                    'Ingresa este código para vincular tu dispositivo',
+                    style: TextStyle(
+                      fontSize: 16,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Lista de notificaciones
           Expanded(
             child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(),
-                  )
+                ? const Center(child: CircularProgressIndicator())
                 : _filteredNotifications.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No hay notificaciones de las apps seleccionadas',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      )
+                    ? const Center(child: Text('No hay notificaciones'))
                     : ListView.builder(
                         itemCount: _filteredNotifications.length,
                         itemBuilder: (context, index) {
                           final notification = _filteredNotifications[index];
                           return ListTile(
+                            leading: const Icon(Icons.notifications),
                             title: Text(notification['title'] ?? 'Sin título'),
-                            subtitle: Text(
-                                '${notification['appName'] ?? notification['packageName'] ?? 'Desconocido'}\n${notification['text'] ?? 'Sin texto'}'),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(notification['text'] ?? 'Sin contenido'),
+                                Text(
+                                  'App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
                           );
                         },
                       ),
