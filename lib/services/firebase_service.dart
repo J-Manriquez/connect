@@ -116,19 +116,78 @@ class FirebaseService {
     final deviceId = await getDeviceId();
     final docRef = _firestore.collection('dispositivos').doc(deviceId);
     
-    final List<Map<String, dynamic>> appMaps = apps.map((app) => app.toMap()).toList();
-    
-    await docRef.update({
-      'lista-apps': appMaps,
-      'ultima-actualizacion': FieldValue.arrayUnion([
-        {
-          'fecha': Timestamp.now(),
-          'tipo-actualizacion': 'actualización-lista-apps',
+    try {
+      // Verificar si el guardado está habilitado
+      final docSnapshot = await docRef.get();
+      if (docSnapshot.exists) {
+        final data = docSnapshot.data();
+        final isSaving = data?['status-guardado'] ?? false;
+        
+        if (!isSaving) {
+          print('Guardado en Firebase no está habilitado, omitiendo actualización de apps');
+          return;
         }
-      ]),
-    });
+      }
+      
+      // Actualizar la lista de aplicaciones
+      await docRef.update({
+        'lista-apps': apps.map((app) => app.toMap()).toList(),
+        'ultima-actualizacion': FieldValue.arrayUnion([
+          {
+            'fecha': Timestamp.now(),
+            'tipo-actualizacion': 'actualizacion-lista-apps',
+          }
+        ]),
+      });
+      
+      print('Lista de aplicaciones actualizada en Firebase: ${apps.length} apps');
+    } catch (e) {
+      print('Error al actualizar lista de aplicaciones en Firebase: $e');
+      throw e;
+    }
+  }
+  
+  // Obtiene la lista de aplicaciones
+  Future<List<AppData>> getAppList() async {
+    final deviceId = await getDeviceId();
+    final docRef = _firestore.collection('dispositivos').doc(deviceId);
     
-    print('Lista de aplicaciones actualizada');
+    try {
+      final docSnapshot = await docRef.get();
+      if (!docSnapshot.exists) {
+        return [];
+      }
+      
+      final data = docSnapshot.data();
+      if (data == null || !data.containsKey('lista-apps')) {
+        return [];
+      }
+      
+      final List<dynamic> appsList = data['lista-apps'];
+      return appsList.map((appData) => AppData.fromMap(appData)).toList();
+    } catch (e) {
+      print('Error al obtener lista de aplicaciones desde Firebase: $e');
+      return [];
+    }
+  }
+  
+  // Obtiene el estado de guardado
+  Future<bool> getSaveStatus() async {
+    final deviceId = await getDeviceId();
+    final docRef = _firestore.collection('dispositivos').doc(deviceId);
+    
+    try {
+      final docSnapshot = await docRef.get();
+      if (!docSnapshot.exists) {
+        return false;
+      }
+      
+      final data = docSnapshot.data();
+      return data?['status-guardado'] ?? false;
+    } catch (e) {
+      print('Error al obtener estado de guardado desde Firebase: $e');
+      return false;
+    }
   }
   
   // Guarda una notificación en Firebase
@@ -163,37 +222,5 @@ class FirebaseService {
     print('Notificación guardada con ID: ${notificationData.id}');
   }
   
-  // Obtiene el estado de guardado actual
-  Future<bool> getSaveStatus() async {
-    final deviceId = await getDeviceId();
-    final docRef = _firestore.collection('dispositivos').doc(deviceId);
-    
-    final docSnapshot = await docRef.get();
-    if (docSnapshot.exists) {
-      final data = docSnapshot.data();
-      return data?['status-guardado'] ?? false;
-    }
-    
-    return false;
-  }
-  
-  // Obtiene la lista de aplicaciones desde Firebase
-  Future<List<AppData>> getAppList() async {
-    final deviceId = await getDeviceId();
-    final docRef = _firestore.collection('dispositivos').doc(deviceId);
-    
-    final docSnapshot = await docRef.get();
-    if (docSnapshot.exists) {
-      final data = docSnapshot.data();
-      if (data != null && data['lista-apps'] != null) {
-        return List<AppData>.from(
-          (data['lista-apps'] as List).map(
-            (x) => AppData.fromMap(x),
-          ),
-        );
-      }
-    }
-    
-    return [];
-  }
+ 
 }

@@ -108,19 +108,36 @@ class NotificationFilterService {
   // Método para sincronizar las apps habilitadas con Firebase
   static Future<void> syncEnabledAppsWithFirebase() async {
     try {
+      print('Iniciando sincronización con Firebase...');
+      
+      // Obtener los paquetes habilitados desde el dispositivo
       final List<dynamic> nativeEnabledPackages = await platform.invokeMethod('getEnabledPackages');
-      final List<dynamic> allPackages = await platform.invokeMethod('getAllPackages');
+      print('Paquetes habilitados obtenidos: ${nativeEnabledPackages.length}');
+      
+      // Obtener todas las aplicaciones instaladas
+      final List<dynamic> result = await platform.invokeMethod('getInstalledApps');
+      final List<Map<String, dynamic>> allPackages = result.map((item) {
+        return Map<String, dynamic>.from(item as Map);
+      }).toList();
+      
+      print('Total de paquetes obtenidos: ${allPackages.length}');
+      
+      if (allPackages.isEmpty) {
+        print('No se encontraron aplicaciones para sincronizar');
+        return;
+      }
       
       // Convertir a lista de AppData
       final List<AppData> appList = [];
       for (final package in allPackages) {
-        final Map<String, dynamic> packageData = Map<String, dynamic>.from(package);
         appList.add(AppData(
-          nombre: packageData['appName'] ?? '',
-          packageName: packageData['packageName'] ?? '',
-          activa: nativeEnabledPackages.contains(packageData['packageName']),
+          nombre: package['appName'] ?? '',
+          packageName: package['packageName'] ?? '',
+          activa: nativeEnabledPackages.contains(package['packageName']),
         ));
       }
+      
+      print('Sincronizando ${appList.length} aplicaciones con Firebase');
       
       // Guardar en Firebase
       await _firebaseService.updateAppList(appList);
@@ -128,6 +145,8 @@ class NotificationFilterService {
       // Actualizar la caché
       _cachedEnabledPackages = nativeEnabledPackages;
       _lastCacheUpdate = DateTime.now();
+      
+      print('Sincronización con Firebase completada exitosamente');
       
     } catch (e) {
       print('Error al sincronizar apps con Firebase: $e');

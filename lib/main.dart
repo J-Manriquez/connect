@@ -1,5 +1,7 @@
+import 'package:connect/services/notification_filter_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
+import 'package:connect/services/notification_filter_service.dart'; // Añadir esta importación
 import 'package:firebase_core/firebase_core.dart';
 import 'package:connect/firebase_options.dart';
 import 'package:connect/services/firebase_service.dart';
@@ -195,16 +197,28 @@ class _MainAppState extends State<MainApp> {
   }
   
   // Método para cambiar el estado de guardado en Firebase
-  Future<void> _toggleSaveToFirebase(bool value) async {
-    setState(() {
-      _isSavingToFirebase = value;
-    });
-    
+  Future<void> _toggleSaveToFirebase(bool isSaving) async {
     try {
-      await _firebaseService.updateSaveStatus(value);
-      print('Estado de guardado en Firebase actualizado: $value');
+      // Actualizar el estado local
+      setState(() {
+        _isSavingToFirebase = isSaving;
+      });
+      
+      // Actualizar el estado en Firebase
+      await _firebaseService.updateSaveStatus(isSaving);
+      
+      // Si se activa el guardado, sincronizar la lista de apps
+      if (isSaving) {
+        await NotificationFilterService.syncEnabledAppsWithFirebase();
+      }
+      
+      print('Estado de guardado en Firebase actualizado: $isSaving');
     } catch (e) {
       print('Error al actualizar estado de guardado en Firebase: $e');
+      // Revertir el cambio local si hay error
+      setState(() {
+        _isSavingToFirebase = !isSaving;
+      });
     }
   }
 

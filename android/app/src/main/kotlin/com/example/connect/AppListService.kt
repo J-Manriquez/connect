@@ -115,6 +115,13 @@ class AppListService(private val context: Context) {
             
             Log.d(TAG, "Guardadas ${apps.size} aplicaciones en SharedPreferences")
             Log.d(TAG, "Aplicaciones habilitadas: ${enabledPackages.size}")
+            
+            // Notificar a Flutter para sincronizar con Firebase
+            MainActivity.instance?.let { activity ->
+                if (activity is MainActivity) {
+                    activity.notifyAppListUpdated()
+                }
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error al guardar aplicaciones en SharedPreferences", e)
         }

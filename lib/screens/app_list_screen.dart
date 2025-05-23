@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:connect/services/notification_filter_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -24,6 +25,27 @@ class _AppListScreenState extends State<AppListScreen> {
   void initState() {
     super.initState();
     _loadApps();
+    
+    // Configurar listener para actualizaciones desde el código nativo
+    platform.setMethodCallHandler(_handleMethodCall);
+  }
+  
+  Future<void> _handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onAppListUpdated':
+        // Sincronizar con Firebase cuando se actualice la lista de apps
+        await NotificationFilterService.syncEnabledAppsWithFirebase();
+        break;
+      default:
+        print('Método desconocido: ${call.method}');
+    }
+  }
+  
+  @override
+  void dispose() {
+    // Limpiar el handler al destruir el widget
+    platform.setMethodCallHandler(null);
+    super.dispose();
   }
 
   Future<void> _loadApps() async {
@@ -92,6 +114,10 @@ class _AppListScreenState extends State<AppListScreen> {
         _filterApps();
         _isLoading = false;
       });
+      
+      // Sincronizar con Firebase después de recargar las aplicaciones
+      await NotificationFilterService.syncEnabledAppsWithFirebase();
+      
     } on PlatformException catch (e) {
       setState(() {
         _error = "Error al recargar aplicaciones: ${e.message}";
@@ -123,6 +149,10 @@ class _AppListScreenState extends State<AppListScreen> {
         }
         _filterApps();
       });
+      
+      // Sincronizar con Firebase después de actualizar el estado
+      await NotificationFilterService.syncEnabledAppsWithFirebase();
+      
     } on PlatformException catch (e) {
       print("Error al actualizar estado de la aplicación: ${e.message}");
       // Mostrar un snackbar con el error

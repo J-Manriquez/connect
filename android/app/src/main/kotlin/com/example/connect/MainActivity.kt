@@ -201,4 +201,14 @@ class MainActivity: FlutterActivity() {
             Log.e("MainActivity", "Error al abrir configuración de notificaciones", e)
         }
     }
+
+    // Método para notificar a Flutter que la lista de apps se actualizó
+    fun notifyAppListUpdated() {
+        try {
+            appListChannel.invokeMethod("onAppListUpdated", null)
+            Log.d("MainActivity", "Notificación enviada a Flutter: lista de apps actualizada")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error al notificar actualización de lista de apps", e)
+        }
+    }
 }
