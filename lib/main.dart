@@ -245,23 +245,28 @@ class _MainAppState extends State<MainApp> {
   // Método para verificar la ruta inicial según las preferencias del usuario
   Future<void> _checkInitialRoute() async {
     try {
-      final useAsReceptor = await PreferencesService.getUseAsReceptor();
-      
-      if (useAsReceptor && _isPermissionGranted) {
-        // Verificar si hay un dispositivo vinculado
-        final receptorService = ReceptorService();
-        final deviceId = await receptorService.getLinkedDeviceId();
-        
-        if (deviceId != null) {
-          // Si hay un dispositivo vinculado, ir directamente a la pantalla de notificaciones
-          Navigator.pushReplacementNamed(context, '/notificaciones');
-        } else {
-          // Si no hay dispositivo vinculado pero quiere usar como receptor, ir a la pantalla de vinculación
-          Navigator.pushReplacementNamed(context, '/receptor');
-        }
+      print('[DEBUG] _checkInitialRoute: Start');
+      final receptorService = ReceptorService();
+      final deviceId = await receptorService.getLinkedDeviceId();
+      print('[DEBUG] _checkInitialRoute: deviceId from SharedPreferences = \$deviceId');
+      final linkStatus = await _firebaseService.getLinkStatus();
+      print('[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus');
+      if (linkStatus) {
+        print('[DEBUG] _checkInitialRoute: Navigating to /notificaciones');
+        Navigator.pushReplacementNamed(context, '/notificaciones');
+        print('[DEBUG] _checkInitialRoute: Navigation to /notificaciones done');
+        return;
       }
-    } catch (e) {
+      final useAsReceptor = await PreferencesService.getUseAsReceptor();
+      print('[DEBUG] _checkInitialRoute: useAsReceptor = \$useAsReceptor, _isPermissionGranted = \$_isPermissionGranted');
+      if (useAsReceptor && _isPermissionGranted) {
+        print('[DEBUG] _checkInitialRoute: Navigating to /receptor');
+        Navigator.pushReplacementNamed(context, '/receptor');
+      }
+      print('[DEBUG] _checkInitialRoute: Staying on EmisorScreen');
+    } catch (e, stack) {
       print('Error al verificar ruta inicial: $e');
+      print('Stacktrace: $stack');
     }
   }
 

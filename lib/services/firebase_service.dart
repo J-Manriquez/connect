@@ -190,6 +190,27 @@ class FirebaseService {
     }
   }
   
+  // Obtiene el estado de vinculación
+  Future<bool> getLinkStatus() async {
+    final deviceId = await getDeviceId();
+    print('[DEBUG] getLinkStatus: deviceId = \$deviceId');
+    final docRef = _firestore.collection('dispositivos').doc(deviceId);
+    try {
+      final docSnapshot = await docRef.get();
+      print('[DEBUG] getLinkStatus: docSnapshot.exists = \${docSnapshot.exists}');
+      if (!docSnapshot.exists) {
+        return false;
+      }
+      final data = docSnapshot.data();
+      final status = data?['status-vinculacion'] ?? false;
+      print('[DEBUG] getLinkStatus: status-vinculacion = \$status');
+      return status;
+    } catch (e) {
+      print('Error al obtener estado de vinculación desde Firebase: \$e');
+      return false;
+    }
+  }
+  
   // Guarda una notificación en Firebase
   Future<void> saveNotification(Map<String, dynamic> notification) async {
     final deviceId = await getDeviceId();

@@ -38,6 +38,10 @@ class ReceptorService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(KEY_LINKED_DEVICE_ID, deviceId);
+      
+      // Actualizar el estado de vinculación en Firebase
+      await _firebaseService.updateLinkStatus(true);
+      
       print('ID del dispositivo emisor guardado: $deviceId');
       return true;
     } catch (e) {
@@ -49,10 +53,13 @@ class ReceptorService {
   // Obtener el ID del dispositivo emisor vinculado
   Future<String?> getLinkedDeviceId() async {
     try {
+      print('[DEBUG] getLinkedDeviceId: Start');
       final prefs = await SharedPreferences.getInstance();
-      return prefs.getString(KEY_LINKED_DEVICE_ID);
+      final id = prefs.getString(KEY_LINKED_DEVICE_ID);
+      print('[DEBUG] getLinkedDeviceId: Result = \$id');
+      return id;
     } catch (e) {
-      print('Error al obtener ID del dispositivo emisor: $e');
+      print('Error al obtener ID del dispositivo emisor: \$e');
       return null;
     }
   }

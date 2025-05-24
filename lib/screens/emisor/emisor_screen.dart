@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
+import 'package:connect/services/receptor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/notification_filter_service.dart';  // Add this import
 
@@ -57,6 +58,9 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
     
     // Registrar el observer para detectar cuando la app vuelve al primer plano
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkInitialRoute(context);
+    });
   }
   
   // Cargar el ID del dispositivo desde SharedPreferences
@@ -214,8 +218,8 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
     // Guardar preferencia de usar como receptor
     await PreferencesService.saveUseAsReceptor(true);
     
-    // Navegar a la pantalla de receptor
-    Navigator.pushNamed(context, '/receptor');
+    // Navegar a la pantalla de receptor (usar pushReplacementNamed en lugar de pushNamed)
+    Navigator.pushReplacementNamed(context, '/receptor');
   }
 
   @override
@@ -419,5 +423,24 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
         ],
       ),
     );
+  }
+}
+
+Future<void> _checkInitialRoute(BuildContext context) async {
+  try {
+    final receptorService = ReceptorService();
+    final deviceId = await receptorService.getLinkedDeviceId();
+    final linkStatus = await FirebaseService().getLinkStatus();
+    if (linkStatus) {
+      Navigator.pushReplacementNamed(context, '/notificaciones');
+      return;
+    }
+    final useAsReceptor = await PreferencesService.getUseAsReceptor();
+    if (useAsReceptor) {
+      Navigator.pushReplacementNamed(context, '/receptor');
+    }
+  } catch (e, stack) {
+    print('Error al verificar ruta inicial: $e');
+    print('Stacktrace: $stack');
   }
 }
