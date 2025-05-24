@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
 
 class ReceptorScreen extends StatefulWidget {
   const ReceptorScreen({Key? key}) : super(key: key);
@@ -167,11 +168,21 @@ class _ReceptorScreenState extends State<ReceptorScreen> {
     }
   }
 
+  // Método para volver a la pantalla emisor
+  Future<void> _backToEmisor() async {
+    // Guardar preferencia de no usar como receptor
+    await PreferencesService.saveUseAsReceptor(false);
+    
+    // Navegar a la pantalla emisor
+    Navigator.pushReplacementNamed(context, '/');
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Receptor de Notificaciones'),
+        automaticallyImplyLeading: false, // Eliminar la flecha de retroceso
         actions: _isLinked
             ? [
                 IconButton(
@@ -189,6 +200,16 @@ class _ReceptorScreenState extends State<ReceptorScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Botón para volver a la pantalla emisor
+                  ElevatedButton.icon(
+                    onPressed: _backToEmisor,
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Volver a Emisor'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(40),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   if (!_isLinked) ...[
                     // Sección de vinculación
                     Card(

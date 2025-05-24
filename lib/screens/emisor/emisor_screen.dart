@@ -2,21 +2,26 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/services/firebase_service.dart';
+import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
 import 'package:flutter/material.dart';
 import 'package:connect/services/notification_filter_service.dart';  // Add this import
 
 class EmisorScreen extends StatefulWidget {
   final List<Map<String, dynamic>> notifications;
   final bool isServiceRunning;
-  final bool isSavingToFirebase; // Añadir este parámetro
-  final Function(bool) toggleSaveToFirebase; // Añadir esta función
+  final bool isSavingToFirebase;
+  final Function(bool) toggleSaveToFirebase;
+  final Function() checkPermissionStatus; // Añadir este parámetro
+  final Function() openNotificationSettings; // Añadir este parámetro
 
   const EmisorScreen({
     super.key, 
     required this.notifications,
     required this.isServiceRunning,
-    required this.isSavingToFirebase, // Requerido
-    required this.toggleSaveToFirebase, // Requerido
+    required this.isSavingToFirebase,
+    required this.toggleSaveToFirebase,
+    required this.checkPermissionStatus, // Requerido
+    required this.openNotificationSettings, // Requerido
   });
 
   @override
@@ -172,6 +177,47 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
   //   }
   // }
   
+  // Método para navegar a la pantalla de receptor y verificar permisos
+  Future<void> _navigateToReceptor(BuildContext context) async {
+    // Verificar si el permiso está concedido
+    widget.checkPermissionStatus();
+    
+    // Si el permiso no está concedido, mostrar diálogo
+    if (!widget.isServiceRunning) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Permiso requerido'),
+            content: const Text('Para usar la app como receptor, necesitas conceder permiso para acceder a las notificaciones.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Cancelar'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.openNotificationSettings();
+                },
+                child: const Text('Abrir configuración'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
+    
+    // Guardar preferencia de usar como receptor
+    await PreferencesService.saveUseAsReceptor(true);
+    
+    // Navegar a la pantalla de receptor
+    Navigator.pushNamed(context, '/receptor');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -197,11 +243,9 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pushNamed(context, '/receptor');
-              },
+              onPressed: () => _navigateToReceptor(context),
               icon: const Icon(Icons.watch),
-              label: const Text('Ver en Receptor'),
+              label: const Text('Usar app como Receptor'),
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(40),
               ),

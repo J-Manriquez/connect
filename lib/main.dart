@@ -1,14 +1,15 @@
-import 'package:connect/screens/receptor_screen.dart';
+import 'package:connect/screens/receptor/receptor_screen.dart';
 import 'package:connect/services/notification_filter_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
 import 'package:connect/services/notification_filter_service.dart'; // Añadir esta importación
+import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
 import 'package:firebase_core/firebase_core.dart';
 import 'package:connect/firebase_options.dart';
 import 'package:connect/services/firebase_service.dart';
-import 'screens/emisor_screen.dart';
-import 'screens/settings_screen.dart';
-import 'screens/app_list_screen.dart';
+import 'screens/emisor/emisor_screen.dart';
+import 'screens/emisor/settings_screen.dart';
+import 'screens/emisor/app_list_screen.dart';
 
 void main() async {
   // Asegurar que Flutter esté inicializado
@@ -56,6 +57,7 @@ class _MainAppState extends State<MainApp> {
     // y el permiso está concedido
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoStartServiceIfNeeded();
+      _checkInitialRoute(); // Añadir esta línea
     });
   }
 
@@ -238,6 +240,21 @@ class _MainAppState extends State<MainApp> {
     }
   }
 
+  // Método para verificar la ruta inicial según las preferencias del usuario
+  Future<void> _checkInitialRoute() async {
+    try {
+      final useAsReceptor = await PreferencesService.getUseAsReceptor();
+      
+      if (useAsReceptor && _isPermissionGranted) {
+        // Si el usuario ha elegido usar la app como receptor y tiene permisos,
+        // navegar directamente a la pantalla de receptor
+        Navigator.pushReplacementNamed(context, '/receptor');
+      }
+    } catch (e) {
+      print('Error al verificar ruta inicial: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -248,8 +265,10 @@ class _MainAppState extends State<MainApp> {
         '/': (context) => EmisorScreen(
           notifications: _notifications,
           isServiceRunning: _isServiceRunning,
-          isSavingToFirebase: _isSavingToFirebase, // Pasar el estado
-          toggleSaveToFirebase: _toggleSaveToFirebase, // Pasar la función
+          isSavingToFirebase: _isSavingToFirebase,
+          toggleSaveToFirebase: _toggleSaveToFirebase,
+          checkPermissionStatus: _checkPermissionStatus, // Añadir este parámetro
+          openNotificationSettings: _openNotificationSettings, // Añadir este parámetro
         ),
         '/settings': (context) => SettingsScreen(
           isServiceRunning: _isServiceRunning,
