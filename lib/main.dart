@@ -1,5 +1,7 @@
 import 'package:connect/screens/receptor/receptor_screen.dart';
+import 'package:connect/screens/receptor/notificaciones_screen.dart'; // Añadir esta importación
 import 'package:connect/services/notification_filter_service.dart';
+import 'package:connect/services/receptor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
 import 'package:connect/services/notification_filter_service.dart'; // Añadir esta importación
@@ -246,9 +248,17 @@ class _MainAppState extends State<MainApp> {
       final useAsReceptor = await PreferencesService.getUseAsReceptor();
       
       if (useAsReceptor && _isPermissionGranted) {
-        // Si el usuario ha elegido usar la app como receptor y tiene permisos,
-        // navegar directamente a la pantalla de receptor
-        Navigator.pushReplacementNamed(context, '/receptor');
+        // Verificar si hay un dispositivo vinculado
+        final receptorService = ReceptorService();
+        final deviceId = await receptorService.getLinkedDeviceId();
+        
+        if (deviceId != null) {
+          // Si hay un dispositivo vinculado, ir directamente a la pantalla de notificaciones
+          Navigator.pushReplacementNamed(context, '/notificaciones');
+        } else {
+          // Si no hay dispositivo vinculado pero quiere usar como receptor, ir a la pantalla de vinculación
+          Navigator.pushReplacementNamed(context, '/receptor');
+        }
       }
     } catch (e) {
       print('Error al verificar ruta inicial: $e');
@@ -267,8 +277,8 @@ class _MainAppState extends State<MainApp> {
           isServiceRunning: _isServiceRunning,
           isSavingToFirebase: _isSavingToFirebase,
           toggleSaveToFirebase: _toggleSaveToFirebase,
-          checkPermissionStatus: _checkPermissionStatus, // Añadir este parámetro
-          openNotificationSettings: _openNotificationSettings, // Añadir este parámetro
+          checkPermissionStatus: _checkPermissionStatus,
+          openNotificationSettings: _openNotificationSettings,
         ),
         '/settings': (context) => SettingsScreen(
           isServiceRunning: _isServiceRunning,
@@ -281,7 +291,8 @@ class _MainAppState extends State<MainApp> {
           toggleSaveToFirebase: _toggleSaveToFirebase,
         ),
         '/app_list': (context) => const AppListScreen(),
-        '/receptor': (context) => const ReceptorScreen(), // Añadir la nueva ruta
+        '/receptor': (context) => const ReceptorScreen(),
+        '/notificaciones': (context) => const NotificacionesScreen(), // Añadir la nueva ruta
       },
     );
   }
