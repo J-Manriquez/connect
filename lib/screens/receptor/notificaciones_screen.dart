@@ -121,7 +121,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notificaciones Recibidas'),
-        automaticallyImplyLeading: false, // Eliminar la flecha de retroceso
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.link_off),
@@ -228,6 +228,28 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                 ],
               ),
             ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0, // 0: Notificaciones, 1: Configuración
+        onTap: (index) {
+          if (index == 1) {
+            Navigator.pushReplacementNamed(context, '/receptor_settings');
+          }
+        },
+        selectedFontSize: 14.0,
+        unselectedFontSize: 12.0,
+        selectedIconTheme: const IconThemeData(size: 37.5),
+        unselectedIconTheme: const IconThemeData(size: 22.5),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.notifications),
+            label: 'Notificaciones',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
+            label: 'Configuración',
+          ),
+        ],
+      ),
     );
   }
 

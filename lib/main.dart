@@ -12,6 +12,7 @@ import 'package:connect/services/firebase_service.dart';
 import 'screens/emisor/emisor_screen.dart';
 import 'screens/emisor/settings_screen.dart';
 import 'screens/emisor/app_list_screen.dart';
+import 'screens/receptor/receptor_settings_screen.dart';
 
 void main() async {
   // Asegurar que Flutter esté inicializado
@@ -298,6 +299,7 @@ class _MainAppState extends State<MainApp> {
         '/app_list': (context) => const AppListScreen(),
         '/receptor': (context) => const ReceptorScreen(),
         '/notificaciones': (context) => const NotificacionesScreen(), // Añadir la nueva ruta
+        '/receptor_settings': (context) => const ReceptorSettingsScreen(),
       },
     );
   }
