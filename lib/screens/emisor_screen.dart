@@ -256,7 +256,6 @@ class _EmisorScreenState extends State<EmisorScreen> with WidgetsBindingObserver
                   _isLinked ? Icons.link : Icons.link_off,
                   color: _isLinked ? Colors.green : Colors.red,
                 ),
-                const SizedBox(width: 8.0),
                 Text(
                   'Estado de Vinculación: ${_isLinked ? 'Vinculado' : 'No Vinculado'}',
                   style: TextStyle(

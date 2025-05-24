@@ -90,12 +90,25 @@ class _MainAppState extends State<MainApp> {
         });
         print('Received notification: $notificationData');
 
-        // Si está habilitado el guardado en Firebase, guardar la notificación
+        // Si está habilitado el guardado en Firebase, verificar si la notificación debe guardarse
         if (_isSavingToFirebase) {
           try {
-            await _firebaseService.saveNotification(notificationData);
+            // Obtener el packageName de la notificación
+            final String packageName = notificationData['packageName'] as String? ?? '';
+            
+            // Verificar si la notificación debe mostrarse según las apps habilitadas
+            final bool shouldShow = await NotificationFilterService.shouldShowNotification(packageName);
+            
+            // Solo guardar la notificación si debe mostrarse
+            if (shouldShow) {
+              await _firebaseService.saveNotification(notificationData);
+              print('Notificación guardada en Firebase: $packageName');
+            } else {
+              print('Notificación filtrada, no se guarda en Firebase: $packageName');
+            }
           } catch (e) {
             print('Error al guardar notificación en Firebase: $e');
+            // En caso de error, NO guardar la notificación
           }
         }
         break;

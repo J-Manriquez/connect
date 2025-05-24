@@ -17,9 +17,9 @@ class NotificationFilterService {
       // Obtener la lista de paquetes habilitados, usando caché si es reciente
       final List<dynamic> enabledPackages = await _getEnabledPackages();
       
-      // Si no hay paquetes habilitados, devolver todas las notificaciones
+      // Si no hay paquetes habilitados, devolver una lista vacía de notificaciones
       if (enabledPackages.isEmpty) {
-        return notifications;
+        return [];
       }
       
       // Filtrar las notificaciones para mostrar solo las de apps habilitadas
@@ -31,8 +31,8 @@ class NotificationFilterService {
       return filteredNotifications;
     } on PlatformException catch (e) {
       print('Error al filtrar notificaciones: ${e.message}');
-      // En caso de error, devolver todas las notificaciones
-      return notifications;
+      // En caso de error, devolver una lista vacía de notificaciones
+      return [];
     }
   }
   
@@ -42,17 +42,17 @@ class NotificationFilterService {
       // Obtener la lista de paquetes habilitados
       final List<dynamic> enabledPackages = await _getEnabledPackages();
       
-      // Si no hay paquetes habilitados, mostrar todas las notificaciones
+      // Si no hay paquetes habilitados, NO mostrar ninguna notificación
       if (enabledPackages.isEmpty) {
-        return true;
+        return false;
       }
       
       // Verificar si el paquete está en la lista de habilitados
       return enabledPackages.contains(packageName);
     } on PlatformException catch (e) {
       print('Error al verificar notificación: ${e.message}');
-      // En caso de error, permitir mostrar la notificación
-      return true;
+      // En caso de error, NO permitir mostrar la notificación
+      return false;
     }
   }
   
