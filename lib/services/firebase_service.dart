@@ -222,5 +222,22 @@ class FirebaseService {
     print('Notificación guardada con ID: ${notificationData.id}');
   }
   
- 
+  // Actualiza el estado de visualización de una notificación
+  Future<void> updateNotificationVisualizationStatus(String notificationId, String dateId, bool visualizado) async {
+    final deviceId = await getDeviceId();
+    
+    // Referencia al documento que contiene la notificación
+    final dayDocRef = _firestore
+        .collection('dispositivos')
+        .doc(deviceId)
+        .collection('notificaciones')
+        .doc(dateId);
+    
+    // Actualizar solo el campo de estado de visualización
+    await dayDocRef.update({
+      'notificaciones.$notificationId.status-visualizacion': visualizado,
+    });
+    
+    print('Estado de visualización actualizado para notificación $notificationId: $visualizado');
+  }
 }

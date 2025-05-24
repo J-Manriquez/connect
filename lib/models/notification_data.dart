@@ -8,6 +8,7 @@ class NotificationData {
   final String appName;
   final DateTime timestamp;
   final Map<String, dynamic> extras;
+  final bool statusVisualizacion; // Nuevo campo para el estado de visualización
 
   NotificationData({
     required this.id,
@@ -17,6 +18,7 @@ class NotificationData {
     required this.appName,
     required this.timestamp,
     required this.extras,
+    this.statusVisualizacion = false, // Valor por defecto: false
   });
 
   factory NotificationData.fromMap(Map<String, dynamic> map) {
@@ -28,6 +30,7 @@ class NotificationData {
       appName: map['appName'] ?? '',
       timestamp: (map['timestamp'] as Timestamp).toDate(),
       extras: Map<String, dynamic>.from(map['extras'] ?? {}),
+      statusVisualizacion: map['status-visualizacion'] ?? false, // Leer el campo desde el mapa
     );
   }
 
@@ -40,6 +43,7 @@ class NotificationData {
       'appName': appName,
       'timestamp': Timestamp.fromDate(timestamp),
       'extras': extras,
+      'status-visualizacion': statusVisualizacion, // Guardar el campo en el mapa
     };
   }
 
@@ -56,16 +60,21 @@ class NotificationData {
       appName: notification['appName'] ?? '',
       timestamp: now,
       extras: Map<String, dynamic>.from(notification['extras'] ?? {}),
+      statusVisualizacion: false, // Siempre inicializar como false para nuevas notificaciones
     );
   }
   
-  // Este método ya no es necesario ya que no generamos códigos aleatorios
-  // static String _generateRandomCode() {
-  //   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  //   String result = '';
-  //   for (int i = 0; i < 4; i++) {
-  //     result += chars[DateTime.now().microsecond % chars.length];
-  //   }
-  //   return result;
-  // }
+  // Método para crear una copia de la notificación con el estado de visualización actualizado
+  NotificationData copyWithVisualizacion(bool visualizado) {
+    return NotificationData(
+      id: id,
+      title: title,
+      text: text,
+      packageName: packageName,
+      appName: appName,
+      timestamp: timestamp,
+      extras: extras,
+      statusVisualizacion: visualizado,
+    );
+  }
 }
