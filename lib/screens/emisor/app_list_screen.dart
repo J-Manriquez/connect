@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:connect/services/notification_filter_service.dart';
+import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,7 +13,7 @@ class AppListScreen extends StatefulWidget {
 
 class _AppListScreenState extends State<AppListScreen> {
   static const platform = MethodChannel('com.example.connect/app_list');
-  
+
   List<Map<String, dynamic>> _apps = [];
   List<Map<String, dynamic>> _filteredApps = [];
   bool _isLoading = true;
@@ -20,16 +21,17 @@ class _AppListScreenState extends State<AppListScreen> {
   String _searchQuery = '';
   String? _error;
   String _lastUpdateDate = 'Desconocido';
-  
+  bool _showActiveApps = true; // Add this state variable
+
   @override
   void initState() {
     super.initState();
     _loadApps();
-    
+
     // Configurar listener para actualizaciones desde el código nativo
     platform.setMethodCallHandler(_handleMethodCall);
   }
-  
+
   Future<void> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'onAppListUpdated':
@@ -40,7 +42,7 @@ class _AppListScreenState extends State<AppListScreen> {
         print('Método desconocido: ${call.method}');
     }
   }
-  
+
   @override
   void dispose() {
     // Limpiar el handler al destruir el widget
@@ -56,18 +58,22 @@ class _AppListScreenState extends State<AppListScreen> {
       });
 
       // Obtener la lista de aplicaciones desde el código nativo (primero intenta desde SharedPreferences)
-      final List<dynamic> result = await platform.invokeMethod('getInstalledApps');
-      
+      final List<dynamic> result = await platform.invokeMethod(
+        'getInstalledApps',
+      );
+
       // Obtener la fecha de última actualización
-      final String lastUpdateDate = await platform.invokeMethod('getLastUpdateDate');
-      
+      final String lastUpdateDate = await platform.invokeMethod(
+        'getLastUpdateDate',
+      );
+
       // Convertir correctamente cada elemento a Map<String, dynamic>
       final List<Map<String, dynamic>> apps = result.map((item) {
         // Convertir explícitamente cada elemento a Map<String, dynamic>
         final Map<String, dynamic> app = Map<String, dynamic>.from(item as Map);
         return app;
       }).toList();
-      
+
       // Actualizar el estado con las aplicaciones cargadas
       setState(() {
         _apps = apps;
@@ -96,17 +102,21 @@ class _AppListScreenState extends State<AppListScreen> {
       });
 
       // Forzar la carga de aplicaciones desde el sistema
-      final List<dynamic> result = await platform.invokeMethod('loadAppsFromSystem');
-      
+      final List<dynamic> result = await platform.invokeMethod(
+        'loadAppsFromSystem',
+      );
+
       // Obtener la fecha de última actualización
-      final String lastUpdateDate = await platform.invokeMethod('getLastUpdateDate');
-      
+      final String lastUpdateDate = await platform.invokeMethod(
+        'getLastUpdateDate',
+      );
+
       // Convertir correctamente cada elemento a Map<String, dynamic>
       final List<Map<String, dynamic>> apps = result.map((item) {
         final Map<String, dynamic> app = Map<String, dynamic>.from(item as Map);
         return app;
       }).toList();
-      
+
       // Actualizar el estado con las aplicaciones cargadas
       setState(() {
         _apps = apps;
@@ -114,10 +124,9 @@ class _AppListScreenState extends State<AppListScreen> {
         _filterApps();
         _isLoading = false;
       });
-      
+
       // Sincronizar con Firebase después de recargar las aplicaciones
       await NotificationFilterService.syncEnabledAppsWithFirebase();
-      
     } on PlatformException catch (e) {
       setState(() {
         _error = "Error al recargar aplicaciones: ${e.message}";
@@ -138,7 +147,7 @@ class _AppListScreenState extends State<AppListScreen> {
         'packageName': packageName,
         'isEnabled': isEnabled,
       });
-      
+
       // Actualizar el estado local
       setState(() {
         for (var i = 0; i < _apps.length; i++) {
@@ -149,10 +158,9 @@ class _AppListScreenState extends State<AppListScreen> {
         }
         _filterApps();
       });
-      
+
       // Sincronizar con Firebase después de actualizar el estado
       await NotificationFilterService.syncEnabledAppsWithFirebase();
-      
     } on PlatformException catch (e) {
       print("Error al actualizar estado de la aplicación: ${e.message}");
       // Mostrar un snackbar con el error
@@ -169,13 +177,13 @@ class _AppListScreenState extends State<AppListScreen> {
         if (!_showSystemApps && app['isSystemApp'] == true) {
           return false;
         }
-        
+
         // Filtrar por búsqueda
         final appName = app['appName'] as String? ?? '';
         final packageName = app['packageName'] as String? ?? '';
-        
+
         return appName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-               packageName.toLowerCase().contains(_searchQuery.toLowerCase());
+            packageName.toLowerCase().contains(_searchQuery.toLowerCase());
       }).toList();
     });
   }
@@ -183,8 +191,11 @@ class _AppListScreenState extends State<AppListScreen> {
   @override
   Widget build(BuildContext context) {
     // Contar aplicaciones habilitadas
-    final enabledAppsCount = _apps.where((app) => app['isEnabled'] == true).length;
-    
+    final enabledAppsCount = _apps
+        .where((app) => app['isEnabled'] == true)
+        .length;
+    final activeApps = _apps.where((app) => app['isEnabled'] == true).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lista de Aplicaciones'),
@@ -197,36 +208,52 @@ class _AppListScreenState extends State<AppListScreen> {
       ),
       body: Column(
         children: [
-          // Barra de búsqueda
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              decoration: const InputDecoration(
-                labelText: 'Buscar aplicaciones',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                  _filterApps();
-                });
-              },
+          // Opción para mostrar aplicaciones del sistema
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: IconButton(
+                    icon: Icon(
+                      _showActiveApps ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _showActiveApps = !_showActiveApps;
+                      });
+                    },
+                  ),
+                  title: const Text('Aplicaciones Activas'),
+                ),
+                if (_showActiveApps)
+                  Column(
+                    children: activeApps.map((app) {
+                      final packageName = app['packageName'] as String? ?? '';
+                      final appName = app['appName'] as String? ?? 'Sin nombre';
+                      return ListTile(
+                        leading: _buildAppIcon(app['icon'] as String?),
+                        title: Text(appName),
+                        subtitle: Text(packageName),
+                        trailing: Switch(
+                          value: true,
+                          onChanged: (value) {
+                            _updateAppState(
+                              packageName,
+                              false,
+                            ); // Deactivate app
+                          },
+                          // activeColor: Colors.green,
+                          inactiveTrackColor: customColor[200],
+                          inactiveThumbColor: Colors.grey[300],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+              ],
             ),
           ),
-          
-          // Opción para mostrar aplicaciones del sistema
-          SwitchListTile(
-            title: const Text('Mostrar aplicaciones del sistema'),
-            value: _showSystemApps,
-            onChanged: (value) {
-              setState(() {
-                _showSystemApps = value;
-                _filterApps();
-              });
-            },
-          ),
-          
+
           // Información de última actualización
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -238,10 +265,34 @@ class _AppListScreenState extends State<AppListScreen> {
               ),
             ),
           ),
-          
+
+          // Barra de búsqueda
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              decoration: const InputDecoration(
+                labelText: 'Buscar aplicaciones',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.black),
+                ),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                  _filterApps();
+                });
+              },
+            ),
+          ),
+
           // Contador de aplicaciones
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -251,93 +302,115 @@ class _AppListScreenState extends State<AppListScreen> {
                 ),
                 Text(
                   'Habilitadas: $enabledAppsCount',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color.fromARGB(255, 0, 0, 0),
+                  ),
                 ),
               ],
             ),
           ),
-          
+
           // Lista de aplicaciones
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
-                    ? Center(child: Text(_error!, style: const TextStyle(color: Colors.red)))
-                    : _filteredApps.isEmpty
-                        ? const Center(child: Text('No se encontraron aplicaciones'))
-                        : ListView.builder(
-                            itemCount: _filteredApps.length,
-                            itemBuilder: (context, index) {
-                              final app = _filteredApps[index];
-                              final packageName = app['packageName'] as String? ?? '';
-                              final isEnabled = app['isEnabled'] as bool? ?? false;
-                              
-                              return ListTile(
-                                leading: _buildAppIcon(app['icon'] as String?),
-                                title: Text(app['appName'] as String? ?? 'Sin nombre'),
-                                subtitle: Text(packageName),
-                                trailing: Switch(
-                                  value: isEnabled,
-                                  onChanged: (value) {
-                                    _updateAppState(packageName, value);
-                                  },
-                                ),
-                              );
-                            },
-                          ),
+                ? Center(
+                    child: Text(
+                      _error!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  )
+                : _filteredApps.isEmpty
+                ? const Center(child: Text('No se encontraron aplicaciones'))
+                : ListView.builder(
+                    itemCount: _filteredApps.length,
+                    itemBuilder: (context, index) {
+                      final app = _filteredApps[index];
+                      final packageName = app['packageName'] as String? ?? '';
+                      final isEnabled = app['isEnabled'] as bool? ?? false;
+
+                      return ListTile(
+                        leading: _buildAppIcon(app['icon'] as String?),
+                        title: Text(app['appName'] as String? ?? 'Sin nombre'),
+                        subtitle: Text(packageName),
+                        trailing: Switch(
+                          value: isEnabled,
+                          onChanged: (value) {
+                            _updateAppState(packageName, value);
+                          },
+                          inactiveTrackColor:
+                              customColor[200], // <-- add this line
+                          inactiveThumbColor: Colors.grey[300], // <-- optional
+                        ),
+                      );
+                    },
+                  ),
           ),
+
+          // Card for active apps
         ],
       ),
-      // Agregar el Bottom Navigation Bar
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 2, // Índice actual (Aplicaciones - ahora a la derecha)
-        onTap: (index) {
-          // Navegar a la pantalla correspondiente según el índice
-          switch (index) {
-            case 0:
-              // Navegar a la pantalla de configuración
-              Navigator.pushReplacementNamed(context, '/settings');
-              break;
-            case 1:
-              // Navegar a la pantalla Emisor
-              Navigator.pushReplacementNamed(context, '/');
-              break;
-            case 2:
-              // Ya estamos en la pantalla de lista de apps
-              break;
-          }
-        },
-        selectedFontSize: 14.0,
-        unselectedFontSize: 12.0,
-        selectedIconTheme: const IconThemeData(size: 37.5), // 2.5 veces el tamaño normal (15*2.5)
-        unselectedIconTheme: const IconThemeData(size: 22.5), // 1.5 veces el tamaño normal (15*1.5)
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Configuración',
+      // Agregar el Bottom Navigation Bar con barra divisoria
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 3,
+            color: customColor[700], // Barra divisoria con customColor
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.send), // Icono que refleja emisión
-            label: 'Emisor',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.apps),
-            label: 'Aplicaciones',
+          BottomNavigationBar(
+            currentIndex:
+                2, // Índice actual (Aplicaciones - ahora a la derecha)
+            onTap: (index) {
+              // Navegar a la pantalla correspondiente según el índice
+              switch (index) {
+                case 0:
+                  Navigator.pushReplacementNamed(context, '/settings');
+                  break;
+                case 1:
+                  Navigator.pushReplacementNamed(context, '/');
+                  break;
+                case 2:
+                  // Ya estamos en la pantalla de lista de apps
+                  break;
+              }
+            },
+            selectedFontSize: 14.0,
+            unselectedFontSize: 12.0,
+            selectedIconTheme: const IconThemeData(size: 37.5),
+            unselectedIconTheme: const IconThemeData(size: 22.5),
+            selectedItemColor:
+                customColor[700], // Color para el ítem seleccionado
+            unselectedItemColor:
+                Colors.black, // Color para los ítems no seleccionados
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings),
+                label: 'Configuración',
+              ),
+              BottomNavigationBarItem(icon: Icon(Icons.send), label: 'Emisor'),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.apps),
+                label: 'Aplicaciones',
+              ),
+            ],
           ),
         ],
       ),
     );
   }
-  
+
   Widget _buildAppIcon(String? base64Icon) {
     if (base64Icon == null || base64Icon.isEmpty) {
       return const Icon(Icons.android);
     }
-    
+
     try {
       // Limpiar la cadena Base64 eliminando saltos de línea y espacios
       final cleanBase64 = base64Icon.replaceAll(RegExp(r'\s+'), '');
-      
+
       final bytes = base64Decode(cleanBase64);
       return Image.memory(
         bytes,

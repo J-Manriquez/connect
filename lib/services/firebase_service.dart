@@ -76,8 +76,8 @@ class FirebaseService {
   }
   
   // Actualiza el estado de vinculación
-  Future<void> updateLinkStatus(bool isLinked) async {
-    final deviceId = await getDeviceId();
+  Future<void> updateLinkStatus(bool isLinked, String deviceId) async {
+    // final deviceId = await getDeviceId();
     final docRef = _firestore.collection('dispositivos').doc(deviceId);
     
     await docRef.update({

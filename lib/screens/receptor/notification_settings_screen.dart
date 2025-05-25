@@ -1,3 +1,4 @@
+import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/local_notification_service.dart';
 
@@ -70,12 +71,18 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   subtitle: const Text('Reproducir sonido al recibir notificaciones'),
                   value: _soundEnabled,
                   onChanged: _toggleSound,
+                  activeTrackColor: customColor[300],
+                  inactiveTrackColor: Colors.grey[300],
+                  activeColor: customColor[700],
                 ),
                 SwitchListTile(
                   title: const Text('Vibración'),
                   subtitle: const Text('Vibrar al recibir notificaciones'),
                   value: _vibrationEnabled,
                   onChanged: _toggleVibration,
+                  activeTrackColor: customColor[300],
+                  inactiveTrackColor: Colors.grey[300],
+                  activeColor: customColor[700],
                 ),
               ],
             ),

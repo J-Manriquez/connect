@@ -18,6 +18,7 @@ import 'screens/receptor/receptor_settings_screen.dart';
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/screens/receptor/unread_notifications_screen.dart';
 import 'package:connect/screens/receptor/notification_settings_screen.dart'; // Import the new screen
+import 'package:connect/theme_colors.dart';
 
 // En el método main, añadir la inicialización del servicio de notificaciones locales
 void main() async {
@@ -26,7 +27,7 @@ void main() async {
 
   // Inicializar Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   // Inicializar el servicio de notificaciones locales
   await LocalNotificationService.initialize();
 
@@ -108,11 +109,15 @@ class _MainAppState extends State<MainApp> {
         if (_isSavingToFirebase) {
           try {
             // Obtener el packageName de la notificación
-            final String packageName = notificationData['packageName'] as String? ?? '';
-            
+            final String packageName =
+                notificationData['packageName'] as String? ?? '';
+
             // Verificar si la notificación debe mostrarse según las apps habilitadas
-            final bool shouldShow = await NotificationFilterService.shouldShowNotification(packageName);
-            
+            final bool shouldShow =
+                await NotificationFilterService.shouldShowNotification(
+                  packageName,
+                );
+
             // Solo guardar la notificación si debe mostrarse
             if (shouldShow) {
               await _firebaseService.saveNotification(notificationData);
@@ -120,9 +125,10 @@ class _MainAppState extends State<MainApp> {
 
               // Mostrar notificación local y actualizar estado de visualización
               await _showLocalNotification(notificationData);
-
             } else {
-              print('Notificación filtrada, no se guarda en Firebase: $packageName');
+              print(
+                'Notificación filtrada, no se guarda en Firebase: $packageName',
+              );
             }
           } catch (e) {
             print('Error al guardar notificación en Firebase: $e');
@@ -262,9 +268,13 @@ class _MainAppState extends State<MainApp> {
       print('[DEBUG] _checkInitialRoute: Start');
       final receptorService = ReceptorService();
       final deviceId = await receptorService.getLinkedDeviceId();
-      print('[DEBUG] _checkInitialRoute: deviceId from SharedPreferences = \$deviceId');
+      print(
+        '[DEBUG] _checkInitialRoute: deviceId from SharedPreferences = \$deviceId',
+      );
       final linkStatus = await _firebaseService.getLinkStatus();
-      print('[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus');
+      print(
+        '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',
+      );
       if (linkStatus) {
         print('[DEBUG] _checkInitialRoute: Navigating to /notificaciones');
         Navigator.pushReplacementNamed(context, '/notificaciones');
@@ -272,7 +282,9 @@ class _MainAppState extends State<MainApp> {
         return;
       }
       final useAsReceptor = await PreferencesService.getUseAsReceptor();
-      print('[DEBUG] _checkInitialRoute: useAsReceptor = \$useAsReceptor, _isPermissionGranted = \$_isPermissionGranted');
+      print(
+        '[DEBUG] _checkInitialRoute: useAsReceptor = \$useAsReceptor, _isPermissionGranted = \$_isPermissionGranted',
+      );
       if (useAsReceptor && _isPermissionGranted) {
         print('[DEBUG] _checkInitialRoute: Navigating to /receptor');
         Navigator.pushReplacementNamed(context, '/receptor');
@@ -287,8 +299,27 @@ class _MainAppState extends State<MainApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Connect',
-      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      theme: ThemeData(
+        primarySwatch: customColor, // Usando el MaterialColor personalizado
+        colorScheme: ColorScheme.fromSwatch(
+          primarySwatch: customColor,
+          accentColor: customColor[900],
+        ),
+        useMaterial3: true,
+        // Añadir o modificar appBarTheme aquí
+        appBarTheme: AppBarTheme(
+          backgroundColor: customColor[700], // Color de fondo del AppBar
+          foregroundColor: Colors.white, // Color de los iconos y texto del AppBar
+          titleTextStyle: TextStyle(
+            color: Colors.white, // Color del título del AppBar
+            fontSize: 20, // Ajusta el tamaño de fuente si es necesario
+            fontWeight: FontWeight.bold, // Ajusta el peso de fuente si es necesario
+          ),
+          centerTitle: true, // Centrar el título del AppBar
+        ),
+      ),
       initialRoute: '/',
       routes: {
         '/': (context) => EmisorScreen(
@@ -313,8 +344,10 @@ class _MainAppState extends State<MainApp> {
         '/receptor': (context) => const ReceptorScreen(),
         '/notificaciones': (context) => const NotificacionesScreen(),
         '/receptor_settings': (context) => const ReceptorSettingsScreen(),
-        '/unread_notifications': (context) => const UnreadNotificationsScreen(), // Añadir esta nueva ruta
-        '/notification_settings': (context) => const NotificationSettingsScreen(), // Add the new route
+        '/unread_notifications': (context) =>
+            const UnreadNotificationsScreen(), // Añadir esta nueva ruta
+        '/notification_settings': (context) =>
+            const NotificationSettingsScreen(), // Add the new route
       },
     );
   }
@@ -330,13 +363,16 @@ Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
       packageName: notification['packageName'] ?? '',
       appName: notification['appName'] ?? 'Desconocida',
     );
-    
+
     // Actualizar el estado de visualización a true
     final String notificationId = notification['id'] ?? '';
     if (notificationId.isNotEmpty) {
       // Usar ReceptorService para actualizar el estado
       final ReceptorService receptorService = ReceptorService();
-      await receptorService.updateNotificationVisualizationStatus(notificationId, true);
+      await receptorService.updateNotificationVisualizationStatus(
+        notificationId,
+        true,
+      );
       print('Notificación marcada como visualizada: \$notificationId');
     }
   } catch (e) {

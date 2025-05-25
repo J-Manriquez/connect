@@ -40,7 +40,7 @@ class ReceptorService {
       await prefs.setString(KEY_LINKED_DEVICE_ID, deviceId);
       
       // Actualizar el estado de vinculación en Firebase
-      await _firebaseService.updateLinkStatus(true);
+      await _firebaseService.updateLinkStatus(true, deviceId);
       
       print('ID del dispositivo emisor guardado: $deviceId');
       return true;

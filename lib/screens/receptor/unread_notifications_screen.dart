@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/services/local_notification_service.dart';
+import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/receptor_service.dart';
 
@@ -8,12 +9,13 @@ class UnreadNotificationsScreen extends StatefulWidget {
   const UnreadNotificationsScreen({Key? key}) : super(key: key);
 
   @override
-  State<UnreadNotificationsScreen> createState() => _UnreadNotificationsScreenState();
+  State<UnreadNotificationsScreen> createState() =>
+      _UnreadNotificationsScreenState();
 }
 
 class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
   final ReceptorService _receptorService = ReceptorService();
-  
+
   bool _isLoading = false;
   List<Map<String, dynamic>> _unreadNotifications = [];
   StreamSubscription? _notificationSubscription;
@@ -27,7 +29,8 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
   }
 
   Future<void> _loadNotificationSettings() async {
-    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+    final notificationsEnabled =
+        await LocalNotificationService.areNotificationsEnabled();
     setState(() {
       _notificationsEnabled = notificationsEnabled;
     });
@@ -61,13 +64,18 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
   void _startListeningForUnreadNotifications() {
     _notificationSubscription = _receptorService
         .listenForUnseenNotifications()
-        .listen((notifications) {
-      setState(() {
-        _unreadNotifications = notifications;
-      });
-    }, onError: (error) {
-      print('Error en la suscripción de notificaciones no leídas: $error');
-    });
+        .listen(
+          (notifications) {
+            setState(() {
+              _unreadNotifications = notifications;
+            });
+          },
+          onError: (error) {
+            print(
+              'Error en la suscripción de notificaciones no leídas: $error',
+            );
+          },
+        );
   }
 
   // Marcar notificación como leída
@@ -75,11 +83,16 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
     try {
       final String notificationId = notification['id'] ?? '';
       if (notificationId.isNotEmpty) {
-        await _receptorService.updateNotificationVisualizationStatus(notificationId, true);
-        
+        await _receptorService.updateNotificationVisualizationStatus(
+          notificationId,
+          true,
+        );
+
         // Eliminar la notificación de la lista local
         setState(() {
-          _unreadNotifications.removeWhere((item) => item['id'] == notificationId);
+          _unreadNotifications.removeWhere(
+            (item) => item['id'] == notificationId,
+          );
         });
       }
     } catch (e) {
@@ -92,7 +105,7 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
       );
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -109,10 +122,7 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                 children: [
                   const Text(
                     'Notificaciones pendientes:',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Expanded(
@@ -127,11 +137,16 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 8.0),
                                 child: ListTile(
-                                  title: Text(notification['title'] ?? 'Sin título'),
+                                  title: Text(
+                                    notification['title'] ?? 'Sin título',
+                                  ),
                                   subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(notification['text'] ?? 'Sin contenido'),
+                                      Text(
+                                        notification['text'] ?? 'Sin contenido',
+                                      ),
                                       Text(
                                         'App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}',
                                         style: const TextStyle(
@@ -145,13 +160,18 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        _formatTimestamp(notification['timestamp']),
+                                        _formatTimestamp(
+                                          notification['timestamp'],
+                                        ),
                                         style: const TextStyle(fontSize: 12),
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.check_circle_outline),
+                                        icon: const Icon(
+                                          Icons.check_circle_outline,
+                                        ),
                                         tooltip: 'Marcar como leída',
-                                        onPressed: () => _markAsRead(notification),
+                                        onPressed: () =>
+                                            _markAsRead(notification),
                                       ),
                                     ],
                                   ),
@@ -163,37 +183,54 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                 ],
               ),
             ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 2, // 0: Configuración, 1: Notificaciones, 2: No Leídas
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              Navigator.pushReplacementNamed(context, '/receptor_settings');
-              break;
-            case 1:
-              Navigator.pushReplacementNamed(context, '/notificaciones');
-              break;
-            case 2:
-              // Ya estamos en no leídas
-              break;
-          }
-        },
-        selectedFontSize: 14.0,
-        unselectedFontSize: 12.0,
-        selectedIconTheme: const IconThemeData(size: 37.5),
-        unselectedIconTheme: const IconThemeData(size: 22.5),
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Configuración',
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 3,
+            color: customColor[700], // Barra divisoria con customColor
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.radio_button_checked, color: _notificationsEnabled ? Colors.green : Colors.red),
-            label: 'Notificaciones',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.mark_email_unread),
-            label: 'No Leídas',
+          BottomNavigationBar(
+            currentIndex:
+                2, // 0: Configuración, 1: Notificaciones, 2: No Leídas
+            onTap: (index) {
+              switch (index) {
+                case 0:
+                  Navigator.pushReplacementNamed(context, '/receptor_settings');
+                  break;
+                case 1:
+                  Navigator.pushReplacementNamed(context, '/notificaciones');
+                  break;
+                case 2:
+                  // Ya estamos en no leídas
+                  break;
+              }
+            },
+            selectedFontSize: 14.0,
+            unselectedFontSize: 12.0,
+            selectedIconTheme: const IconThemeData(size: 37.5),
+            unselectedIconTheme: const IconThemeData(size: 22.5),
+            selectedItemColor:
+                customColor[700], // Color para el ítem seleccionado
+            unselectedItemColor:
+                Colors.black, // Color para los ítems no seleccionados
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.settings),
+                label: 'Configuración',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(
+                  Icons.radio_button_checked,
+                  color: _notificationsEnabled ? Colors.green : Colors.red,
+                ),
+                label: 'Notificaciones',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.mark_email_unread),
+                label: 'No Leídas',
+              ),
+            ],
           ),
         ],
       ),
@@ -203,7 +240,7 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
   // Formatear timestamp para mostrar
   String _formatTimestamp(dynamic timestamp) {
     if (timestamp == null) return '';
-    
+
     final DateTime date = (timestamp as Timestamp).toDate();
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
