@@ -67,28 +67,23 @@ class ReceptorService {
   // Método para actualizar el estado de visualización de una notificación
   Future<void> updateNotificationVisualizationStatus(String notificationId, bool visualizado) async {
     try {
-      // Obtener el ID del dispositivo emisor vinculado
       final deviceId = await getLinkedDeviceId();
-      
       if (deviceId == null) {
         print('No hay dispositivo emisor vinculado');
         return;
       }
-      
-      // Obtener la fecha actual en formato YYYY-MM-DD
       final DateTime now = DateTime.now();
       final String dateId = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      
-      // Actualizar el estado de visualización en Firebase
-      await _firestore
+      final docRef = _firestore
           .collection('dispositivos')
           .doc(deviceId)
           .collection('notificaciones')
-          .doc(dateId)
-          .update({
-            'notificaciones.$notificationId.status-visualizacion': visualizado,
-          });
-      
+          .doc(dateId);
+      await docRef.set({
+        'notificaciones': {
+          notificationId: {'status-visualizacion': visualizado}
+        }
+      }, SetOptions(merge: true));
       print('Estado de visualización actualizado para notificación $notificationId: $visualizado');
     } catch (e) {
       print('Error al actualizar estado de visualización: $e');
