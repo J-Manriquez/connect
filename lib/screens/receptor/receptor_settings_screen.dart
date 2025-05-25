@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:connect/services/local_notification_service.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
+import 'package:connect/services/receptor_service.dart'; // Import ReceptorService
+import 'package:connect/services/preferences_service.dart'; // Import PreferencesService
 
 class ReceptorSettingsScreen extends StatefulWidget {
   const ReceptorSettingsScreen({Key? key}) : super(key: key);
@@ -10,10 +12,13 @@ class ReceptorSettingsScreen extends StatefulWidget {
 }
 
 class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
-  bool _notificationsEnabled = false;
-  bool _soundEnabled = true;
-  bool _vibrationEnabled = true;
+  // Removed notification settings state variables
+  // bool _notificationsEnabled = false;
+  // bool _soundEnabled = true;
+  // bool _vibrationEnabled = true;
   bool _isLoading = true;
+
+  final ReceptorService _receptorService = ReceptorService(); // Instantiate ReceptorService
 
   @override
   void initState() {
@@ -26,51 +31,64 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       _isLoading = true;
     });
 
-    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
-    final soundEnabled = await LocalNotificationService.isSoundEnabled();
-    final vibrationEnabled = await LocalNotificationService.isVibrationEnabled();
+    // Removed loading of notification settings
+    // final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+    // final soundEnabled = await LocalNotificationService.isSoundEnabled();
+    // final vibrationEnabled = await LocalNotificationService.isVibrationEnabled();
 
     setState(() {
-      _notificationsEnabled = notificationsEnabled;
-      _soundEnabled = soundEnabled;
-      _vibrationEnabled = vibrationEnabled;
+      // Removed setting notification settings state
+      // _notificationsEnabled = notificationsEnabled;
+      // _soundEnabled = soundEnabled;
+      // _vibrationEnabled = vibrationEnabled;
       _isLoading = false;
     });
   }
 
-  Future<void> _toggleNotifications(bool value) async {
-    if (value && await Permission.notification.isDenied) {
-      final status = await Permission.notification.request();
-      if (status.isDenied) {
-        // El usuario rechazó los permisos
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Se requieren permisos de notificación para esta función'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
+  // Removed toggle methods for notifications, sound, and vibration
+  // Future<void> _toggleNotifications(bool value) async { ... }
+  // Future<void> _toggleSound(bool value) async { ... }
+  // Future<void> _toggleVibration(bool value) async { ... }
+
+  // Desvincular dispositivo (Moved from NotificacionesScreen)
+  Future<void> _unlinkDevice() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(ReceptorService.KEY_LINKED_DEVICE_ID);
+      
+      // Note: Notification subscription cancellation should be handled in the screen where the subscription exists (NotificacionesScreen)
+      // _notificationSubscription?.cancel(); // Removed as subscription is in NotificacionesScreen
+      
+      // Guardar preferencia de no usar como receptor
+      await PreferencesService.saveUseAsReceptor(false);
+      
+      // Redirigir a la pantalla emisor
+      Navigator.pushReplacementNamed(context, '/');
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Dispositivo desvinculado correctamente'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    } catch (e) {
+      print('Error al desvincular dispositivo: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al desvincular dispositivo: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
-
-    await LocalNotificationService.setNotificationsEnabled(value);
-    setState(() {
-      _notificationsEnabled = value;
-    });
   }
 
-  Future<void> _toggleSound(bool value) async {
-    await LocalNotificationService.setSoundEnabled(value);
-    setState(() {
-      _soundEnabled = value;
-    });
-  }
-
-  Future<void> _toggleVibration(bool value) async {
-    await LocalNotificationService.setVibrationEnabled(value);
-    setState(() {
-      _vibrationEnabled = value;
-    });
+  // Método para volver a la pantalla emisor (Moved from NotificacionesScreen)
+  Future<void> _backToEmisor() async {
+    // Guardar preferencia de no usar como receptor
+    await PreferencesService.saveUseAsReceptor(false);
+    
+    // Navegar a la pantalla emisor
+    Navigator.pushReplacementNamed(context, '/');
   }
 
   @override
@@ -84,38 +102,71 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(16.0),
               children: [
+                // Removed Notificaciones section and toggles
+                // const SizedBox(height: 16),
+                // const Text(
+                //   'Notificaciones',
+                //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                // ),
+                // const SizedBox(height: 8),
+                // SwitchListTile( ... ),
+                // const Divider(),
+
+                // Add Card for Unlinking and Back to Emisor
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Opciones de Dispositivo',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: _unlinkDevice,
+                          icon: const Icon(Icons.link_off),
+                          label: const Text('Desvincular Dispositivo'),
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(40),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: _backToEmisor,
+                          icon: const Icon(Icons.arrow_back),
+                          label: const Text('Volver a Pantalla Emisor'),
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(40),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Notificaciones',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+
+                // Add button to navigate to Notification Settings
+                Card(
+                  child: ListTile(
+                    title: const Text('Configuración de Notificaciones'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () {
+                      Navigator.pushNamed(context, '/notification_settings'); // Navigate to new screen
+                    },
+                  ),
                 ),
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  title: const Text('Mostrar notificaciones locales'),
-                  subtitle: const Text(
-                      'Muestra las notificaciones recibidas en la barra de notificaciones'),
-                  value: _notificationsEnabled,
-                  onChanged: _toggleNotifications,
-                ),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text(
-                  'Configuración de notificaciones',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  title: const Text('Sonido'),
-                  subtitle: const Text('Reproducir sonido al recibir notificaciones'),
-                  value: _soundEnabled,
-                  onChanged: _notificationsEnabled ? _toggleSound : null,
-                ),
-                SwitchListTile(
-                  title: const Text('Vibración'),
-                  subtitle: const Text('Vibrar al recibir notificaciones'),
-                  value: _vibrationEnabled,
-                  onChanged: _notificationsEnabled ? _toggleVibration : null,
-                ),
+
+                // Removed Notification Settings section and toggles
+                // const SizedBox(height: 8),
+                // const Text(
+                //   'Configuración de notificaciones',
+                //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                // ),
+                // const SizedBox(height: 8),
+                // SwitchListTile( ... ),
+                // SwitchListTile( ... ),
               ],
             ),
       bottomNavigationBar: BottomNavigationBar(
@@ -143,11 +194,11 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
             label: 'Notificaciones',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
+            icon: Icon(Icons.settings), // Assuming this is for settings
             label: 'Configuración',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.mark_email_unread),
+            icon: Icon(Icons.mark_email_unread), // Assuming this is for unread
             label: 'No Leídas',
           ),
         ],

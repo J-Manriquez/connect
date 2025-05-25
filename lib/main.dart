@@ -17,6 +17,7 @@ import 'screens/receptor/receptor_settings_screen.dart';
 // Añadir este import al inicio del archivo
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/screens/receptor/unread_notifications_screen.dart';
+import 'package:connect/screens/receptor/notification_settings_screen.dart'; // Import the new screen
 
 // En el método main, añadir la inicialización del servicio de notificaciones locales
 void main() async {
@@ -313,6 +314,7 @@ class _MainAppState extends State<MainApp> {
         '/notificaciones': (context) => const NotificacionesScreen(),
         '/receptor_settings': (context) => const ReceptorSettingsScreen(),
         '/unread_notifications': (context) => const UnreadNotificationsScreen(), // Añadir esta nueva ruta
+        '/notification_settings': (context) => const NotificationSettingsScreen(), // Add the new route
       },
     );
   }

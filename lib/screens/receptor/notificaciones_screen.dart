@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/receptor_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:connect/services/local_notification_service.dart';
@@ -20,17 +21,27 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   List<Map<String, dynamic>> _notifications = [];
   StreamSubscription? _notificationSubscription;
   String? _linkedDeviceId;
+  bool _notificationsEnabled = false; // Add state for the toggle
 
   @override
   void initState() {
     super.initState();
     _loadLinkedDevice();
+    _loadNotificationSettings(); // Load initial state for the toggle
   }
 
   @override
   void dispose() {
     _notificationSubscription?.cancel();
     super.dispose();
+  }
+
+  // Load initial state for the notification toggle
+  Future<void> _loadNotificationSettings() async {
+    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+    setState(() {
+      _notificationsEnabled = notificationsEnabled;
+    });
   }
 
   // Cargar el dispositivo vinculado y comenzar a escuchar notificaciones
@@ -115,47 +126,33 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   //   }
   // }
   
-  // Desvincular dispositivo
-  Future<void> _unlinkDevice() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(ReceptorService.KEY_LINKED_DEVICE_ID);
-      
-      // Cancelar la suscripción a notificaciones
-      _notificationSubscription?.cancel();
-      
-      // Guardar preferencia de no usar como receptor
-      await PreferencesService.saveUseAsReceptor(false);
-      
-      // Redirigir a la pantalla emisor
-      Navigator.pushReplacementNamed(context, '/');
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Dispositivo desvinculado correctamente'),
-          backgroundColor: Colors.blue,
-        ),
-      );
-    } catch (e) {
-      print('Error al desvincular dispositivo: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error al desvincular dispositivo: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+  // Desvincular dispositivo (Moved to ReceptorSettingsScreen)
+  // Future<void> _unlinkDevice() async { ... }
+
+  // Método para volver a la pantalla emisor (Moved to ReceptorSettingsScreen)
+  // Future<void> _backToEmisor() async { ... }
+  
+  // Toggle for local notifications (Moved from ReceptorSettingsScreen)
+  Future<void> _toggleNotifications(bool value) async {
+    if (value && await Permission.notification.isDenied) {
+      final status = await Permission.notification.request();
+      if (status.isDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Se requieren permisos de notificación para esta función'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
     }
+
+    await LocalNotificationService.setNotificationsEnabled(value);
+    setState(() {
+      _notificationsEnabled = value;
+    });
   }
 
-  // Método para volver a la pantalla emisor
-  Future<void> _backToEmisor() async {
-    // Guardar preferencia de no usar como receptor
-    await PreferencesService.saveUseAsReceptor(false);
-    
-    // Navegar a la pantalla emisor
-    Navigator.pushReplacementNamed(context, '/');
-  }
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -163,11 +160,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         title: const Text('Notificaciones Recibidas'),
         automaticallyImplyLeading: false,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.link_off),
-            tooltip: 'Desvincular',
-            onPressed: _unlinkDevice,
-          ),
+          // Removed Desvincular button
         ],
       ),
       body: _isLoading
@@ -177,16 +170,8 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Botón para volver a la pantalla emisor
-                  ElevatedButton.icon(
-                    onPressed: _backToEmisor,
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('Volver a Emisor'),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(40),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  // Removed Volver a Emisor button
+                  const SizedBox(height: 16), // Adjust spacing
                   // Sección de dispositivo vinculado
                   Card(
                     child: Padding(
@@ -222,6 +207,16 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // Add the notification toggle here
+                  SwitchListTile(
+                    title: const Text('Mostrar notificaciones locales'),
+                    subtitle: const Text(
+                        'Muestra las notificaciones recibidas en la barra de notificaciones'),
+                    value: _notificationsEnabled,
+                    onChanged: _toggleNotifications,
+                  ),
+                  const Divider(), // Add a divider for separation
+                  const SizedBox(height: 16), // Adjust spacing
                   const Text(
                     'Notificaciones recibidas:',
                     style: TextStyle(
@@ -297,7 +292,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
             label: 'Configuración',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.mark_email_unread),
+            icon: Icon(Icons.mark_email_unread), // Assuming this is for unread
             label: 'No Leídas',
           ),
         ],
