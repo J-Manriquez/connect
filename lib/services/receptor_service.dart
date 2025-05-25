@@ -64,6 +64,56 @@ class ReceptorService {
     }
   }
 
+  // Método para actualizar el estado de visualización de una notificación
+  Future<void> updateNotificationVisualizationStatus(String notificationId, bool visualizado) async {
+    try {
+      // Obtener el ID del dispositivo emisor vinculado
+      final deviceId = await getLinkedDeviceId();
+      
+      if (deviceId == null) {
+        print('No hay dispositivo emisor vinculado');
+        return;
+      }
+      
+      // Obtener la fecha actual en formato YYYY-MM-DD
+      final DateTime now = DateTime.now();
+      final String dateId = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      
+      // Actualizar el estado de visualización en Firebase
+      await _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones')
+          .doc(dateId)
+          .update({
+            'notificaciones.$notificationId.status-visualizacion': visualizado,
+          });
+      
+      print('Estado de visualización actualizado para notificación $notificationId: $visualizado');
+    } catch (e) {
+      print('Error al actualizar estado de visualización: $e');
+    }
+  }
+
+  // Nuevo método para filtrar notificaciones no visualizadas
+  Stream<List<Map<String, dynamic>>> listenForUnseenNotifications() async* {
+    try {
+      // Obtener el stream de todas las notificaciones
+      final allNotificationsStream = listenForNotifications();
+      
+      // Filtrar solo las notificaciones con status-visualizacion = false
+      yield* allNotificationsStream.map((notifications) {
+        return notifications.where((notification) {
+          // Verificar si el campo status-visualizacion existe y es false
+          return notification['status-visualizacion'] == false;
+        }).toList();
+      });
+    } catch (e) {
+      print('Error al filtrar notificaciones no visualizadas: $e');
+      yield <Map<String, dynamic>>[];
+    }
+  }
+
   // Iniciar escucha de notificaciones desde Firebase
   Stream<List<Map<String, dynamic>>> listenForNotifications() async* {
     try {
@@ -114,7 +164,6 @@ class ReceptorService {
       yield <Map<String, dynamic>>[];
     }
   }
-
   // Obtener el estado del dispositivo emisor
   Future<Map<String, dynamic>> getDeviceStatus(String deviceId) async {
     try {
