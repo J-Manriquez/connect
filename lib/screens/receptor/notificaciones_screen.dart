@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/preferences_service.dart';
+import 'package:connect/services/local_notification_service.dart';
 
 class NotificacionesScreen extends StatefulWidget {
   const NotificacionesScreen({Key? key}) : super(key: key);
@@ -63,16 +64,50 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   }
 
   // Iniciar escucha de notificaciones
+  // Añadir este import al inicio del archivo
+  // import 'package:connect/services/local_notification_service.dart';
+  
+  // En la clase _NotificacionesScreenState, añadir este método para mostrar notificaciones locales
+  // Añadir después del método _startListeningForNotifications
+  
   void _startListeningForNotifications() {
     _notificationSubscription = _receptorService
         .listenForNotifications()
         .listen((notifications) {
+      // Si hay nuevas notificaciones (comparando con la lista actual)
+      if (notifications.isNotEmpty && _notifications.isNotEmpty) {
+        // Verificar si hay notificaciones nuevas
+        final latestNotification = notifications.first;
+        final latestTimestamp = (latestNotification['timestamp'] as Timestamp).toDate();
+        
+        // Verificar si la notificación más reciente es nueva
+        if (_notifications.isEmpty || 
+            latestTimestamp.isAfter(((_notifications.first['timestamp'] as Timestamp).toDate()))) {
+          // Mostrar notificación local para la nueva notificación
+          _showLocalNotification(latestNotification);
+        }
+      }
+      
       setState(() {
         _notifications = notifications;
       });
     }, onError: (error) {
       print('Error en la suscripción de notificaciones: $error');
     });
+  }
+  
+  // Añadir este método para mostrar notificaciones locales
+  Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
+    try {
+      await LocalNotificationService.showNotification(
+        title: notification['title'] ?? 'Nueva notificación',
+        body: notification['text'] ?? '',
+        packageName: notification['packageName'] ?? '',
+        appName: notification['appName'] ?? 'Desconocida',
+      );
+    } catch (e) {
+      print('Error al mostrar notificación local: $e');
+    }
   }
 
   // Desvincular dispositivo

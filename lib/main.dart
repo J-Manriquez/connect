@@ -14,12 +14,19 @@ import 'screens/emisor/settings_screen.dart';
 import 'screens/emisor/app_list_screen.dart';
 import 'screens/receptor/receptor_settings_screen.dart';
 
+// Añadir este import al inicio del archivo
+import 'package:connect/services/local_notification_service.dart';
+
+// En el método main, añadir la inicialización del servicio de notificaciones locales
 void main() async {
   // Asegurar que Flutter esté inicializado
   WidgetsFlutterBinding.ensureInitialized();
 
   // Inicializar Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Inicializar el servicio de notificaciones locales
+  await LocalNotificationService.initialize();
 
   runApp(const MainApp());
 }

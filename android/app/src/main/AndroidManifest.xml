@@ -9,6 +9,8 @@
     <!-- Tipo de servicio en primer plano, ajusta si es necesario -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- Añadir este permiso dentro de la etiqueta <manifest> -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Connect Ɐ2"
         android:name="${applicationName}"
