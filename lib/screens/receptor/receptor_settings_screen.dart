@@ -119,7 +119,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
               ],
             ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1, // Configuración
+        currentIndex: 1, // 0: Notificaciones, 1: Configuración, 2: No Leídas
         onTap: (index) {
           switch (index) {
             case 0:
@@ -127,6 +127,9 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
               break;
             case 1:
               // Ya estamos en configuración
+              break;
+            case 2:
+              Navigator.pushReplacementNamed(context, '/unread_notifications');
               break;
           }
         },
@@ -142,6 +145,10 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'Configuración',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.mark_email_unread),
+            label: 'No Leídas',
           ),
         ],
       ),

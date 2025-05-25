@@ -71,51 +71,50 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   // Añadir después del método _startListeningForNotifications
   
   void _startListeningForNotifications() {
-    // Cambiar para escuchar solo notificaciones no visualizadas
+    // Escuchar todas las notificaciones y filtrar las visualizadas para mostrar en la lista
     _notificationSubscription = _receptorService
-        .listenForUnseenNotifications() // Usar el nuevo método que filtra por status-visualizacion
-        .listen((notifications) {
-      // Si hay nuevas notificaciones (comparando con la lista actual)
-      if (notifications.isNotEmpty) {
-        // Verificar si hay notificaciones nuevas
-        final latestNotification = notifications.first;
-        
-        // Mostrar notificación local para la nueva notificación
-        _showLocalNotification(latestNotification);
-      }
-      
-      // Actualizar la lista completa de notificaciones (incluyendo las ya visualizadas)
-      _receptorService.listenForNotifications().first.then((allNotifications) {
-        setState(() {
-          _notifications = allNotifications;
-        });
+        .listenForNotifications() // Listen to all notifications
+        .listen((allNotifications) {
+      // Filter only the visualized notifications (status-visualizacion = true)
+      final visualizedNotifications = allNotifications.where((notification) {
+        return notification['status-visualizacion'] == true;
+      }).toList();
+
+      setState(() {
+        _notifications = visualizedNotifications;
       });
+
+      // Removed the call to _showLocalNotification and _updateVisualizedNotificationsList()
+      // Local notification logic should be handled elsewhere (e.g., main.dart)
     }, onError: (error) {
-      print('Error en la suscripción de notificaciones: $error');
+      print('Error en la suscripción de notificaciones: -$error');
     });
   }
 
+  // Removed the _updateVisualizedNotificationsList method
+
   // Añadir este método para mostrar notificaciones locales
-   Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
-    try {
-      // Mostrar la notificación local
-      await LocalNotificationService.showNotification(
-        title: notification['title'] ?? 'Nueva notificación',
-        body: notification['text'] ?? '',
-        packageName: notification['packageName'] ?? '',
-        appName: notification['appName'] ?? 'Desconocida',
-      );
+  //  Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
+  //   try {
+  //     // Mostrar la notificación local
+  //     await LocalNotificationService.showNotification(
+  //       title: notification['title'] ?? 'Nueva notificación',
+  //       body: notification['text'] ?? '',
+  //       packageName: notification['packageName'] ?? '',
+  //       appName: notification['appName'] ?? 'Desconocida',
+  //     );
       
-      // Actualizar el estado de visualización a true
-      final String notificationId = notification['id'] ?? '';
-      if (notificationId.isNotEmpty) {
-        await _receptorService.updateNotificationVisualizationStatus(notificationId, true);
-        print('Notificación marcada como visualizada: $notificationId');
-      }
-    } catch (e) {
-      print('Error al mostrar notificación local: $e');
-    }
-  }
+  //     // Actualizar el estado de visualización a true
+  //     final String notificationId = notification['id'] ?? '';
+  //     if (notificationId.isNotEmpty) {
+  //       await _receptorService.updateNotificationVisualizationStatus(notificationId, true);
+  //       print('Notificación marcada como visualizada: $notificationId');
+  //     }
+  //   } catch (e) {
+  //     print('Error al mostrar notificación local: $e');
+  //   }
+  // }
+  
   // Desvincular dispositivo
   Future<void> _unlinkDevice() async {
     try {
@@ -270,10 +269,18 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               ),
             ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0, // 0: Notificaciones, 1: Configuración
+        currentIndex: 0, // 0: Notificaciones, 1: Configuración, 2: No Leídas
         onTap: (index) {
-          if (index == 1) {
-            Navigator.pushReplacementNamed(context, '/receptor_settings');
+          switch (index) {
+            case 0:
+              // Ya estamos en notificaciones
+              break;
+            case 1:
+              Navigator.pushReplacementNamed(context, '/receptor_settings');
+              break;
+            case 2:
+              Navigator.pushReplacementNamed(context, '/unread_notifications');
+              break;
           }
         },
         selectedFontSize: 14.0,
@@ -288,6 +295,10 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'Configuración',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.mark_email_unread),
+            label: 'No Leídas',
           ),
         ],
       ),

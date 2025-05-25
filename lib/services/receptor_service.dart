@@ -147,7 +147,18 @@ class ReceptorService {
         
         // Convertir el mapa a una lista de notificaciones
         final List<Map<String, dynamic>> notificationsList = notificationsMap.entries
-            .map((entry) => Map<String, dynamic>.from(entry.value as Map))
+            .map((entry) {
+              final notif = Map<String, dynamic>.from(entry.value as Map);
+              // Validar timestamp
+              if (notif['timestamp'] is Timestamp) {
+                return notif;
+              } else {
+                print('Notificación con timestamp inválido: $notif');
+                return null;
+              }
+            })
+            .where((notif) => notif != null)
+            .cast<Map<String, dynamic>>()
             .toList();
         
         // Ordenar por timestamp (más reciente primero)

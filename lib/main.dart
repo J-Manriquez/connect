@@ -16,6 +16,7 @@ import 'screens/receptor/receptor_settings_screen.dart';
 
 // Añadir este import al inicio del archivo
 import 'package:connect/services/local_notification_service.dart';
+import 'package:connect/screens/receptor/unread_notifications_screen.dart';
 
 // En el método main, añadir la inicialización del servicio de notificaciones locales
 void main() async {
@@ -115,6 +116,10 @@ class _MainAppState extends State<MainApp> {
             if (shouldShow) {
               await _firebaseService.saveNotification(notificationData);
               print('Notificación guardada en Firebase: $packageName');
+
+              // Mostrar notificación local y actualizar estado de visualización
+              await _showLocalNotification(notificationData);
+
             } else {
               print('Notificación filtrada, no se guarda en Firebase: $packageName');
             }
@@ -305,9 +310,34 @@ class _MainAppState extends State<MainApp> {
         ),
         '/app_list': (context) => const AppListScreen(),
         '/receptor': (context) => const ReceptorScreen(),
-        '/notificaciones': (context) => const NotificacionesScreen(), // Añadir la nueva ruta
+        '/notificaciones': (context) => const NotificacionesScreen(),
         '/receptor_settings': (context) => const ReceptorSettingsScreen(),
+        '/unread_notifications': (context) => const UnreadNotificationsScreen(), // Añadir esta nueva ruta
       },
     );
+  }
+}
+
+// Método para mostrar notificaciones locales y actualizar estado de visualización
+Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
+  try {
+    // Mostrar la notificación local
+    await LocalNotificationService.showNotification(
+      title: notification['title'] ?? 'Nueva notificación',
+      body: notification['text'] ?? '',
+      packageName: notification['packageName'] ?? '',
+      appName: notification['appName'] ?? 'Desconocida',
+    );
+    
+    // Actualizar el estado de visualización a true
+    final String notificationId = notification['id'] ?? '';
+    if (notificationId.isNotEmpty) {
+      // Usar ReceptorService para actualizar el estado
+      final ReceptorService receptorService = ReceptorService();
+      await receptorService.updateNotificationVisualizationStatus(notificationId, true);
+      print('Notificación marcada como visualizada: \$notificationId');
+    }
+  } catch (e) {
+    print('Error al mostrar notificación local: \$e');
   }
 }
