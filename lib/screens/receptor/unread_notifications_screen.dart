@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/services/local_notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/receptor_service.dart';
 
@@ -16,11 +17,20 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
   bool _isLoading = false;
   List<Map<String, dynamic>> _unreadNotifications = [];
   StreamSubscription? _notificationSubscription;
+  bool _notificationsEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _loadUnreadNotifications();
+    _loadNotificationSettings();
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+    setState(() {
+      _notificationsEnabled = notificationsEnabled;
+    });
   }
 
   @override
@@ -154,17 +164,17 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
               ),
             ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 2, // Notificaciones no leídas
+        currentIndex: 2, // 0: Configuración, 1: Notificaciones, 2: No Leídas
         onTap: (index) {
           switch (index) {
             case 0:
-              Navigator.pushReplacementNamed(context, '/notificaciones');
-              break;
-            case 1:
               Navigator.pushReplacementNamed(context, '/receptor_settings');
               break;
+            case 1:
+              Navigator.pushReplacementNamed(context, '/notificaciones');
+              break;
             case 2:
-              // Ya estamos en notificaciones no leídas
+              // Ya estamos en no leídas
               break;
           }
         },
@@ -172,16 +182,16 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
         unselectedFontSize: 12.0,
         selectedIconTheme: const IconThemeData(size: 37.5),
         unselectedIconTheme: const IconThemeData(size: 22.5),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications),
-            label: 'Notificaciones',
-          ),
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'Configuración',
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.radio_button_checked, color: _notificationsEnabled ? Colors.green : Colors.red),
+            label: 'Notificaciones',
+          ),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.mark_email_unread),
             label: 'No Leídas',
           ),

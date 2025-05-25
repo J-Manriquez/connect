@@ -12,10 +12,7 @@ class ReceptorSettingsScreen extends StatefulWidget {
 }
 
 class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
-  // Removed notification settings state variables
-  // bool _notificationsEnabled = false;
-  // bool _soundEnabled = true;
-  // bool _vibrationEnabled = true;
+  bool _notificationsEnabled = false;
   bool _isLoading = true;
 
   final ReceptorService _receptorService = ReceptorService(); // Instantiate ReceptorService
@@ -24,6 +21,14 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
   void initState() {
     super.initState();
     _loadSettings();
+    _loadNotificationSettings();
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+    setState(() {
+      _notificationsEnabled = notificationsEnabled;
+    });
   }
 
   Future<void> _loadSettings() async {
@@ -170,14 +175,14 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
               ],
             ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 1, // 0: Notificaciones, 1: Configuración, 2: No Leídas
+        currentIndex: 0, // 0: Configuración, 1: Notificaciones, 2: No Leídas
         onTap: (index) {
           switch (index) {
             case 0:
-              Navigator.pushReplacementNamed(context, '/notificaciones');
+              // Ya estamos en configuración
               break;
             case 1:
-              // Ya estamos en configuración
+              Navigator.pushReplacementNamed(context, '/notificaciones');
               break;
             case 2:
               Navigator.pushReplacementNamed(context, '/unread_notifications');
@@ -188,17 +193,17 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
         unselectedFontSize: 12.0,
         selectedIconTheme: const IconThemeData(size: 37.5),
         unselectedIconTheme: const IconThemeData(size: 22.5),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications),
-            label: 'Notificaciones',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings), // Assuming this is for settings
+        items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.settings),
             label: 'Configuración',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.mark_email_unread), // Assuming this is for unread
+            icon: Icon(Icons.radio_button_checked, color: _notificationsEnabled ? Colors.green : Colors.red),
+            label: 'Notificaciones',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.mark_email_unread),
             label: 'No Leídas',
           ),
         ],

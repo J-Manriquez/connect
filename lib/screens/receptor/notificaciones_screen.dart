@@ -22,6 +22,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   StreamSubscription? _notificationSubscription;
   String? _linkedDeviceId;
   bool _notificationsEnabled = false; // Add state for the toggle
+  bool _showSubtitle = false;
 
   @override
   void initState() {
@@ -153,15 +154,77 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     });
   }
 
+  Widget _buildNotificationToggle() {
+    final isActive = _notificationsEnabled;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showSubtitle = !_showSubtitle;
+        });
+        // if (_showSubtitle) {
+        //   ScaffoldMessenger.of(context).showSnackBar(
+        //     const SnackBar(
+        //       content: Text('Muestra las notificaciones recibidas en la barra de notificaciones'),
+        //       duration: Duration(seconds: 2),
+        //     ),
+        //   );
+        // }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: isActive ? Colors.green[50] : Colors.red[50],
+          border: Border.all(color: isActive ? Colors.green : Colors.red, width: 2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mostrar notificaciones locales',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? Colors.green[900] : Colors.red[900],
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (_showSubtitle)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Text(
+                        'Muestra las notificaciones recibidas en la barra de notificaciones',
+                        style: TextStyle(
+                          color: isActive ? Colors.green[700] : Colors.red[700],
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Switch(
+              value: _notificationsEnabled,
+              onChanged: _toggleNotifications,
+              activeColor: Colors.green,
+              inactiveThumbColor: Colors.red,
+              inactiveTrackColor: Colors.red[200],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notificaciones Recibidas'),
+        title: const Text('Receptor de Notificaciones'),
         automaticallyImplyLeading: false,
-        actions: [
-          // Removed Desvincular button
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -170,9 +233,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Removed Volver a Emisor button
-                  const SizedBox(height: 16), // Adjust spacing
-                  // Sección de dispositivo vinculado
+                  const SizedBox(height: 16),
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -207,16 +268,9 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Add the notification toggle here
-                  SwitchListTile(
-                    title: const Text('Mostrar notificaciones locales'),
-                    subtitle: const Text(
-                        'Muestra las notificaciones recibidas en la barra de notificaciones'),
-                    value: _notificationsEnabled,
-                    onChanged: _toggleNotifications,
-                  ),
-                  const Divider(), // Add a divider for separation
-                  const SizedBox(height: 16), // Adjust spacing
+                  _buildNotificationToggle(),
+                  const Divider(),
+                  const SizedBox(height: 16),
                   const Text(
                     'Notificaciones recibidas:',
                     style: TextStyle(
@@ -264,11 +318,11 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               ),
             ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0, // 0: Notificaciones, 1: Configuración, 2: No Leídas
+        currentIndex: 1, // 0: Configuración, 1: Notificaciones, 2: No Leídas
         onTap: (index) {
           switch (index) {
             case 0:
-              // Ya estamos en notificaciones
+              Navigator.pushReplacementNamed(context, '/receptor_settings');
               break;
             case 1:
               Navigator.pushReplacementNamed(context, '/receptor_settings');
@@ -282,17 +336,17 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         unselectedFontSize: 12.0,
         selectedIconTheme: const IconThemeData(size: 37.5),
         unselectedIconTheme: const IconThemeData(size: 22.5),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications),
-            label: 'Notificaciones',
-          ),
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'Configuración',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.mark_email_unread), // Assuming this is for unread
+            icon: Icon(Icons.radio_button_checked, color: _notificationsEnabled ? Colors.green : Colors.red),
+            label: 'Notificaciones',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.mark_email_unread),
             label: 'No Leídas',
           ),
         ],
