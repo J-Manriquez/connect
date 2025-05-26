@@ -638,16 +638,16 @@ class _EmisorScreenState extends State<EmisorScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.only(left: 16.0, bottom: 8.0),
-                      child: Text(
-                        'Notificaciones Almacenadas',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    // const Padding(
+                    //   padding: EdgeInsets.only(left: 16.0, bottom: 8.0),
+                    //   child: Text(
+                    //     'Notificaciones Almacenadas',
+                    //     style: TextStyle(
+                    //       fontSize: 16,
+                    //       fontWeight: FontWeight.bold,
+                    //     ),
+                    //   ),
+                    // ),
                     Container(
                       height: 300, // Aumentar altura para mostrar más contenido
                       child: _isLoading

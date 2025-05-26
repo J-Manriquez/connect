@@ -157,7 +157,7 @@ class _ReceptorScreenState extends State<ReceptorScreen> {
                     ),
                   ),
                 ),
-                SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                // SizedBox(height: MediaQuery.of(context).size.height * 0.2),
                 // Espacio flexible para centrar la Card verticalmente
                 Expanded(
                   child: SingleChildScrollView(

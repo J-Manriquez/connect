@@ -286,113 +286,116 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Padding(
               padding: const EdgeInsets.all(5.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 8),
-                  Card(
-                    margin: const EdgeInsets.all(0),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.link, color: Colors.green),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Dispositivo vinculado',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                                Text(
-                                  'ID: $_linkedDeviceId',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  _buildNotificationToggle(),
-                  // const Divider(),
-                  // const SizedBox(height: 8),
-                  // const Text(
-                  //   'Notificaciones recibidas:',
-                  //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  // ),
-                  // const SizedBox(height: 8),
-                  Expanded(
-      child: _groupedNotifications.isEmpty
-          ? const Center(child: Text('No hay notificaciones recibidas'))
-          : ListView(
-              children: _groupedNotifications.entries.map((entry) {
-                final dateKey = entry.key;
-                final notifications = entry.value;
-                final isExpanded = _expandedDays[dateKey] ?? true;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              child: SingleChildScrollView( // Wrap the Column with SingleChildScrollView
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ListTile(
-                      title: Text(_formatDate(dateKey), style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: IconButton(
-                        icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
-                        onPressed: () {
-                          setState(() {
-                            _expandedDays[dateKey] = !isExpanded;
-                          });
-                        },
-                      ),
-                    ),
-                    if (isExpanded)
-                      ...notifications.map((notification) {
-                        return Dismissible(
-                          key: UniqueKey(),
-                          direction: DismissDirection.endToStart,
-                          background: Container(
-                            color: Colors.red,
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: const Icon(Icons.delete, color: Colors.white),
-                          ),
-                          onDismissed: (direction) async {
-                            await _deleteNotification(notification);
-                          },
-                          child: Card(
-                            margin: const EdgeInsets.only(bottom: 8.0, left: 1, right: 1),
-                            child: ListTile(
-                              title: Text(notification['title'] ?? 'Sin título'),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 8),
+                    Card(
+                      margin: const EdgeInsets.all(0),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.link, color: Colors.green),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(notification['text'] ?? 'Sin contenido'),
-                                  Text('App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                                  const Text(
+                                    'Dispositivo vinculado',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                  Text(
+                                    'ID: $_linkedDeviceId',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
                                 ],
                               ),
-                              trailing: Text(_formatTimestamp(notification['timestamp']), style: const TextStyle(fontSize: 12)),
                             ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildNotificationToggle(),
+                    // const Divider(),
+                    // const SizedBox(height: 8),
+                    // const Text(
+                    //   'Notificaciones recibidas:',
+                    //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    // ),
+                    // const SizedBox(height: 8),
+                    // Remove Expanded from here
+                    _groupedNotifications.isEmpty
+                        ? const Center(child: Text('No hay notificaciones recibidas'))
+                        : ListView(
+                            shrinkWrap: true, // Add shrinkWrap to ListView
+                            physics: NeverScrollableScrollPhysics(), // Disable ListView's own scrolling
+                            children: _groupedNotifications.entries.map((entry) {
+                              final dateKey = entry.key;
+                              final notifications = entry.value;
+                              final isExpanded = _expandedDays[dateKey] ?? true;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ListTile(
+                                    title: Text(_formatDate(dateKey), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    trailing: IconButton(
+                                      icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                                      onPressed: () {
+                                        setState(() {
+                                          _expandedDays[dateKey] = !isExpanded;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  if (isExpanded)
+                                    ...notifications.map((notification) {
+                                      return Dismissible(
+                                        key: UniqueKey(),
+                                        direction: DismissDirection.endToStart,
+                                        background: Container(
+                                          color: Colors.red,
+                                          alignment: Alignment.centerRight,
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          child: const Icon(Icons.delete, color: Colors.white),
+                                        ),
+                                        onDismissed: (direction) async {
+                                          await _deleteNotification(notification);
+                                        },
+                                        child: Card(
+                                          margin: const EdgeInsets.only(bottom: 8.0, left: 1, right: 1),
+                                          child: ListTile(
+                                            title: Text(notification['title'] ?? 'Sin título'),
+                                            subtitle: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(notification['text'] ?? 'Sin contenido'),
+                                                Text('App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                                              ],
+                                            ),
+                                            trailing: Text(_formatTimestamp(notification['timestamp']), style: const TextStyle(fontSize: 12)),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                ],
+                              );
+                            }).toList(),
                           ),
-                        );
-                      }).toList(),
+
                   ],
-                );
-              }).toList(),
-            ),
-    ),
-                
-                ],
+                ),
               ),
             ),
       bottomNavigationBar: Column(
