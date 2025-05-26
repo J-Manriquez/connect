@@ -21,7 +21,44 @@ class FirebaseService {
     
     return deviceId;
   }
-  
+
+  // Elimina una notificación específica de Firebase
+  Future<void> deleteNotification(String notificationId, String dateId) async {
+    final deviceId = await getDeviceId();
+    
+    // Referencia al documento que contiene la notificación
+    final dayDocRef = _firestore
+        .collection('dispositivos')
+        .doc(deviceId)
+        .collection('notificaciones')
+        .doc(dateId);
+    
+    try {
+      // Eliminar la notificación específica usando FieldValue.delete()
+      await dayDocRef.update({
+        'notificaciones.$notificationId': FieldValue.delete(),
+      });
+      
+      print('Notificación eliminada: $notificationId');
+      
+      // Verificar si quedan notificaciones en el documento
+      final docSnapshot = await dayDocRef.get();
+      final data = docSnapshot.data();
+      
+      if (data != null && data.containsKey('notificaciones')) {
+        final Map<String, dynamic> notificationsMap = data['notificaciones'] as Map<String, dynamic>;
+        
+        // Si no quedan notificaciones, eliminar el documento del día
+        if (notificationsMap.isEmpty) {
+          await dayDocRef.delete();
+          print('Documento del día eliminado: $dateId (sin notificaciones)');
+        }
+      }
+    } catch (e) {
+      print('Error al eliminar notificación: $e');
+    }
+  }
+
   // Genera un ID numérico de 6 dígitos
   String _generateDeviceId() {
     final random = Random();
@@ -294,7 +331,7 @@ class FirebaseService {
                     notificationDataMap['timestamp'] is Timestamp) {
                   allNotifications.add(NotificationData.fromMap(notificationDataMap));
                 } else {
-                  print('Error: timestamp inválido en notificación $notificationId');
+                  // print('Error: timestamp inválido en notificación $notificationId');
                 }
               } else {
                 print('Error: datos de notificación inválidos para $notificationId');
@@ -310,7 +347,7 @@ class FirebaseService {
       // Ordenar las notificaciones por fecha, más recientes primero
       allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       
-      print('Notificaciones procesadas correctamente: ${allNotifications.length}');
+      // print('Notificaciones procesadas correctamente: ${allNotifications.length}');
       return allNotifications;
     } catch (e, stackTrace) {
       print('Error al obtener notificaciones almacenadas: $e');
