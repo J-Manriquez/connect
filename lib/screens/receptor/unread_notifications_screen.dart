@@ -116,15 +116,15 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Notificaciones pendientes:',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
+                  // const Text(
+                  //   'Notificaciones pendientes:',
+                  //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  // ),
+                  // const SizedBox(height: 8),
                   Expanded(
                     child: _unreadNotifications.isEmpty
                         ? const Center(
@@ -135,7 +135,7 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                             itemBuilder: (context, index) {
                               final notification = _unreadNotifications[index];
                               return Card(
-                                margin: const EdgeInsets.only(bottom: 8.0),
+                                margin: const EdgeInsets.only(left: 5, right: 5, bottom: 5, top: 5),
                                 child: ListTile(
                                   title: Text(
                                     notification['title'] ?? 'Sin título',

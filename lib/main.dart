@@ -373,9 +373,9 @@ Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
         notificationId,
         true,
       );
-      print('Notificación marcada como visualizada: \$notificationId');
+      print('Notificación marcada como visualizada: $notificationId');
     }
   } catch (e) {
-    print('Error al mostrar notificación local: \$e');
+    print('Error al mostrar notificación local: $e');
   }
 }

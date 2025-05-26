@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/services/firebase_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/receptor_service.dart';
@@ -24,6 +25,8 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   String? _linkedDeviceId;
   bool _notificationsEnabled = false; // Add state for the toggle
   bool _showSubtitle = false;
+  Map<String, List<Map<String, dynamic>>> _groupedNotifications = {};
+  Map<String, bool> _expandedDays = {};
 
   @override
   void initState() {
@@ -97,8 +100,26 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               return notification['status-visualizacion'] == true;
             }).toList();
 
+            // Agrupar por día
+            final Map<String, List<Map<String, dynamic>>> grouped = {};
+            for (var notification in visualizedNotifications) {
+              final timestamp = notification['timestamp'] as Timestamp?;
+              if (timestamp == null) continue;
+              final date = timestamp.toDate();
+              final dateKey =
+                  '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+              if (!grouped.containsKey(dateKey)) {
+                grouped[dateKey] = [];
+                if (!_expandedDays.containsKey(dateKey)) {
+                  _expandedDays[dateKey] = true;
+                }
+              }
+              grouped[dateKey]!.add(notification);
+            }
+
             setState(() {
               _notifications = visualizedNotifications;
+              _groupedNotifications = grouped;
             });
 
             // Removed the call to _showLocalNotification and _updateVisualizedNotificationsList()
@@ -163,6 +184,20 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     });
   }
 
+  Future<void> _deleteNotification(Map<String, dynamic> notification) async {
+    try {
+      final notificationId = notification['id'] as String?;
+      final timestamp = notification['timestamp'] as Timestamp?;
+      if (notificationId == null || timestamp == null) return;
+      final date = timestamp.toDate();
+      final dateId = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      // Usa tu servicio de Firebase para eliminar
+      await FirebaseService().deleteNotification(notificationId, dateId);
+    } catch (e) {
+      print('Error al eliminar notificación: \$e');
+    }
+  }
+
   Widget _buildNotificationToggle() {
     final isActive = _notificationsEnabled;
     return GestureDetector(
@@ -170,16 +205,9 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         setState(() {
           _showSubtitle = !_showSubtitle;
         });
-        // if (_showSubtitle) {
-        //   ScaffoldMessenger.of(context).showSnackBar(
-        //     const SnackBar(
-        //       content: Text('Muestra las notificaciones recibidas en la barra de notificaciones'),
-        //       duration: Duration(seconds: 2),
-        //     ),
-        //   );
-        // }
       },
       child: Container(
+        margin: const EdgeInsets.all(0),
         decoration: BoxDecoration(
           color: isActive ? Colors.green[50] : Colors.red[50],
           border: Border.all(
@@ -189,7 +217,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
           borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        margin: const EdgeInsets.only(bottom: 12),
+        // margin: const EdgeInsets.only(bottom: 12),
         child: Row(
           children: [
             Expanded(
@@ -206,7 +234,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                   ),
                   if (_showSubtitle)
                     Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
+                      padding: const EdgeInsets.only(top: 1.0),
                       child: Text(
                         'Muestra las notificaciones recibidas en la barra de notificaciones',
                         style: TextStyle(
@@ -230,6 +258,55 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       ),
     );
   }
+  // Método para formatear la fecha en formato legible
+  String _formatDate(String dateKey) {
+    try {
+      final parts = dateKey.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final day = int.parse(parts[2]);
+
+      final date = DateTime(year, month, day);
+      final now = DateTime.now();
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+
+      if (date.year == now.year &&
+          date.month == now.month &&
+          date.day == now.day) {
+        return 'Hoy';
+      } else if (date.year == yesterday.year &&
+          date.month == yesterday.month &&
+          date.day == yesterday.day) {
+        return 'Ayer';
+      } else {
+        // Formato: 25 Mayo 2023
+        final months = [
+          'Enero',
+          'Febrero',
+          'Marzo',
+          'Abril',
+          'Mayo',
+          'Junio',
+          'Julio',
+          'Agosto',
+          'Septiembre',
+          'Octubre',
+          'Noviembre',
+          'Diciembre',
+        ];
+        return '$day ${months[month - 1]} $year';
+      }
+    } catch (e) {
+      return dateKey; // En caso de error, devolver la clave original
+    }
+  }
+
+  // Método para formatear la hora
+  String _formatTime(DateTime timestamp) {
+    final hour = timestamp.hour.toString().padLeft(2, '0');
+    final minute = timestamp.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -241,12 +318,13 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(5.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                   Card(
+                    margin: const EdgeInsets.all(0),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Row(
@@ -254,8 +332,9 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                           const Icon(Icons.link, color: Colors.green),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text(
                                   'Dispositivo vinculado',
@@ -279,55 +358,73 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   _buildNotificationToggle(),
-                  const Divider(),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Notificaciones recibidas:',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
+                  // const Divider(),
+                  // const SizedBox(height: 8),
+                  // const Text(
+                  //   'Notificaciones recibidas:',
+                  //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  // ),
+                  // const SizedBox(height: 8),
                   Expanded(
-                    child: _notifications.isEmpty
-                        ? const Center(
-                            child: Text('No hay notificaciones recibidas'),
-                          )
-                        : ListView.builder(
-                            itemCount: _notifications.length,
-                            itemBuilder: (context, index) {
-                              final notification = _notifications[index];
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 8.0),
-                                child: ListTile(
-                                  title: Text(
-                                    notification['title'] ?? 'Sin título',
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        notification['text'] ?? 'Sin contenido',
-                                      ),
-                                      Text(
-                                        'App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontStyle: FontStyle.italic,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  trailing: Text(
-                                    _formatTimestamp(notification['timestamp']),
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                ),
-                              );
-                            },
+      child: _groupedNotifications.isEmpty
+          ? const Center(child: Text('No hay notificaciones recibidas'))
+          : ListView(
+              children: _groupedNotifications.entries.map((entry) {
+                final dateKey = entry.key;
+                final notifications = entry.value;
+                final isExpanded = _expandedDays[dateKey] ?? true;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ListTile(
+                      title: Text(_formatDate(dateKey), style: const TextStyle(fontWeight: FontWeight.bold)),
+                      trailing: IconButton(
+                        icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                        onPressed: () {
+                          setState(() {
+                            _expandedDays[dateKey] = !isExpanded;
+                          });
+                        },
+                      ),
+                    ),
+                    if (isExpanded)
+                      ...notifications.map((notification) {
+                        return Dismissible(
+                          key: UniqueKey(),
+                          direction: DismissDirection.endToStart,
+                          background: Container(
+                            color: Colors.red,
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: const Icon(Icons.delete, color: Colors.white),
                           ),
-                  ),
+                          onDismissed: (direction) async {
+                            await _deleteNotification(notification);
+                          },
+                          child: Card(
+                            margin: const EdgeInsets.only(bottom: 8.0, left: 1, right: 1),
+                            child: ListTile(
+                              title: Text(notification['title'] ?? 'Sin título'),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(notification['text'] ?? 'Sin contenido'),
+                                  Text('App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                                ],
+                              ),
+                              trailing: Text(_formatTimestamp(notification['timestamp']), style: const TextStyle(fontSize: 12)),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                  ],
+                );
+              }).toList(),
+            ),
+    ),
+                
                 ],
               ),
             ),

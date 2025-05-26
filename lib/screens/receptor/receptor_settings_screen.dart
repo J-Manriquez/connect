@@ -109,17 +109,8 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(5.0),
               children: [
-                // Removed Notificaciones section and toggles
-                // const SizedBox(height: 16),
-                // const Text(
-                //   'Notificaciones',
-                //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                // ),
-                // const SizedBox(height: 8),
-                // SwitchListTile( ... ),
-                // const Divider(),
 
                 // Add Card for Unlinking and Back to Emisor
                 Card(
@@ -153,29 +144,11 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
                             ),
                           ),
                         ),
-                        // const SizedBox(height: 8),
-                        // ElevatedButton.icon(
-                        //   onPressed: _backToEmisor,
-                        //   icon: const Icon(Icons.arrow_back),
-                        //   label: const Text(
-                        //     'Volver a Pantalla Emisor',
-                        //     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        //   ),
-                        //   style: ElevatedButton.styleFrom(
-                        //     minimumSize: const Size.fromHeight(48),
-                        //     padding: const EdgeInsets.symmetric(vertical: 12),
-                        //     backgroundColor: customColor[400],
-                        //     foregroundColor: Colors.white,
-                        //     shape: RoundedRectangleBorder(
-                        //       borderRadius: BorderRadius.circular(8),
-                        //     ),
-                        //   ),
-                        // ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
 
                 // Add button to navigate to Notification Settings
                 Card(
