@@ -1,6 +1,7 @@
 import 'package:connect/screens/receptor/receptor_screen.dart';
 import 'package:connect/screens/receptor/notificaciones_screen.dart'; // Añadir esta importación
 import 'package:connect/services/notification_filter_service.dart';
+import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
@@ -30,6 +31,9 @@ void main() async {
 
   // Inicializar el servicio de notificaciones locales
   await LocalNotificationService.initialize();
+
+  final notificationListenerService = NotificationListenerService();
+  notificationListenerService.startListening(); // Iniciar la escucha
 
   runApp(const MainApp());
 }
