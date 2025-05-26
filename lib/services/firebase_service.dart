@@ -261,4 +261,61 @@ class FirebaseService {
     
     print('Estado de visualización actualizado para notificación $notificationId: $visualizado');
   }
+  
+  // Obtiene todas las notificaciones almacenadas para el dispositivo
+  Future<List<NotificationData>> getStoredNotifications() async {
+    final deviceId = await getDeviceId();
+    final List<NotificationData> allNotifications = [];
+    
+    try {
+      // Obtener todos los documentos de la colección de notificaciones
+      final querySnapshot = await _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones')
+          .get();
+      
+      // Iterar sobre cada documento (cada día)
+      for (final dayDoc in querySnapshot.docs) {
+        final data = dayDoc.data();
+        if (data.containsKey('notificaciones')) {
+          // Convertir el mapa de notificaciones a una lista de NotificationData
+          final Map<String, dynamic> notificationsMap = data['notificaciones'] as Map<String, dynamic>;
+          
+          notificationsMap.forEach((notificationId, notificationData) {
+            try {
+              if (notificationData != null && notificationData is Map<String, dynamic>) {
+                // Añadir el ID del día al mapa para poder actualizar el estado después
+                final Map<String, dynamic> notificationDataMap = Map<String, dynamic>.from(notificationData);
+                notificationDataMap['dateId'] = dayDoc.id;
+                
+                // Verificar que timestamp existe y es un Timestamp
+                if (notificationDataMap.containsKey('timestamp') && 
+                    notificationDataMap['timestamp'] is Timestamp) {
+                  allNotifications.add(NotificationData.fromMap(notificationDataMap));
+                } else {
+                  print('Error: timestamp inválido en notificación $notificationId');
+                }
+              } else {
+                print('Error: datos de notificación inválidos para $notificationId');
+              }
+            } catch (e) {
+              print('Error al procesar notificación $notificationId: $e');
+              // Continuar con la siguiente notificación
+            }
+          });
+        }
+      }
+      
+      // Ordenar las notificaciones por fecha, más recientes primero
+      allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      
+      print('Notificaciones procesadas correctamente: ${allNotifications.length}');
+      return allNotifications;
+    } catch (e, stackTrace) {
+      print('Error al obtener notificaciones almacenadas: $e');
+      print('Stack trace: $stackTrace');
+      return [];
+    }
+  }
 }

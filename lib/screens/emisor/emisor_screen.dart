@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/models/notification_data.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
 import 'package:connect/services/receptor_service.dart';
@@ -33,6 +34,8 @@ class EmisorScreen extends StatefulWidget {
 class _EmisorScreenState extends State<EmisorScreen>
     with WidgetsBindingObserver {
   List<Map<String, dynamic>> _filteredNotifications = [];
+  List<NotificationData> _storedNotifications =
+      []; // Nueva lista para notificaciones almacenadas
   bool _isLoading = true;
   bool _isLinked = false; // Estado de vinculación
   String _deviceId = ''; // ID del dispositivo
@@ -48,6 +51,7 @@ class _EmisorScreenState extends State<EmisorScreen>
     _filterNotifications();
     _loadDeviceId();
     _checkLinkStatus();
+    _loadStoredNotifications(); // Cargar notificaciones almacenadas
 
     // Crear un stream que se ejecute cada 2 segundos para actualizar las notificaciones
     _updateStream = Stream.periodic(const Duration(seconds: 2));
@@ -55,6 +59,7 @@ class _EmisorScreenState extends State<EmisorScreen>
       if (mounted) {
         _filterNotifications();
         _checkLinkStatus();
+        _loadStoredNotifications(); // Actualizar notificaciones almacenadas
       }
     });
 
@@ -108,6 +113,7 @@ class _EmisorScreenState extends State<EmisorScreen>
     if (state == AppLifecycleState.resumed) {
       _filterNotifications();
       _checkLinkStatus();
+      _loadStoredNotifications(); // Actualizar notificaciones almacenadas
     }
   }
 
@@ -132,6 +138,30 @@ class _EmisorScreenState extends State<EmisorScreen>
     _updateSubscription.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  // Método para cargar las notificaciones almacenadas en Firebase
+  Future<void> _loadStoredNotifications() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Obtener las notificaciones almacenadas desde Firebase
+      final notifications = await _firebaseService.getStoredNotifications();
+
+      setState(() {
+        _storedNotifications = notifications;
+        _isLoading = false;
+      });
+
+      print('Notificaciones cargadas desde Firebase: ${notifications.length}');
+    } catch (e) {
+      print('Error al cargar notificaciones desde Firebase: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   // Método para navegar a la pantalla de receptor y verificar permisos
@@ -433,7 +463,7 @@ class _EmisorScreenState extends State<EmisorScreen>
             ),
           ),
 
-          // Lista de notificaciones
+          // Lista de notificaciones enviadas y guardadas en firebase, leidas y no leidas
           Card(
             margin: const EdgeInsets.only(
               left: 16.0,
@@ -444,40 +474,83 @@ class _EmisorScreenState extends State<EmisorScreen>
               padding: const EdgeInsets.symmetric(
                 horizontal: 8.0,
                 vertical: 16.0,
-              ), // Agregamos padding a la Card
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _filteredNotifications.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No hay notificaciones de las apps seleccionadas',
-                        style: TextStyle(fontSize: 16),
-                        textAlign: TextAlign
-                            .center, // Aseguramos que el texto esté centrado
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.only(left: 16.0, bottom: 8.0),
+                    child: Text(
+                      'Notificaciones Almacenadas',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
-                    )
-                  : ListView.builder(
-                      itemCount: _filteredNotifications.length,
-                      itemBuilder: (context, index) {
-                        final notification = _filteredNotifications[index];
-                        return ListTile(
-                          title: Text(notification['title'] ?? 'Sin título'),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(notification['text'] ?? 'Sin contenido'),
-                              Text(
-                                'App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
                     ),
+                  ),
+                  Container(
+                    height: 200, // Altura fija para la lista
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _storedNotifications.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No hay notificaciones almacenadas',
+                              style: TextStyle(fontSize: 16),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _storedNotifications.length,
+                            itemBuilder: (context, index) {
+                              final notification = _storedNotifications[index];
+                              return ListTile(
+                                leading: Icon(
+                                  notification.statusVisualizacion
+                                      ? Icons.mark_email_read
+                                      : Icons.mark_email_unread,
+                                  color: notification.statusVisualizacion
+                                      ? Colors.green
+                                      : Colors.red,
+                                ),
+                                title: Text(
+                                  notification.title.isNotEmpty
+                                      ? notification.title
+                                      : 'Sin título',
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      notification.text.isNotEmpty
+                                          ? notification.text
+                                          : 'Sin contenido',
+                                    ),
+                                    Text(
+                                      'App: ${notification.appName.isNotEmpty ? notification.appName : notification.packageName}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Estado: ${notification.statusVisualizacion ? "Leído" : "No leído"}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: notification.statusVisualizacion
+                                            ? Colors.green[700]
+                                            : Colors.red[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
