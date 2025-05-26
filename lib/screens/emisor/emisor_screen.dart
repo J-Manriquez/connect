@@ -194,32 +194,32 @@ class _EmisorScreenState extends State<EmisorScreen>
       if (!notification.statusVisualizacion) {
         // Obtener dateId del campo correcto
         final uniqueId = notification.id;
-      // 2. Convertir el String de milisegundos a un entero
-      final int millisecondsSinceEpoch = int.parse(uniqueId);
-      print('Milisegundos (int): $millisecondsSinceEpoch');
+        // 2. Convertir el String de milisegundos a un entero
+        final int millisecondsSinceEpoch = int.parse(uniqueId);
+        print('Milisegundos (int): $millisecondsSinceEpoch');
 
-      // 3. Crear un objeto DateTime a partir de los milisegundos
-      final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
-        millisecondsSinceEpoch,
-      );
-      print(
-        'Objeto DateTime: $dateTimeObject',
-      ); // Esto mostrará la fecha y la hora completas
+        // 3. Crear un objeto DateTime a partir de los milisegundos
+        final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
+          millisecondsSinceEpoch,
+        );
+        print(
+          'Objeto DateTime: $dateTimeObject',
+        ); // Esto mostrará la fecha y la hora completas
 
-      // 4. Formatear el objeto DateTime a "aaaa-mm-dd"
-      // Para esto, nos aseguramos de que el mes y el día tengan dos dígitos (ej. 05 en lugar de 5)
+        // 4. Formatear el objeto DateTime a "aaaa-mm-dd"
+        // Para esto, nos aseguramos de que el mes y el día tengan dos dígitos (ej. 05 en lugar de 5)
 
-      final String year = dateTimeObject.year.toString();
-      final String month = dateTimeObject.month.toString().padLeft(
-        2,
-        '0',
-      ); // Añade un 0 a la izquierda si es necesario
-      final String day = dateTimeObject.day.toString().padLeft(
-        2,
-        '0',
-      ); // Añade un 0 a la izquierda si es necesario
+        final String year = dateTimeObject.year.toString();
+        final String month = dateTimeObject.month.toString().padLeft(
+          2,
+          '0',
+        ); // Añade un 0 a la izquierda si es necesario
+        final String day = dateTimeObject.day.toString().padLeft(
+          2,
+          '0',
+        ); // Añade un 0 a la izquierda si es necesario
 
-      final String dateId = '$year-$month-$day';
+        final String dateId = '$year-$month-$day';
 
         await _firebaseService.updateNotificationVisualizationStatus(
           notification.id,

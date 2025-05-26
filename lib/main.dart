@@ -122,9 +122,9 @@ class _MainAppState extends State<MainApp> {
             if (shouldShow) {
               await _firebaseService.saveNotification(notificationData);
               print('Notificación guardada en Firebase: $packageName');
+              
 
-              // Mostrar notificación local y actualizar estado de visualización
-              await _showLocalNotification(notificationData);
+              
             } else {
               print(
                 'Notificación filtrada, no se guarda en Firebase: $packageName',
@@ -311,11 +311,13 @@ class _MainAppState extends State<MainApp> {
         // Añadir o modificar appBarTheme aquí
         appBarTheme: AppBarTheme(
           backgroundColor: customColor[700], // Color de fondo del AppBar
-          foregroundColor: Colors.white, // Color de los iconos y texto del AppBar
+          foregroundColor:
+              Colors.white, // Color de los iconos y texto del AppBar
           titleTextStyle: TextStyle(
             color: Colors.white, // Color del título del AppBar
             fontSize: 20, // Ajusta el tamaño de fuente si es necesario
-            fontWeight: FontWeight.bold, // Ajusta el peso de fuente si es necesario
+            fontWeight:
+                FontWeight.bold, // Ajusta el peso de fuente si es necesario
           ),
           centerTitle: true, // Centrar el título del AppBar
         ),
@@ -350,32 +352,5 @@ class _MainAppState extends State<MainApp> {
             const NotificationSettingsScreen(), // Add the new route
       },
     );
-  }
-}
-
-// Método para mostrar notificaciones locales y actualizar estado de visualización
-Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
-  try {
-    // Mostrar la notificación local
-    await LocalNotificationService.showNotification(
-      title: notification['title'] ?? 'Nueva notificación',
-      body: notification['text'] ?? '',
-      packageName: notification['packageName'] ?? '',
-      appName: notification['appName'] ?? 'Desconocida',
-    );
-
-    // Actualizar el estado de visualización a true
-    final String notificationId = notification['id'] ?? '';
-    if (notificationId.isNotEmpty) {
-      // Usar ReceptorService para actualizar el estado
-      final ReceptorService receptorService = ReceptorService();
-      await receptorService.updateNotificationVisualizationStatus(
-        notificationId,
-        true,
-      );
-      print('Notificación marcada como visualizada: $notificationId');
-    }
-  } catch (e) {
-    print('Error al mostrar notificación local: $e');
   }
 }

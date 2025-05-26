@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/models/notification_data.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
@@ -33,6 +34,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     super.initState();
     _loadLinkedDevice();
     _loadNotificationSettings(); // Load initial state for the toggle
+    _startListeningForReadNotifications();
   }
 
   @override
@@ -66,7 +68,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         });
 
         // Iniciar escucha de notificaciones
-        _startListeningForNotifications();
+        _startListeningForReadNotifications();
       } else {
         // Si no hay dispositivo vinculado, redirigir a la pantalla de vinculación
         Navigator.pushReplacementNamed(context, '/receptor');
@@ -80,29 +82,16 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     }
   }
 
-  // Iniciar escucha de notificaciones
-  // Añadir este import al inicio del archivo
-  // import 'package:connect/services/local_notification_service.dart';
 
-  // En la clase _NotificacionesScreenState, añadir este método para mostrar notificaciones locales
-  // Añadir después del método _startListeningForNotifications
-
-  void _startListeningForNotifications() {
-    // Escuchar todas las notificaciones y filtrar las visualizadas para mostrar en la lista
+// Iniciar escucha de notificaciones no leídas
+  void _startListeningForReadNotifications() {
     _notificationSubscription = _receptorService
-        .listenForNotifications() // Listen to all notifications
+        .listenForSeenNotifications()
         .listen(
-          (allNotifications) {
-            // Filter only the visualized notifications (status-visualizacion = true)
-            final visualizedNotifications = allNotifications.where((
-              notification,
-            ) {
-              return notification['status-visualizacion'] == true;
-            }).toList();
-
+          (notifications) {
             // Agrupar por día
             final Map<String, List<Map<String, dynamic>>> grouped = {};
-            for (var notification in visualizedNotifications) {
+            for (var notification in notifications) {
               final timestamp = notification['timestamp'] as Timestamp?;
               if (timestamp == null) continue;
               final date = timestamp.toDate();
@@ -118,48 +107,17 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
             }
 
             setState(() {
-              _notifications = visualizedNotifications;
+              _notifications = notifications;
               _groupedNotifications = grouped;
             });
-
-            // Removed the call to _showLocalNotification and _updateVisualizedNotificationsList()
-            // Local notification logic should be handled elsewhere (e.g., main.dart)
           },
           onError: (error) {
-            print('Error en la suscripción de notificaciones: -$error');
+            print(
+              'Error en la suscripción de notificaciones no leídas: $error',
+            );
           },
         );
   }
-
-  // Removed the _updateVisualizedNotificationsList method
-
-  // Añadir este método para mostrar notificaciones locales
-  //  Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
-  //   try {
-  //     // Mostrar la notificación local
-  //     await LocalNotificationService.showNotification(
-  //       title: notification['title'] ?? 'Nueva notificación',
-  //       body: notification['text'] ?? '',
-  //       packageName: notification['packageName'] ?? '',
-  //       appName: notification['appName'] ?? 'Desconocida',
-  //     );
-
-  //     // Actualizar el estado de visualización a true
-  //     final String notificationId = notification['id'] ?? '';
-  //     if (notificationId.isNotEmpty) {
-  //       await _receptorService.updateNotificationVisualizationStatus(notificationId, true);
-  //       print('Notificación marcada como visualizada: $notificationId');
-  //     }
-  //   } catch (e) {
-  //     print('Error al mostrar notificación local: $e');
-  //   }
-  // }
-
-  // Desvincular dispositivo (Moved to ReceptorSettingsScreen)
-  // Future<void> _unlinkDevice() async { ... }
-
-  // Método para volver a la pantalla emisor (Moved to ReceptorSettingsScreen)
-  // Future<void> _backToEmisor() async { ... }
 
   // Toggle for local notifications (Moved from ReceptorSettingsScreen)
   Future<void> _toggleNotifications(bool value) async {
