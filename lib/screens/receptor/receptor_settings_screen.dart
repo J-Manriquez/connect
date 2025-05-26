@@ -1,4 +1,5 @@
 import 'package:connect/services/firebase_service.dart';
+import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/local_notification_service.dart';
@@ -74,6 +75,13 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       }
       // Guardar preferencia de no usar como receptor
       await PreferencesService.saveUseAsReceptor(false);
+
+      await LocalNotificationService.setNotificationsEnabled(false);
+      await NotificationListenerService.instance.setListeningEnabled(false);
+      setState(() {
+        _notificationsEnabled = false;
+      });
+
       // Redirigir a la pantalla emisor
       Navigator.pushReplacementNamed(context, '/');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -111,7 +119,6 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(5.0),
               children: [
-
                 // Add Card for Unlinking and Back to Emisor
                 Card(
                   child: Padding(
@@ -132,7 +139,10 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
                           icon: const Icon(Icons.link_off),
                           label: const Text(
                             'Desvincular Dispositivo',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             minimumSize: const Size.fromHeight(48),

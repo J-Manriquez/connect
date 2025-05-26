@@ -5,15 +5,36 @@ import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/local_notification_service.dart';
 
 class NotificationListenerService {
+  // Implementación del patrón Singleton
+  static final NotificationListenerService _instance = NotificationListenerService._internal();
+  factory NotificationListenerService() => _instance;
+  static NotificationListenerService get instance => _instance;
+  NotificationListenerService._internal();
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseService _firebaseService = FirebaseService();
   StreamSubscription? _notificationStreamSubscription;
   Map<String, Map<String, dynamic>> _lastKnownNotifications = {}; // Para rastrear notificaciones existentes
   DateTime? _lastNotificationShownTime; // Para limitar la frecuencia
   final Duration _minShowInterval = const Duration(seconds: 5); // Intervalo mínimo entre notificaciones
+  bool _isListening = false; // Estado de escucha
+
+  // Método para verificar si está escuchando
+  bool get isListening => _isListening;
+
+  // Método para habilitar/deshabilitar la escucha
+  Future<void> setListeningEnabled(bool enabled) async {
+    if (enabled && !_isListening) {
+      await startListening();
+    } else if (!enabled && _isListening) {
+      stopListening();
+    }
+  }
 
   // Inicia la escucha de nuevas notificaciones
   Future<void> startListening() async {
+    if (_isListening) return; // Evitar iniciar múltiples veces
+    
     final deviceId = await _firebaseService.getDeviceId();
     if (deviceId.isEmpty) {
       print('NotificationListenerService: Device ID not available.');
@@ -85,14 +106,20 @@ class NotificationListenerService {
         print('NotificationListenerService: Error listening for notifications: $error');
       },
     );
+    
+    _isListening = true;
+    print('NotificationListenerService: Started listening for notifications.');
   }
 
   // Detiene la escucha
   void stopListening() {
+    if (!_isListening) return; // Evitar detener si ya está detenido
+    
     _notificationStreamSubscription?.cancel();
     _notificationStreamSubscription = null;
     _lastKnownNotifications.clear(); // Limpiar estado al detener
-     print('NotificationListenerService: Stopped listening for notifications.');
+    _isListening = false;
+    print('NotificationListenerService: Stopped listening for notifications.');
   }
 
   // Método para mostrar notificaciones locales (adaptado del código proporcionado)

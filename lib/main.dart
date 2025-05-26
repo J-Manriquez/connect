@@ -32,8 +32,8 @@ void main() async {
   // Inicializar el servicio de notificaciones locales
   await LocalNotificationService.initialize();
 
-  final notificationListenerService = NotificationListenerService();
-  notificationListenerService.startListening(); // Iniciar la escucha
+  // final notificationListenerService = NotificationListenerService();
+  // notificationListenerService.startListening(); // Iniciar la escucha
 
   runApp(const MainApp());
 }

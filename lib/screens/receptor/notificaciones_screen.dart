@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/models/notification_data.dart';
 import 'package:connect/services/firebase_service.dart';
+import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/receptor_service.dart';
@@ -37,12 +38,6 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     _startListeningForReadNotifications();
   }
 
-  @override
-  void dispose() {
-    _notificationSubscription?.cancel();
-    super.dispose();
-  }
-
   // Load initial state for the notification toggle
   Future<void> _loadNotificationSettings() async {
     final notificationsEnabled =
@@ -50,6 +45,15 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     setState(() {
       _notificationsEnabled = notificationsEnabled;
     });
+    
+    // Iniciar o detener el servicio según el estado del toggle
+    await NotificationListenerService.instance.setListeningEnabled(notificationsEnabled);
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
   }
 
   // Cargar el dispositivo vinculado y comenzar a escuchar notificaciones
@@ -119,7 +123,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         );
   }
 
-  // Toggle for local notifications (Moved from ReceptorSettingsScreen)
+  // Toggle for local notifications
   Future<void> _toggleNotifications(bool value) async {
     if (value && await Permission.notification.isDenied) {
       final status = await Permission.notification.request();
@@ -136,7 +140,12 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       }
     }
 
+    // Habilitar/deshabilitar notificaciones locales
     await LocalNotificationService.setNotificationsEnabled(value);
+    
+    // Habilitar/deshabilitar el servicio de escucha de notificaciones
+    await NotificationListenerService.instance.setListeningEnabled(value);
+    
     setState(() {
       _notificationsEnabled = value;
     });
