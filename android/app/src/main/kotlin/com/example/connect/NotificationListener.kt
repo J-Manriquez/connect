@@ -81,7 +81,6 @@ class NotificationListener : NotificationListenerService() {
         methodChannel?.invokeMethod("serviceDisconnected", null)
     }
 
-
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
 
@@ -91,15 +90,25 @@ class NotificationListener : NotificationListenerService() {
         val notification = sbn.notification
         val extras = notification.extras
 
-        // --- No aplicamos filtros, capturamos todas las notificaciones ---
-        // La lógica de filtrado por app se ha eliminado según tu solicitud.
-        // -----------------------------------------------------------------
+        // Lista de paquetes a excluir para evitar bucles infinitos y notificaciones no deseadas
+        val excludedPackages = setOf(
+            "com.example.connect", // Nuestra propia aplicación
+            "android", // Sistema Android
+            "com.android.systemui", // UI del sistema
+            "com.android.settings" // Configuraciones del sistema
+        )
+
+        // Filtrar las notificaciones de paquetes excluidos
+        if (excludedPackages.contains(packageName)) {
+            Log.d("NotificationListener", "Ignorando notificación de paquete excluido: $packageName")
+            return
+        }
 
         val title = extras.getString(Notification.EXTRA_TITLE)
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         val time = sbn.postTime // Timestamp de la notificación
 
-        // Obtener el nombre de la aplicación (como en la versión copy)
+        // Obtener el nombre de la aplicación
         val appName = try {
             val appInfo = packageManager.getApplicationInfo(packageName, 0)
             packageManager.getApplicationLabel(appInfo).toString()
@@ -116,9 +125,10 @@ class NotificationListener : NotificationListenerService() {
             "time" to time.toString() // Convertir a String para enviarlo
         )
 
-        Log.d("NotificationListener", "Notificación capturada: $notificationData")
+        Log.d("NotificationListener", "Notificación capturada para EMISOR: $notificationData")
 
-        // Enviar la notificación a Flutter
+        // SOLO enviar la notificación a Flutter para procesamiento (guardar en Firebase)
+        // NO mostrar notificación local aquí - eso es responsabilidad del RECEPTOR
         methodChannel?.invokeMethod("onNotificationReceived", notificationData)
             ?: Log.e("NotificationListener", "MethodChannel es null, no se puede enviar la notificación")
     }
@@ -128,15 +138,12 @@ class NotificationListener : NotificationListenerService() {
         sbn?.let {
             val packageName = it.packageName
             Log.d("NotificationListener", "Notification Removed: Package: $packageName")
-            // Puedes añadir lógica aquí si necesitas manejar la eliminación de notificaciones
-            // methodChannel?.invokeMethod("onNotificationRemoved", mapOf("packageName" to packageName))
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        isRunning = false // Asegurarse de que el flag se actualice al destruir el servicio
+        isRunning = false
         Log.d("NotificationListener", "Service destroyed")
-        // Limpiar recursos si es necesario
     }
 }

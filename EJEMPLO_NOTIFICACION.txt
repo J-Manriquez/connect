@@ -1,0 +1,102 @@
+# Funcionamiento de las Notificaciones de Alarma en The Good Alarm
+Voy a explicarte detalladamente cómo funcionan las notificaciones que se activan cuando suena una alarma en la aplicación, desde su creación hasta que se muestran en la barra de notificaciones.
+
+## 1. Estructura General del Sistema
+La aplicación utiliza una arquitectura que combina Flutter (para la interfaz de usuario) con código nativo de Android (para manejar las alarmas y notificaciones). La comunicación entre ambas partes se realiza mediante MethodChannel .
+
+## 2. Creación del Canal de Notificaciones
+Antes de poder mostrar notificaciones, la aplicación crea un canal de notificaciones (obligatorio en Android 8.0+):
+
+- En MainActivity.kt , el método createNotificationChannel() crea un canal llamado "Alarm Notifications" con prioridad alta ( IMPORTANCE_HIGH ).
+- Este canal está configurado para:
+  - Activar vibración y luces
+  - Permitir que las alarmas suenen incluso en modo No molestar ( setBypassDnd(true) )
+  - Mostrar notificaciones en la pantalla de bloqueo ( lockscreenVisibility = VISIBILITY_PUBLIC )
+  - Usar el sonido de alarma predeterminado del sistema
+## 3. Flujo de Activación de Alarma
+### 3.1 Recepción de la Alarma
+Cuando llega el momento programado para una alarma:
+
+1. El sistema Android activa AlarmReceiver (un BroadcastReceiver ) con la acción ALARM_TRIGGERED
+2. AlarmReceiver.onReceive() detecta esta acción y llama a handleAlarmTrigger()
+### 3.2 Manejo de la Alarma (AlarmReceiver.kt)
+El método handleAlarmTrigger() realiza varias acciones importantes:
+
+1. Adquiere un WakeLock para asegurar que el dispositivo se despierte y permanezca despierto durante 60 segundos
+2. Reproduce el sonido de alarma :
+   - Obtiene el tono de alarma predeterminado del sistema
+   - Lo almacena en currentRingtone y comienza a reproducirlo
+3. Activa la vibración :
+   - Configura un patrón de vibración (0, 500, 500, 500)
+   - Inicia la vibración en un bucle continuo
+4. Crea intents para las acciones :
+   - launchIntent : Para abrir la aplicación cuando se toca la notificación
+   - stopIntent : Para detener la alarma desde la notificación
+   - snoozeIntent : Para posponer la alarma desde la notificación
+5. Crea y muestra la notificación :
+   - Configura una notificación con prioridad máxima ( PRIORITY_MAX )
+   - Añade botones de acción para "Apagar" y "Posponer"
+   - Establece la notificación como persistente ( setOngoing(true) )
+   - Muestra la notificación usando notificationManager.notify()
+## 4. Estructura de la Notificación
+La notificación creada en AlarmReceiver.kt tiene las siguientes características:
+
+- Icono : Icono de alarma estándar de Android
+- Título : El título de la alarma configurada
+- Texto : El mensaje de la alarma configurada
+- Prioridad : Máxima ( PRIORITY_MAX )
+- Categoría : Alarma ( CATEGORY_ALARM )
+- Acciones : Dos botones - "Apagar" y "Posponer 1 min"
+- Persistencia : Es una notificación persistente ( setOngoing(true) )
+- Visibilidad : Visible en pantalla de bloqueo ( VISIBILITY_PUBLIC )
+## 5. Manejo de Acciones de Notificación
+Cuando el usuario interactúa con la notificación:
+
+### 5.1 Tocar la Notificación Principal
+Si el usuario toca la notificación principal:
+
+- Se ejecuta pendingLaunchIntent
+- Abre la aplicación y muestra la pantalla de alarma activa
+### 5.2 Botón "Apagar"
+Si el usuario toca "Apagar":
+
+1. Se activa AlarmReceiver con la acción STOP_ACTION
+2. stopAlarmSound() detiene el sonido y la vibración
+3. Se cancela la notificación
+4. Se inicia MainActivity con la acción STOP_ALARM_FROM_NOTIFICATION
+5. MainActivity procesa esta acción y notifica a Flutter
+### 5.3 Botón "Posponer"
+Si el usuario toca "Posponer":
+
+1. Se activa AlarmReceiver con la acción SNOOZE_ACTION
+2. stopAlarmSound() detiene el sonido y la vibración
+3. Se cancela la notificación actual
+4. Se inicia MainActivity con la acción SNOOZE_ALARM_FROM_NOTIFICATION
+5. MainActivity programa una nueva alarma para después del tiempo de posponer
+## 6. Comunicación con Flutter
+Cuando se maneja una alarma en el código nativo, se notifica a Flutter a través de MethodChannel :
+
+1. En MainActivity.kt , cuando se detiene o pospone una alarma, se llama a channel.invokeMethod()
+2. En Flutter ( home_page.dart ), el método _handleNativeCalls() recibe estas llamadas
+3. Dependiendo del método recibido, actualiza la interfaz de usuario:
+   - notifyAlarmRinging : Actualiza el estado para mostrar que hay una alarma sonando
+   - alarmManuallyStopped : Actualiza el estado para ocultar la alarma
+## 7. Visualización en la Interfaz de Usuario
+En Flutter, cuando una alarma está sonando:
+
+1. El método _buildRingingAlarmContainer() construye un widget que muestra:
+   - El título de la alarma
+   - El mensaje de la alarma
+   - Botones para apagar o posponer la alarma
+2. Este widget se muestra en la pantalla principal cuando _isAlarmRinging es true
+## Resumen del Flujo Completo
+1. Programación : El usuario programa una alarma en la aplicación Flutter
+2. Activación : Cuando llega el momento, Android activa AlarmReceiver
+3. Notificación : AlarmReceiver crea y muestra una notificación, reproduce sonido y vibración
+4. Interacción : El usuario puede:
+   - Abrir la aplicación tocando la notificación
+   - Apagar la alarma desde la notificación
+   - Posponer la alarma desde la notificación
+5. Comunicación : Las acciones del usuario se comunican de vuelta a Flutter
+6. UI : La interfaz de usuario se actualiza para reflejar el estado actual de la alarma
+Este sistema asegura que las alarmas funcionen correctamente incluso cuando la aplicación está en segundo plano o el dispositivo está bloqueado, proporcionando múltiples formas de interactuar con la alarma activa.

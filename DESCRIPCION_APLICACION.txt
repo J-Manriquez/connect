@@ -1,0 +1,111 @@
+# Connect - Aplicación de Sincronización de Notificaciones
+
+## Descripción General
+Connect es una aplicación Android que permite sincronizar notificaciones entre dispositivos mediante Firebase. La aplicación tiene dos modos de funcionamiento completamente independientes:
+
+### MODO EMISOR
+- Captura notificaciones de aplicaciones seleccionadas en el dispositivo
+- Filtra las notificaciones según la configuración del usuario
+- Guarda las notificaciones capturadas en Firebase Cloud Firestore
+- NO muestra notificaciones locales
+
+### MODO RECEPTOR
+- Escucha notificaciones almacenadas en Firebase
+- Muestra las notificaciones recibidas como notificaciones locales en la barra de estado
+- Permite configurar sonido, vibración y apertura automática
+- NO captura notificaciones del dispositivo local
+
+## Arquitectura Técnica
+
+### Servicios Nativos (Android)
+1. **NotificationListener.kt** (Solo EMISOR)
+   - Servicio que escucha todas las notificaciones del sistema
+   - Filtra notificaciones según apps habilitadas
+   - Envía datos a Flutter para guardar en Firebase
+   - NO genera notificaciones locales
+
+2. **LocalNotificationManager.kt** (Solo RECEPTOR)
+   - Maneja la creación de notificaciones locales
+   - Configura canales de notificación
+   - Gestiona interacciones del usuario con notificaciones
+   - Solo actúa cuando Flutter le solicita mostrar una notificación
+
+3. **MainActivity.kt**
+   - Gestiona dos MethodChannels separados:
+     - Canal EMISOR: com.example.connect/notifications
+     - Canal RECEPTOR: com.example.connect/local_notifications
+   - Asegura que los servicios funcionen de forma aislada
+
+### Servicios Flutter
+1. **NotificationListenerService** - Procesa notificaciones del emisor
+2. **LocalNotificationService** - Gestiona notificaciones del receptor
+3. **ReceptorService** - Escucha cambios en Firebase
+4. **FirebaseService** - Maneja operaciones de Firestore
+
+## Ejemplo de Uso: Smartphone y Smartwatch
+
+### Escenario: Sincronizar notificaciones de WhatsApp del teléfono al smartwatch
+
+#### DISPOSITIVO 1: Smartphone (EMISOR)
+1. **Configuración inicial:**
+   - Abrir Connect en el smartphone
+   - Seleccionar "Usar como Emisor"
+   - Conceder permisos de acceso a notificaciones
+   - Ir a "Lista de Apps" y habilitar WhatsApp
+   - Activar "Guardar en Firebase"
+
+2. **Funcionamiento:**
+   - El usuario recibe un mensaje de WhatsApp
+   - NotificationListener.kt captura la notificación
+   - La notificación se filtra (WhatsApp está habilitado)
+   - Se guarda en Firebase: /dispositivos/{deviceId}/notificaciones/{fecha}/{timestamp}
+   - NO se muestra ninguna notificación adicional en el teléfono
+
+#### DISPOSITIVO 2: Smartwatch (RECEPTOR)
+1. **Configuración inicial:**
+   - Instalar Connect en el smartwatch
+   - Seleccionar "Usar como Receptor"
+   - Vincular con el mismo deviceId del smartphone
+   - Configurar preferencias:
+     - Sonido: Activado
+     - Vibración: Activada
+     - Apertura automática: Desactivada
+
+2. **Funcionamiento:**
+   - ReceptorService escucha cambios en Firebase
+   - Detecta la nueva notificación de WhatsApp
+   - LocalNotificationService solicita mostrar notificación local
+   - LocalNotificationManager.kt crea la notificación en el smartwatch
+   - El usuario ve la notificación de WhatsApp en su smartwatch
+
+
+### Casos de Uso Adicionales
+
+1. **Tablet como receptor secundario:**
+   - Configurar tablet como receptor
+   - Recibir notificaciones del mismo smartphone
+   - Útil para cuando el smartwatch no está disponible
+
+2. **Múltiples emisores:**
+   - Smartphone personal (WhatsApp, Instagram)
+   - Smartphone de trabajo (Slack, Email)
+   - Ambos envían a un smartwatch receptor
+
+3. **Filtrado avanzado:**
+   - Emisor: Solo notificaciones de apps importantes
+   - Receptor: Configurar horarios de "No molestar"
+   - Personalizar sonidos por tipo de aplicación
+
+### Ventajas del Sistema
+- **Aislamiento completo:** Emisor y receptor no interfieren entre sí
+- **Escalabilidad:** Un emisor puede alimentar múltiples receptores
+- **Flexibilidad:** Cada dispositivo puede configurarse independientemente
+- **Sincronización en tiempo real:** Cambios instantáneos vía Firebase
+- **Persistencia:** Las notificaciones se almacenan en la nube
+
+### Requisitos Técnicos
+- Android 6.0+ (API 23+)
+- Conexión a Internet
+- Permisos de acceso a notificaciones (solo emisor)
+- Cuenta de Firebase configurada
+- Mismo proyecto Firebase para todos los dispositivos

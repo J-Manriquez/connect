@@ -11,13 +11,17 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.example.connect/notifications"
+    // CANALES SEPARADOS PARA EMISOR Y RECEPTOR
+    private val EMISOR_CHANNEL = "com.example.connect/notifications" // Para NotificationListener (EMISOR)
     private val APP_LIST_CHANNEL = "com.example.connect/app_list"
-    private lateinit var channel: MethodChannel
+    private val RECEPTOR_CHANNEL = "com.example.connect/local_notifications" // Para LocalNotificationManager (RECEPTOR)
+    
+    private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
+    private lateinit var receptorChannel: MethodChannel
     private lateinit var appListService: AppListService
+    private lateinit var localNotificationManager: LocalNotificationManager
 
-    // Puedes mantener esta instancia si la necesitas en otras partes de tu app nativa
     companion object {
         var instance: MainActivity? = null
     }
@@ -27,82 +31,70 @@ class MainActivity: FlutterActivity() {
 
         instance = this
         
-        // Inicializar el servicio de lista de aplicaciones
+        // Inicializar servicios
         appListService = AppListService(this)
+        localNotificationManager = LocalNotificationManager(this)
 
-        // Canal para notificaciones
-        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-        // Asignar el MethodChannel al servicio tan pronto como se crea
-        NotificationListener.methodChannel = channel
-        Log.d("MainActivity", "MethodChannel assigned to NotificationListener")
+        // Canal para EMISOR (NotificationListener)
+        emisorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EMISOR_CHANNEL)
+        NotificationListener.methodChannel = emisorChannel
+        Log.d("MainActivity", "Canal EMISOR asignado a NotificationListener")
         
         // Canal para lista de aplicaciones
         appListChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_LIST_CHANNEL)
+        
+        // CANAL PARA RECEPTOR (LocalNotificationManager)
+        receptorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, RECEPTOR_CHANNEL)
 
         // Iniciar automáticamente el servicio si el permiso está concedido
         if (isNotificationServiceEnabled()) {
             val serviceIntent = Intent(this, NotificationListener::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(serviceIntent)
-                Log.d("MainActivity", "Iniciando servicio automáticamente al arrancar la app")
+                Log.d("MainActivity", "Iniciando servicio EMISOR automáticamente")
             } else {
                 startService(serviceIntent)
             }
         }
 
-        // Configurar el manejador para el canal de notificaciones
-        channel.setMethodCallHandler { call, result ->
+        // CONFIGURAR MANEJADOR PARA CANAL EMISOR (NotificationListener)
+        emisorChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startNotificationService" -> {
                     if (!isNotificationServiceEnabled()) {
-                        // Si el servicio no está habilitado, abrir la configuración
                         openNotificationListenerSettings()
-                        // No podemos confirmar que el servicio se inició, solo que se abrió la configuración
                         result.success(false)
-                        Log.d("MainActivity", "Servicio no habilitado, abriendo configuración.")
+                        Log.d("MainActivity", "Servicio EMISOR no habilitado, abriendo configuración.")
                     } else {
-                        // El servicio está habilitado, intentar iniciarlo explícitamente
                         val serviceIntent = Intent(this, NotificationListener::class.java)
-                        // Usar startForegroundService para servicios que deben ejecutarse continuamente
-                        // Requiere Android O (API 26) o superior
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(serviceIntent)
-                            Log.d("MainActivity", "Llamando a startForegroundService.")
                         } else {
                             startService(serviceIntent)
-                            Log.d("MainActivity", "Llamando a startService.")
                         }
-                        // El flag isRunning se actualizará en onListenerConnected
-                        result.success(true) // Indicar que se envió la intención de inicio
-                        Log.d("MainActivity", "Intent para iniciar NotificationListener enviado.")
+                        result.success(true)
+                        Log.d("MainActivity", "Servicio EMISOR iniciado.")
                     }
                 }
                 "stopNotificationService" -> {
                     val serviceIntent = Intent(this, NotificationListener::class.java)
                     stopService(serviceIntent)
-                    // El flag isRunning se actualizará en onListenerDisconnected o onDestroy
-                    result.success(true) // Indicar que se envió la intención de detener
-                    Log.d("MainActivity", "Intent para detener NotificationListener enviado.")
+                    result.success(true)
+                    Log.d("MainActivity", "Servicio EMISOR detenido.")
                 }
                 "isServiceRunning" -> {
-                    // Devolver el estado actual del flag isRunning del servicio
                     result.success(NotificationListener.isRunning)
-                    Log.d("MainActivity", "¿NotificationListener está corriendo? ${NotificationListener.isRunning}")
+                    Log.d("MainActivity", "Estado servicio EMISOR: ${NotificationListener.isRunning}")
                 }
                 "isNotificationServiceEnabled" -> {
-                    // Devolver si el permiso de escucha de notificaciones está concedido
                     result.success(isNotificationServiceEnabled())
-                    Log.d("MainActivity", "¿Permiso de escucha de notificaciones concedido? ${isNotificationServiceEnabled()}")
                 }
                 "openNotificationSettings" -> {
-                    // Abrir la pantalla de configuración de escucha de notificaciones
                     openNotificationListenerSettings()
-                    result.success(null) // No esperamos un resultado de esta acción
-                    Log.d("MainActivity", "Abriendo configuración de escucha de notificaciones.")
+                    result.success(null)
                 }
                 else -> {
                     result.notImplemented()
-                    Log.w("MainActivity", "Llamada a método no implementado: ${call.method}")
                 }
             }
         }
@@ -151,7 +143,6 @@ class MainActivity: FlutterActivity() {
                             Log.d("MainActivity", "Estado de la aplicación $packageName actualizado a $isEnabled")
                         } else {
                             result.error("INVALID_ARGS", "Argumentos inválidos", null)
-                            Log.e("MainActivity", "Argumentos inválidos para updateAppState")
                         }
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al actualizar estado de la aplicación", e)
@@ -170,30 +161,102 @@ class MainActivity: FlutterActivity() {
                 }
                 else -> {
                     result.notImplemented()
-                    Log.w("MainActivity", "Llamada a método no implementado en app_list: ${call.method}")
+                }
+            }
+        }
+        
+        // CONFIGURAR MANEJADOR PARA CANAL RECEPTOR (LocalNotificationManager)
+        receptorChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "showNotification" -> {
+                    try {
+                        val title = call.argument<String>("title") ?: ""
+                        val body = call.argument<String>("body") ?: ""
+                        val packageName = call.argument<String>("packageName") ?: ""
+                        val appName = call.argument<String>("appName") ?: ""
+                        val notificationId = call.argument<String>("notificationId") ?: ""
+                        val soundEnabled = call.argument<Boolean>("soundEnabled") ?: true
+                        val vibrationEnabled = call.argument<Boolean>("vibrationEnabled") ?: true
+                        val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
+                        
+                        localNotificationManager.showNotification(
+                            title, body, packageName, appName, notificationId,
+                            soundEnabled, vibrationEnabled, autoOpenEnabled
+                        )
+                        result.success(true)
+                        Log.d("MainActivity", "Notificación RECEPTOR mostrada: $title")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al mostrar notificación RECEPTOR", e)
+                        result.error("ERROR", "Error al mostrar notificación: ${e.message}", null)
+                    }
+                }
+                "cancelNotification" -> {
+                    try {
+                        val notificationId = call.argument<String>("notificationId") ?: ""
+                        localNotificationManager.cancelNotification(notificationId)
+                        result.success(true)
+                        Log.d("MainActivity", "Notificación RECEPTOR cancelada: $notificationId")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al cancelar notificación RECEPTOR", e)
+                        result.error("ERROR", "Error al cancelar notificación: ${e.message}", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
                 }
             }
         }
     }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleNotificationIntent(intent)
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        handleNotificationIntent(intent)
+    }
+    
+    private fun handleNotificationIntent(intent: Intent?) {
+        if (intent?.action == LocalNotificationManager.NOTIFICATION_ACTION_OPEN) {
+            val notificationId = intent.getStringExtra(LocalNotificationManager.EXTRA_NOTIFICATION_DATA)
+            val title = intent.getStringExtra("title")
+            val body = intent.getStringExtra("body")
+            val packageName = intent.getStringExtra("packageName")
+            val appName = intent.getStringExtra("appName")
+            val autoOpen = intent.getBooleanExtra("autoOpen", false)
+            
+            if (notificationId != null) {
+                val notificationData = mapOf(
+                    "notificationId" to notificationId,
+                    "title" to (title ?: ""),
+                    "body" to (body ?: ""),
+                    "packageName" to (packageName ?: ""),
+                    "appName" to (appName ?: ""),
+                    "autoOpen" to autoOpen
+                )
+                
+                receptorChannel.invokeMethod("onNotificationTapped", notificationData)
+                Log.d("MainActivity", "Notificación RECEPTOR tocada, enviando datos a Flutter")
+            }
+        }
+    }
 
-    // Helper para verificar si el permiso de escucha de notificaciones está concedido
     private fun isNotificationServiceEnabled(): Boolean {
         val pkgName = packageName
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-        // Verificar si el nombre de nuestro componente de servicio está en la lista de listeners habilitados
         val cn = ComponentName(pkgName, NotificationListener::class.java.name)
         val enabled = flat != null && flat.contains(cn.flattenToString())
         return enabled
     }
 
-    // Helper para abrir la pantalla de configuración de escucha de notificaciones
     private fun openNotificationListenerSettings() {
         try {
             val intent = Intent()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 intent.action = Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
             } else {
-                // Acción para versiones anteriores a Android O
                 intent.action = "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"
             }
             startActivity(intent)
@@ -202,13 +265,7 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    // Método para notificar a Flutter que la lista de apps se actualizó
     fun notifyAppListUpdated() {
-        try {
-            appListChannel.invokeMethod("onAppListUpdated", null)
-            Log.d("MainActivity", "Notificación enviada a Flutter: lista de apps actualizada")
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error al notificar actualización de lista de apps", e)
-        }
+        appListChannel.invokeMethod("onAppListUpdated", null)
     }
 }

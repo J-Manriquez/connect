@@ -125,19 +125,21 @@ class NotificationListenerService {
   // Método para mostrar notificaciones locales (adaptado del código proporcionado)
   Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
     try {
+      // Obtener notificationId de la notificación
+      final String notificationId = notification['id'];
+      
       // Mostrar la notificación local
       await LocalNotificationService.showNotification(
         title: notification['title'] ?? 'Nueva notificación',
         body: notification['text'] ?? '',
         packageName: notification['packageName'] ?? '',
         appName: notification['appName'] ?? 'Desconocida',
+        notificationId: notificationId, // Add this required parameter
       );
-       _lastNotificationShownTime = DateTime.now(); // Actualizar tiempo de última notificación mostrada
+      _lastNotificationShownTime = DateTime.now(); // Actualizar tiempo de última notificación mostrada
 
-      // Obtener notificationId y dateId de la notificación
-      final String notificationId = notification['id'];
-        // 2. Convertir el String de milisegundos a un entero
-        final int millisecondsSinceEpoch = int.parse(notificationId);
+      // 2. Convertir el String de milisegundos a un entero
+      final int millisecondsSinceEpoch = int.parse(notificationId);
         print('Milisegundos (int): $millisecondsSinceEpoch');
 
         // 3. Crear un objeto DateTime a partir de los milisegundos

@@ -1,3 +1,4 @@
+import 'package:connect/screens/receptor/notification_detail_screen.dart';
 import 'package:connect/screens/receptor/receptor_screen.dart';
 import 'package:connect/screens/receptor/notificaciones_screen.dart'; // Añadir esta importación
 import 'package:connect/services/notification_filter_service.dart';
@@ -21,6 +22,9 @@ import 'package:connect/screens/receptor/unread_notifications_screen.dart';
 import 'package:connect/screens/receptor/notification_settings_screen.dart'; // Import the new screen
 import 'package:connect/theme_colors.dart';
 
+// Add this global navigator key
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 // En el método main, añadir la inicialización del servicio de notificaciones locales
 void main() async {
   // Asegurar que Flutter esté inicializado
@@ -30,12 +34,29 @@ void main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Inicializar el servicio de notificaciones locales
-  await LocalNotificationService.initialize();
-
+  // await LocalNotificationService.initialize();
+  initializeNotificationHandling();
   // final notificationListenerService = NotificationListenerService();
   // notificationListenerService.startListening(); // Iniciar la escucha
 
   runApp(const MainApp());
+}
+
+void initializeNotificationHandling() {
+  // Configurar el callback para manejar cuando se toca una notificación
+  LocalNotificationService.onNotificationTapped = (Map<String, dynamic> data) {
+    final autoOpen = data['autoOpen'] as bool? ?? false;
+
+    if (autoOpen) {
+      // Navegar automáticamente a la pantalla de detalle
+      Navigator.of(
+        navigatorKey.currentContext!,
+      ).pushNamed('/notification_detail', arguments: data);
+    }
+  };
+
+  // Inicializar el servicio
+  LocalNotificationService.initialize();
 }
 
 class MainApp extends StatefulWidget {
@@ -126,9 +147,6 @@ class _MainAppState extends State<MainApp> {
             if (shouldShow) {
               await _firebaseService.saveNotification(notificationData);
               print('Notificación guardada en Firebase: $packageName');
-              
-
-              
             } else {
               print(
                 'Notificación filtrada, no se guarda en Firebase: $packageName',
@@ -279,11 +297,18 @@ class _MainAppState extends State<MainApp> {
       print(
         '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',
       );
+      // En el método _checkInitialRoute, después de verificar el linkStatus
       if (linkStatus) {
-        print('[DEBUG] _checkInitialRoute: Navigating to /notificaciones');
-        Navigator.pushReplacementNamed(context, '/notificaciones');
-        print('[DEBUG] _checkInitialRoute: Navigation to /notificaciones done');
-        return;
+      print('[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor');
+      
+      // Inicializar el receptor sin mostrar notificaciones existentes
+      final receptorService = ReceptorService();
+      await receptorService.initializeReceptorWithoutNotifications();
+      
+      // Navegar a la pantalla del receptor
+      Navigator.pushReplacementNamed(context, '/receptor');
+      } else {
+      print('[DEBUG] _checkInitialRoute: Dispositivo no vinculado, mantener en emisor');
       }
       final useAsReceptor = await PreferencesService.getUseAsReceptor();
       print(
@@ -303,6 +328,7 @@ class _MainAppState extends State<MainApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey, // Add this line
       debugShowCheckedModeBanner: false,
       title: 'Connect',
       theme: ThemeData(
@@ -354,6 +380,7 @@ class _MainAppState extends State<MainApp> {
             const UnreadNotificationsScreen(), // Añadir esta nueva ruta
         '/notification_settings': (context) =>
             const NotificationSettingsScreen(), // Add the new route
+        '/notification_detail': (context) => const NotificationDetailScreen(notificationData: {},), // Add this line
       },
     );
   }

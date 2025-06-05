@@ -3,9 +3,9 @@ import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/local_notification_service.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Import SharedPreferences
-import 'package:connect/services/receptor_service.dart'; // Import ReceptorService
-import 'package:connect/services/preferences_service.dart'; // Import PreferencesService
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connect/services/receptor_service.dart';
+import 'package:connect/services/preferences_service.dart';
 
 class ReceptorSettingsScreen extends StatefulWidget {
   const ReceptorSettingsScreen({Key? key}) : super(key: key);
@@ -16,24 +16,15 @@ class ReceptorSettingsScreen extends StatefulWidget {
 
 class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
   bool _notificationsEnabled = false;
+  bool _autoOpenEnabled = false;
   bool _isLoading = true;
 
-  final ReceptorService _receptorService =
-      ReceptorService(); // Instantiate ReceptorService
+  final ReceptorService _receptorService = ReceptorService();
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
-    _loadNotificationSettings();
-  }
-
-  Future<void> _loadNotificationSettings() async {
-    final notificationsEnabled =
-        await LocalNotificationService.areNotificationsEnabled();
-    setState(() {
-      _notificationsEnabled = notificationsEnabled;
-    });
   }
 
   Future<void> _loadSettings() async {
@@ -41,48 +32,43 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       _isLoading = true;
     });
 
-    // Removed loading of notification settings
-    // final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
-    // final soundEnabled = await LocalNotificationService.isSoundEnabled();
-    // final vibrationEnabled = await LocalNotificationService.isVibrationEnabled();
-
+    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+    final autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
+    
     setState(() {
-      // Removed setting notification settings state
-      // _notificationsEnabled = notificationsEnabled;
-      // _soundEnabled = soundEnabled;
-      // _vibrationEnabled = vibrationEnabled;
+      _notificationsEnabled = notificationsEnabled;
+      _autoOpenEnabled = autoOpenEnabled;
       _isLoading = false;
     });
   }
 
-  // Removed toggle methods for notifications, sound, and vibration
-  // Future<void> _toggleNotifications(bool value) async { ... }
-  // Future<void> _toggleSound(bool value) async { ... }
-  // Future<void> _toggleVibration(bool value) async { ... }
+  Future<void> _toggleAutoOpen(bool value) async {
+    await LocalNotificationService.setAutoOpenEnabled(value);
+    setState(() {
+      _autoOpenEnabled = value;
+    });
+  }
 
-  // Desvincular dispositivo (Moved from NotificacionesScreen)
+  // Desvincular dispositivo
   Future<void> _unlinkDevice() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Retrieve the linked device ID before removing it
       final deviceId = await _receptorService.getLinkedDeviceId();
-      // Remove the device ID from preferences
       await prefs.remove(ReceptorService.KEY_LINKED_DEVICE_ID);
-      // Update link status in Firebase if deviceId exists
+      
       if (deviceId != null) {
         final firebaseservice = FirebaseService();
         await firebaseservice.updateLinkStatus(false, deviceId);
       }
-      // Guardar preferencia de no usar como receptor
+      
       await PreferencesService.saveUseAsReceptor(false);
-
       await LocalNotificationService.setNotificationsEnabled(false);
       await NotificationListenerService.instance.setListeningEnabled(false);
+      
       setState(() {
         _notificationsEnabled = false;
       });
 
-      // Redirigir a la pantalla emisor
       Navigator.pushReplacementNamed(context, '/');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -91,23 +77,14 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
         ),
       );
     } catch (e) {
-      print('Error al desvincular dispositivo: \$e');
+      print('Error al desvincular dispositivo: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error al desvincular dispositivo: \$e'),
+          content: Text('Error al desvincular dispositivo: $e'),
           backgroundColor: Colors.red,
         ),
       );
     }
-  }
-
-  // Método para volver a la pantalla emisor (Moved from NotificacionesScreen)
-  Future<void> _backToEmisor() async {
-    // Guardar preferencia de no usar como receptor
-    await PreferencesService.saveUseAsReceptor(false);
-
-    // Navegar a la pantalla emisor
-    Navigator.pushReplacementNamed(context, '/');
   }
 
   @override
@@ -119,7 +96,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(5.0),
               children: [
-                // Add Card for Unlinking and Back to Emisor
+                // Opciones de Dispositivo
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -158,31 +135,54 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
                     ),
                   ),
                 ),
+                
                 const SizedBox(height: 8),
 
-                // Add button to navigate to Notification Settings
+                // Configuración de Notificaciones
                 Card(
-                  child: ListTile(
-                    title: const Text('Configuración de Notificaciones'),
-                    trailing: const Icon(Icons.arrow_forward_ios),
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        '/notification_settings',
-                      ); // Navigate to new screen
-                    },
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Configuración de Notificaciones',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        
+                        // Apertura automática
+                        SwitchListTile(
+                          title: const Text('Abrir aplicación automáticamente'),
+                          subtitle: const Text(
+                            'Abre la aplicación automáticamente cuando llega una notificación'
+                          ),
+                          value: _autoOpenEnabled,
+                          onChanged: _toggleAutoOpen,
+                          activeColor: customColor[700],
+                        ),
+                        
+                        const Divider(),
+                        
+                        // Botón para configuraciones avanzadas
+                        ListTile(
+                          title: const Text('Configuraciones Avanzadas'),
+                          subtitle: const Text('Sonido, vibración y más opciones'),
+                          trailing: const Icon(Icons.arrow_forward_ios),
+                          onTap: () {
+                            Navigator.pushNamed(
+                              context,
+                              '/notification_settings',
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-
-                // Removed Notification Settings section and toggles
-                // const SizedBox(height: 8),
-                // const Text(
-                //   'Configuración de notificaciones',
-                //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                // ),
-                // const SizedBox(height: 8),
-                // SwitchListTile( ... ),
-                // SwitchListTile( ... ),
               ],
             ),
       bottomNavigationBar: Column(
@@ -190,15 +190,13 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
         children: [
           Container(
             height: 3,
-            color: customColor[700], // Barra divisoria con customColor
+            color: customColor[700],
           ),
           BottomNavigationBar(
-            currentIndex:
-                0, // 0: Configuración, 1: Notificaciones, 2: No Leídas
+            currentIndex: 0,
             onTap: (index) {
               switch (index) {
                 case 0:
-                  // Ya estamos en configuración
                   break;
                 case 1:
                   Navigator.pushReplacementNamed(context, '/notificaciones');
@@ -215,10 +213,8 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
             unselectedFontSize: 12.0,
             selectedIconTheme: const IconThemeData(size: 37.5),
             unselectedIconTheme: const IconThemeData(size: 22.5),
-            selectedItemColor:
-                customColor[700], // Color para el ítem seleccionado
-            unselectedItemColor:
-                Colors.black, // Color para los ítems no seleccionados
+            selectedItemColor: customColor[700],
+            unselectedItemColor: Colors.black,
             items: [
               const BottomNavigationBarItem(
                 icon: Icon(Icons.settings),
