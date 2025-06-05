@@ -59,6 +59,7 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="dataSync"
             android:exported="false"/>
+        <receiver android:name=".NotificationDeleteReceiver" />
 
     </application>
     <!-- Required to query activities that can process text, see:

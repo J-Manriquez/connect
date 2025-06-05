@@ -243,7 +243,7 @@ class _AppListScreenState extends State<AppListScreen> {
                               false,
                             ); // Deactivate app
                           },
-                          // activeColor: Colors.green,
+                          activeColor: Colors.green,
                           inactiveTrackColor: customColor[200],
                           inactiveThumbColor: Colors.grey[300],
                         ),

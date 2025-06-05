@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dismissed_notifications_service.dart';
 
 class LocalNotificationService {
   static const MethodChannel _channel = MethodChannel('com.example.connect/local_notifications');
@@ -27,10 +28,17 @@ class LocalNotificationService {
           onNotificationTapped!(data);
         }
         break;
+      case 'onNotificationDismissed':
+        final Map<String, dynamic> data = Map<String, dynamic>.from(call.arguments);
+        final String notificationId = data['notificationId'] ?? '';
+        if (notificationId.isNotEmpty) {
+          await DismissedNotificationsService.markAsDismissed(notificationId);
+        }
+        break;
     }
   }
   
-  // Mostrar una notificación
+  // Mostrar una notificación (método modificado)
   static Future<void> showNotification({
     required String title,
     required String body,
@@ -40,6 +48,12 @@ class LocalNotificationService {
   }) async {
     // Verificar si las notificaciones están habilitadas
     if (!await areNotificationsEnabled()) {
+      return;
+    }
+    
+    // Verificar si la notificación fue eliminada previamente
+    if (await DismissedNotificationsService.isDismissed(notificationId)) {
+      print('Notificación previamente eliminada, no se muestra: $notificationId');
       return;
     }
     

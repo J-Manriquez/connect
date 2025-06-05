@@ -18,8 +18,8 @@ class LocalNotificationManager(private val context: Context) {
         const val NOTIFICATION_ACTION_OPEN = "OPEN_NOTIFICATION"
         const val EXTRA_NOTIFICATION_DATA = "notification_data"
         
-        // Usar un ID fijo para que las notificaciones se reemplacen en lugar de acumularse
-        private const val FIXED_NOTIFICATION_ID = 1001
+        // Usar un conjunto para rastrear notificaciones canceladas por el usuario
+        private val cancelledNotifications = mutableSetOf<String>()
     }
     
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -57,6 +57,12 @@ class LocalNotificationManager(private val context: Context) {
         autoOpenEnabled: Boolean
     ) {
         try {
+            // Verificar si esta notificación fue cancelada por el usuario
+            if (cancelledNotifications.contains(notificationId)) {
+                Log.d("LocalNotificationManager", "Notificación previamente cancelada, no se muestra: $notificationId")
+                return
+            }
+            
             // Intent para abrir la aplicación
             val launchIntent = Intent(context, MainActivity::class.java).apply {
                 action = NOTIFICATION_ACTION_OPEN
@@ -69,9 +75,12 @@ class LocalNotificationManager(private val context: Context) {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             
+            // Usar el hash del notificationId para generar un ID único
+            val uniqueNotificationId = notificationId.hashCode()
+            
             val pendingLaunchIntent = PendingIntent.getActivity(
                 context,
-                FIXED_NOTIFICATION_ID, // Usar ID fijo en lugar de notificationId.hashCode()
+                uniqueNotificationId,
                 launchIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -86,9 +95,7 @@ class LocalNotificationManager(private val context: Context) {
                 .setContentIntent(pendingLaunchIntent)
                 .setAutoCancel(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setOnlyAlertOnce(true) // Solo alertar una vez, no en actualizaciones
-                .setGroup("receptor_notifications") // Agrupar notificaciones
-                .setGroupSummary(false) // No es un resumen de grupo
+                .setDeleteIntent(createDeleteIntent(notificationId)) // Agregar intent para detectar eliminación
             
             // Configurar sonido y vibración según las preferencias
             if (soundEnabled) {
@@ -99,24 +106,42 @@ class LocalNotificationManager(private val context: Context) {
                 notificationBuilder.setVibrate(longArrayOf(0, 500, 500, 500))
             }
             
-            // Mostrar la notificación usando un ID fijo para que se reemplace
-            notificationManager.notify(FIXED_NOTIFICATION_ID, notificationBuilder.build())
-            Log.d("LocalNotificationManager", "Notificación mostrada: $title")
+            // Mostrar la notificación usando el ID único
+            notificationManager.notify(uniqueNotificationId, notificationBuilder.build())
+            Log.d("LocalNotificationManager", "Notificación mostrada: $title (ID: $uniqueNotificationId)")
             
         } catch (e: Exception) {
             Log.e("LocalNotificationManager", "Error al mostrar notificación", e)
         }
     }
     
+    private fun createDeleteIntent(notificationId: String): PendingIntent {
+        val deleteIntent = Intent(context, NotificationDeleteReceiver::class.java).apply {
+            putExtra("notification_id", notificationId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            notificationId.hashCode(),
+            deleteIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+    
     fun cancelNotification(notificationId: String) {
-        // Cancelar usando el ID fijo
-        notificationManager.cancel(FIXED_NOTIFICATION_ID)
+        val uniqueNotificationId = notificationId.hashCode()
+        notificationManager.cancel(uniqueNotificationId)
+        // Marcar como cancelada por el usuario
+        cancelledNotifications.add(notificationId)
         Log.d("LocalNotificationManager", "Notificación cancelada: $notificationId")
     }
     
-    // Nuevo método para cancelar todas las notificaciones del receptor
     fun cancelAllNotifications() {
-        notificationManager.cancel(FIXED_NOTIFICATION_ID)
-        Log.d("LocalNotificationManager", "Todas las notificaciones del receptor canceladas")
+        notificationManager.cancelAll()
+        Log.d("LocalNotificationManager", "Todas las notificaciones canceladas")
+    }
+    
+    // Método para limpiar notificaciones canceladas (llamar periódicamente)
+    fun clearCancelledNotifications() {
+        cancelledNotifications.clear()
     }
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/models/notification_data.dart';
+import 'package:connect/services/dismissed_notifications_service.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/local_notification_service.dart';
 
@@ -16,8 +17,11 @@ class NotificationListenerService {
   StreamSubscription? _notificationStreamSubscription;
   Map<String, Map<String, dynamic>> _lastKnownNotifications = {}; // Para rastrear notificaciones existentes
   DateTime? _lastNotificationShownTime; // Para limitar la frecuencia
-  final Duration _minShowInterval = const Duration(seconds: 5); // Intervalo mínimo entre notificaciones
+  final Duration _minShowInterval = const Duration(seconds: 10); // Intervalo mínimo entre notificaciones
   bool _isListening = false; // Estado de escucha
+
+  bool _isInitialLoad = true; // Flag para controlar la carga inicial
+  DateTime? _serviceStartTime; // Tiempo de inicio del servicio
 
   // Método para verificar si está escuchando
   bool get isListening => _isListening;
@@ -25,9 +29,51 @@ class NotificationListenerService {
   // Método para habilitar/deshabilitar la escucha
   Future<void> setListeningEnabled(bool enabled) async {
     if (enabled && !_isListening) {
+      _serviceStartTime = DateTime.now();
+      _isInitialLoad = true;
+      
+      // Limpiar notificaciones eliminadas antiguas
+      await DismissedNotificationsService.cleanOldDismissedNotifications();
+      
+      // Marcar todas las notificaciones existentes como "conocidas"
+      await _markExistingNotificationsAsKnown();
+      
       await startListening();
+      
+      // Después de 5 segundos, permitir mostrar notificaciones nuevas
+      Future.delayed(const Duration(seconds: 5), () {
+        _isInitialLoad = false;
+        print('NotificationListenerService: Período inicial completado, ahora mostrando notificaciones nuevas');
+      });
     } else if (!enabled && _isListening) {
       stopListening();
+    }
+  }
+  
+
+  // Nuevo método para marcar notificaciones existentes como conocidas
+  Future<void> _markExistingNotificationsAsKnown() async {
+    try {
+      final deviceId = await _firebaseService.getDeviceId();
+      if (deviceId.isEmpty) return;
+      
+      final snapshot = await _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones')
+          .get();
+      
+      for (var dayDoc in snapshot.docs) {
+        final data = dayDoc.data();
+        if (data.containsKey('notificaciones')) {
+          final notificationsMap = Map<String, dynamic>.from(data['notificaciones']);
+          _lastKnownNotifications[dayDoc.id] = notificationsMap;
+        }
+      }
+      
+      print('NotificationListenerService: ${_lastKnownNotifications.length} documentos diarios marcados como conocidos');
+    } catch (e) {
+      print('NotificationListenerService: Error al marcar notificaciones existentes: $e');
     }
   }
 
@@ -125,8 +171,63 @@ class NotificationListenerService {
   // Método para mostrar notificaciones locales (adaptado del código proporcionado)
   Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
     try {
-      // Obtener notificationId de la notificación
       final String notificationId = notification['id'];
+      
+      // No mostrar durante la carga inicial
+      if (_isInitialLoad) {
+        print('NotificationListenerService: Notificación ignorada durante carga inicial: $notificationId');
+        return;
+      }
+      
+      // Verificar si fue eliminada previamente
+      if (await DismissedNotificationsService.isDismissed(notificationId)) {
+        print('NotificationListenerService: Notificación previamente eliminada: $notificationId');
+        return;
+      }
+      
+      // Verificar si ya está visualizada en Firebase
+      final deviceId = await _firebaseService.getDeviceId();
+      final dateId = _parseDateFromNotificationId(notificationId);
+      
+      if (dateId != null) {
+        final docRef = _firestore
+            .collection('dispositivos')
+            .doc(deviceId)
+            .collection('notificaciones')
+            .doc(dateId);
+            
+        final docSnapshot = await docRef.get();
+        if (docSnapshot.exists) {
+          final data = docSnapshot.data();
+          if (data != null && data.containsKey('notificaciones')) {
+            final notificationsMap = data['notificaciones'] as Map<String, dynamic>;
+            if (notificationsMap.containsKey(notificationId)) {
+              final notificationData = notificationsMap[notificationId] as Map<String, dynamic>;
+              final bool isVisualized = notificationData['visualizada'] ?? false;
+              
+              if (isVisualized) {
+                print('NotificationListenerService: Notificación ya visualizada: $notificationId');
+                return;
+              }
+            }
+          }
+        }
+      }
+      
+      // Verificar intervalo mínimo
+      if (!_shouldShowLocalNotification()) {
+        print('NotificationListenerService: Notificación no mostrada por intervalo mínimo: $notificationId');
+        return;
+      }
+      
+      // Verificar que la notificación sea realmente nueva (después del inicio del servicio)
+      if (_serviceStartTime != null && notification['timestamp'] is Timestamp) {
+        final notificationTime = (notification['timestamp'] as Timestamp).toDate();
+        if (notificationTime.isBefore(_serviceStartTime!)) {
+          print('NotificationListenerService: Notificación anterior al inicio del servicio: $notificationId');
+          return;
+        }
+      }
       
       // Mostrar la notificación local
       await LocalNotificationService.showNotification(
@@ -134,46 +235,52 @@ class NotificationListenerService {
         body: notification['text'] ?? '',
         packageName: notification['packageName'] ?? '',
         appName: notification['appName'] ?? 'Desconocida',
-        notificationId: notificationId, // Add this required parameter
+        notificationId: notificationId,
       );
-      _lastNotificationShownTime = DateTime.now(); // Actualizar tiempo de última notificación mostrada
-
-      // 2. Convertir el String de milisegundos a un entero
-      final int millisecondsSinceEpoch = int.parse(notificationId);
-        print('Milisegundos (int): $millisecondsSinceEpoch');
-
-        // 3. Crear un objeto DateTime a partir de los milisegundos
-        final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
-          millisecondsSinceEpoch,
-        );
-        print(
-          'Objeto DateTime: $dateTimeObject',
-        ); // Esto mostrará la fecha y la hora completas
-
-        // 4. Formatear el objeto DateTime a "aaaa-mm-dd"
-        // Para esto, nos aseguramos de que el mes y el día tengan dos dígitos (ej. 05 en lugar de 5)
-
-        final String year = dateTimeObject.year.toString();
-        final String month = dateTimeObject.month.toString().padLeft(
-          2,
-          '0',
-        ); // Añade un 0 a la izquierda si es necesario
-        final String day = dateTimeObject.day.toString().padLeft(
-          2,
-          '0',
-        ); // Añade un 0 a la izquierda si es necesario
-
-        final String dateId = '$year-$month-$day';
-      // Actualizar el estado de visualización en Firebase
-      await _firebaseService.updateNotificationVisualizationStatus(
-        notificationId,
-        dateId,
-        true, // Marcar como visualizado
-      );
-
+      
+      _lastNotificationShownTime = DateTime.now();
+      
+      // IMPORTANTE: Marcar como visualizada en Firebase
+      if (dateId != null) {
+        try {
+          final docRef = _firestore
+              .collection('dispositivos')
+              .doc(deviceId)
+              .collection('notificaciones')
+              .doc(dateId);
+              
+          await docRef.update({
+            'notificaciones.$notificationId.visualizada': true,
+          });
+          
+          print('NotificationListenerService: Notificación marcada como visualizada: $notificationId');
+        } catch (e) {
+          print('NotificationListenerService: Error al marcar como visualizada: $e');
+        }
+      }
+      
     } catch (e) {
       print('NotificationListenerService: Error al mostrar notificación local: $e');
     }
+  }
+  
+  // Método auxiliar para extraer la fecha del ID de notificación
+  String? _parseDateFromNotificationId(String notificationId) {
+    try {
+      // Asumiendo que el ID tiene formato: timestamp_packageName_hash
+      // Extraer el timestamp y convertirlo a fecha
+      final parts = notificationId.split('_');
+      if (parts.isNotEmpty) {
+        final timestamp = int.tryParse(parts[0]);
+        if (timestamp != null) {
+          final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+          return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        }
+      }
+    } catch (e) {
+      print('Error al parsear fecha del ID de notificación: $e');
+    }
+    return null;
   }
 
   // Verifica si se debe mostrar una notificación local basada en la frecuencia

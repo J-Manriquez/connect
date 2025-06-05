@@ -53,6 +53,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   @override
   void dispose() {
     _notificationSubscription?.cancel();
+    _notificationSubscription = null;
     super.dispose();
   }
 
@@ -89,10 +90,14 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
 
 // Iniciar escucha de notificaciones no leídas
   void _startListeningForReadNotifications() {
+    _notificationSubscription?.cancel(); // Cancelar suscripción anterior si existe
+    
     _notificationSubscription = _receptorService
         .listenForSeenNotifications()
         .listen(
           (notifications) {
+            if (!mounted) return; // Verificar si el widget sigue montado
+            
             // Agrupar por día
             final Map<String, List<Map<String, dynamic>>> grouped = {};
             for (var notification in notifications) {
@@ -110,10 +115,12 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               grouped[dateKey]!.add(notification);
             }
 
-            setState(() {
-              _notifications = notifications;
-              _groupedNotifications = grouped;
-            });
+            if (mounted) { // Verificar nuevamente antes de setState
+              setState(() {
+                _notifications = notifications;
+                _groupedNotifications = grouped;
+              });
+            }
           },
           onError: (error) {
             print(
@@ -123,7 +130,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         );
   }
 
-  // Toggle for local notifications
+  // Toggle mejorado para local notifications
   Future<void> _toggleNotifications(bool value) async {
     if (value && await Permission.notification.isDenied) {
       final status = await Permission.notification.request();
@@ -143,12 +150,43 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     // Habilitar/deshabilitar notificaciones locales
     await LocalNotificationService.setNotificationsEnabled(value);
     
-    // Habilitar/deshabilitar el servicio de escucha de notificaciones
-    await NotificationListenerService.instance.setListeningEnabled(value);
+    if (value) {
+      // Mostrar mensaje de inicialización
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Inicializando servicio de notificaciones...'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Habilitar el servicio (esto manejará la inicialización automáticamente)
+      await NotificationListenerService.instance.setListeningEnabled(true);
+      
+      // Mensaje de confirmación después de la inicialización
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Notificaciones locales habilitadas. Solo se mostrarán notificaciones nuevas.'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      });
+    } else {
+      // Deshabilitar el servicio
+      await NotificationListenerService.instance.setListeningEnabled(false);
+    }
     
-    setState(() {
-      _notificationsEnabled = value;
-    });
+    if (mounted) {
+      setState(() {
+        _notificationsEnabled = value;
+      });
+    }
   }
 
   Future<void> _deleteNotification(Map<String, dynamic> notification) async {

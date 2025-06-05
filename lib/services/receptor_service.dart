@@ -74,7 +74,7 @@ class ReceptorService {
         print('No hay dispositivo emisor vinculado');
         return;
       }
-      
+
       final uniqueId = notificationId;
       final int millisecondsSinceEpoch = int.parse(uniqueId);
       print('Milisegundos (int): $millisecondsSinceEpoch');
@@ -121,7 +121,7 @@ class ReceptorService {
       yield <Map<String, dynamic>>[];
     }
   }
-  
+
   // Nuevo método para filtrar notificaciones no visualizadas
   Stream<List<Map<String, dynamic>>> listenForUnseenNotifications() async* {
     try {
@@ -142,31 +142,38 @@ class ReceptorService {
   Future<List<NotificationData>> getStoredNotifications() async {
     final deviceId = await getLinkedDeviceId();
     final List<NotificationData> allNotifications = [];
-    
+
     try {
       final querySnapshot = await _firestore
           .collection('dispositivos')
           .doc(deviceId)
           .collection('notificaciones')
           .get();
-      
+
       for (final dayDoc in querySnapshot.docs) {
         final data = dayDoc.data();
         if (data.containsKey('notificaciones')) {
-          final Map<String, dynamic> notificationsMap = data['notificaciones'] as Map<String, dynamic>;
-          
+          final Map<String, dynamic> notificationsMap =
+              data['notificaciones'] as Map<String, dynamic>;
+
           notificationsMap.forEach((notificationId, notificationData) {
             try {
-              if (notificationData != null && notificationData is Map<String, dynamic>) {
-                final Map<String, dynamic> notificationDataMap = Map<String, dynamic>.from(notificationData);
+              if (notificationData != null &&
+                  notificationData is Map<String, dynamic>) {
+                final Map<String, dynamic> notificationDataMap =
+                    Map<String, dynamic>.from(notificationData);
                 notificationDataMap['dateId'] = dayDoc.id;
-                
-                if (notificationDataMap.containsKey('timestamp') && 
+
+                if (notificationDataMap.containsKey('timestamp') &&
                     notificationDataMap['timestamp'] is Timestamp) {
-                  allNotifications.add(NotificationData.fromMap(notificationDataMap));
+                  allNotifications.add(
+                    NotificationData.fromMap(notificationDataMap),
+                  );
                 }
               } else {
-                print('Error: datos de notificación inválidos para $notificationId');
+                print(
+                  'Error: datos de notificación inválidos para $notificationId',
+                );
               }
             } catch (e) {
               print('Error al procesar notificación $notificationId: $e');
@@ -174,9 +181,9 @@ class ReceptorService {
           });
         }
       }
-      
+
       allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      
+
       return allNotifications;
     } catch (e, stackTrace) {
       print('Error al obtener notificaciones almacenadas: $e');
@@ -219,8 +226,9 @@ class ReceptorService {
             .entries
             .map((entry) {
               final notif = Map<String, dynamic>.from(entry.value as Map);
-              notif['notificationId'] = entry.key; // Agregar el ID de la notificación
-              
+              notif['notificationId'] =
+                  entry.key; // Agregar el ID de la notificación
+
               if (notif['timestamp'] is Timestamp) {
                 // Mostrar notificación local cuando se detecta una nueva
                 _showLocalNotificationIfNew(notif, entry.key);
@@ -246,7 +254,7 @@ class ReceptorService {
       yield <Map<String, dynamic>>[];
     }
   }
-  
+
   // Método privado para mostrar notificación local cuando se detecta una nueva
   // Nuevo método para inicializar el receptor sin mostrar notificaciones existentes
   Future<void> initializeReceptorWithoutNotifications() async {
@@ -256,110 +264,191 @@ class ReceptorService {
         print('No hay dispositivo emisor vinculado');
         return;
       }
-      
+
       // Obtener todas las notificaciones existentes y marcarlas como "procesadas"
       // para que no se muestren como notificaciones locales
       final existingNotifications = await getStoredNotifications();
-      
+
       // Crear un Set con los IDs de notificaciones existentes
       final Set<String> existingNotificationIds = existingNotifications
           .map((notification) => notification.id)
           .toSet();
-      
+
       // Guardar estos IDs en SharedPreferences para referencia futura
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setStringList('existing_notification_ids', existingNotificationIds.toList());
-      
-      print('Receptor inicializado. ${existingNotificationIds.length} notificaciones existentes no se mostrarán como locales.');
+      await prefs.setStringList(
+        'existing_notification_ids',
+        existingNotificationIds.toList(),
+      );
+
+      print(
+        'Receptor inicializado. ${existingNotificationIds.length} notificaciones existentes no se mostrarán como locales.',
+      );
     } catch (e) {
       print('Error al inicializar receptor: $e');
     }
   }
-  
+
   // Método modificado para verificar si una notificación es nueva
   bool _isNewNotification(String notificationId) {
     // Verificar si la notificación ya existía cuando se inicializó el receptor
     final prefs = SharedPreferences.getInstance();
     return prefs.then((prefs) {
-      final existingIds = prefs.getStringList('existing_notification_ids') ?? [];
-      return !existingIds.contains(notificationId);
-    }) as bool;
+          final existingIds =
+              prefs.getStringList('existing_notification_ids') ?? [];
+          return !existingIds.contains(notificationId);
+        })
+        as bool;
   }
-  
+
   // Método para verificar si una notificación debe ser filtrada (mismo que en FirebaseService)
-bool _shouldFilterNotification(Map<String, dynamic> notificationData) {
-  final String packageName = notificationData['packageName'] ?? notificationData['paquete'] ?? '';
-  final String title = notificationData['title'] ?? notificationData['titulo'] ?? '';
-  final String text = notificationData['text'] ?? notificationData['contenido'] ?? '';
-  final String bigText = notificationData['bigText'] ?? '';
-  
-  // Solo aplicar filtros a WhatsApp
-  if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
-    // Combinar todos los textos posibles para verificar
-    final String content = '$title $text $bigText'.toLowerCase();
+  // Método mejorado para verificar si una notificación debe ser filtrada
+  bool _shouldFilterNotification(Map<String, dynamic> notification) {
+    final String packageName = notification['packageName'] ?? '';
     
-    // Filtro 1: Mensajes que comienzan con '{numero} mensajes de {numero} chats'
-    final RegExp messagesPattern = RegExp(r'^\d+\s+mensajes?\s+de\s+\d+\s+chats?', caseSensitive: false);
-    if (messagesPattern.hasMatch(content)) {
-      return true;
+    // Solo aplicar filtros a WhatsApp
+    if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
+      // Recopilar TODOS los textos posibles de la notificación
+      final List<String> allTexts = [
+        notification['title'] ?? '',
+        notification['text'] ?? '',
+        notification['bigText'] ?? '',
+        notification['subText'] ?? '',
+        notification['summaryText'] ?? '',
+        notification['infoText'] ?? '',
+        notification['contentInfo'] ?? '',
+        notification['body'] ?? '',
+        notification['mensaje'] ?? '',
+        notification['contenido'] ?? '',
+        notification['titulo'] ?? '',
+      ];
+      
+      // Combinar todos los textos y normalizar
+      final String allContent = allTexts.join(' ').toLowerCase();
+      final String normalizedContent = allContent
+          .replaceAll(RegExp(r'[áàäâ]'), 'a')
+          .replaceAll(RegExp(r'[éèëê]'), 'e')
+          .replaceAll(RegExp(r'[íìïî]'), 'i')
+          .replaceAll(RegExp(r'[óòöô]'), 'o')
+          .replaceAll(RegExp(r'[úùüû]'), 'u')
+          .replaceAll(RegExp(r'[ñ]'), 'n')
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      
+      // Filtros actualizados (mismo código que en FirebaseService)
+      final List<RegExp> messagePatterns = [
+        RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
+        RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
+        RegExp(r'\d+\s*nuevos?\s*mensajes?'),
+        RegExp(r'\d+\s*new\s*messages?'),
+        RegExp(r'\d+\s*mensajes?\s*nuevos?'),
+      ];
+      
+      for (final pattern in messagePatterns) {
+        if (pattern.hasMatch(normalizedContent)) {
+          return true;
+        }
+      }
+      
+      final List<String> callKeywords = [
+        'llamando', 'calling', 'llamada entrante', 'incoming call',
+        'llamada perdida', 'missed call', 'llamada de', 'call from',
+        'videollamada', 'video call',
+      ];
+      
+      for (final keyword in callKeywords) {
+        if (normalizedContent.contains(keyword)) {
+          return true;
+        }
+      }
+      
+      final List<String> backupKeywords = [
+        'copia de seguridad', 'backup', 'respaldo', 'copia de seg',
+        'backing up', 'guardando copia',
+      ];
+      
+      for (final keyword in backupKeywords) {
+        if (normalizedContent.contains(keyword)) {
+          return true;
+        }
+      }
+      
+      // Nuevos filtros
+      final List<String> genericKeywords = [
+        'nueva notificacion', 'new notification', 'contenido no disponible',
+        'content not available', 'content unavailable', 'mensaje no disponible',
+        'message not available', 'sin contenido', 'no content',
+      ];
+      
+      for (final keyword in genericKeywords) {
+        if (normalizedContent.contains(keyword)) {
+          return true;
+        }
+      }
     }
     
-    // Filtro 2: Mensajes que comienzan con 'llamando...' o 'llamada entrante'
-    if (content.startsWith('llamando') || content.startsWith('llamada entrante')) {
-      return true;
-    }
-    
-    // Filtro 3: Mensajes que comienzan con 'copia de seg'
-    if (content.startsWith('copia de seg')) {
-      return true;
-    }
+    return false;
   }
-  
-  return false;
-}
 
   // Método privado modificado para mostrar notificación local solo si es nueva y no filtrada
-  void _showLocalNotificationIfNew(Map<String, dynamic> notificationData, String notificationId) async {
+  void _showLocalNotificationIfNew(
+    Map<String, dynamic> notificationData,
+    String notificationId,
+  ) async {
     // Verificar si la notificación debe ser filtrada
     if (_shouldFilterNotification(notificationData)) {
       print('Notificación filtrada en receptor: $notificationId');
       return;
     }
-    
+
     // Solo mostrar si la notificación no ha sido visualizada Y es nueva (no existía al inicializar)
     if (notificationData['status-visualizacion'] == false) {
       final prefs = await SharedPreferences.getInstance();
-      final existingIds = prefs.getStringList('existing_notification_ids') ?? [];
-      
+      final existingIds =
+          prefs.getStringList('existing_notification_ids') ?? [];
+
       // Solo mostrar si es una notificación nueva (no estaba en la lista inicial)
       if (!existingIds.contains(notificationId)) {
         // Extraer el contenido dinámico de la notificación
         String title = 'Nueva notificación';
         String body = 'Contenido no disponible';
-        
+
         // Intentar obtener título de diferentes campos posibles
-        if (notificationData['title'] != null && notificationData['title'].toString().isNotEmpty) {
+        if (notificationData['title'] != null &&
+            notificationData['title'].toString().isNotEmpty) {
           title = notificationData['title'].toString();
-        } else if (notificationData['titulo'] != null && notificationData['titulo'].toString().isNotEmpty) {
+        } else if (notificationData['titulo'] != null &&
+            notificationData['titulo'].toString().isNotEmpty) {
           title = notificationData['titulo'].toString();
         }
-        
+
         // Intentar obtener contenido de diferentes campos posibles
-        if (notificationData['text'] != null && notificationData['text'].toString().isNotEmpty) {
+        if (notificationData['text'] != null &&
+            notificationData['text'].toString().isNotEmpty) {
           body = notificationData['text'].toString();
-        } else if (notificationData['contenido'] != null && notificationData['contenido'].toString().isNotEmpty) {
+        } else if (notificationData['contenido'] != null &&
+            notificationData['contenido'].toString().isNotEmpty) {
           body = notificationData['contenido'].toString();
-        } else if (notificationData['body'] != null && notificationData['body'].toString().isNotEmpty) {
+        } else if (notificationData['body'] != null &&
+            notificationData['body'].toString().isNotEmpty) {
           body = notificationData['body'].toString();
-        } else if (notificationData['bigText'] != null && notificationData['bigText'].toString().isNotEmpty) {
+        } else if (notificationData['bigText'] != null &&
+            notificationData['bigText'].toString().isNotEmpty) {
           body = notificationData['bigText'].toString();
         }
-        
+
         LocalNotificationService.showNotification(
           title: title,
           body: body,
-          packageName: notificationData['packageName'] ?? notificationData['paquete'] ?? '',
-          appName: notificationData['appName'] ?? notificationData['aplicacion'] ?? 'Aplicación desconocida',
+          packageName:
+              notificationData['packageName'] ??
+              notificationData['paquete'] ??
+              '',
+          appName:
+              notificationData['appName'] ??
+              notificationData['aplicacion'] ??
+              'Aplicación desconocida',
           notificationId: notificationId,
         );
       }

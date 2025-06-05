@@ -6,10 +6,12 @@ class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({Key? key}) : super(key: key);
 
   @override
-  State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
+  State<NotificationSettingsScreen> createState() =>
+      _NotificationSettingsScreenState();
 }
 
-class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> {
+class _NotificationSettingsScreenState
+    extends State<NotificationSettingsScreen> {
   bool _soundEnabled = true;
   bool _vibrationEnabled = true;
   bool _isLoading = true;
@@ -26,7 +28,8 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     });
 
     final soundEnabled = await LocalNotificationService.isSoundEnabled();
-    final vibrationEnabled = await LocalNotificationService.isVibrationEnabled();
+    final vibrationEnabled =
+        await LocalNotificationService.isVibrationEnabled();
 
     setState(() {
       _soundEnabled = soundEnabled;
@@ -52,9 +55,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Configuración de Notificaciones'),
-      ),
+      appBar: AppBar(title: const Text('Configuración de Notificaciones')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -68,21 +69,23 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 const SizedBox(height: 8),
                 SwitchListTile(
                   title: const Text('Sonido'),
-                  subtitle: const Text('Reproducir sonido al recibir notificaciones'),
+                  subtitle: const Text(
+                    'Reproducir sonido al recibir notificaciones',
+                  ),
                   value: _soundEnabled,
                   onChanged: _toggleSound,
-                  activeTrackColor: customColor[300],
-                  inactiveTrackColor: Colors.grey[300],
-                  activeColor: customColor[700],
+                  activeColor: Colors.green,
+                  inactiveTrackColor: customColor[200],
+                  inactiveThumbColor: Colors.grey[300],
                 ),
                 SwitchListTile(
                   title: const Text('Vibración'),
                   subtitle: const Text('Vibrar al recibir notificaciones'),
                   value: _vibrationEnabled,
                   onChanged: _toggleVibration,
-                  activeTrackColor: customColor[300],
-                  inactiveTrackColor: Colors.grey[300],
-                  activeColor: customColor[700],
+                  activeColor: Colors.green,
+                  inactiveTrackColor: customColor[200],
+                  inactiveThumbColor: Colors.grey[300],
                 ),
               ],
             ),

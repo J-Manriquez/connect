@@ -32,9 +32,10 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       _isLoading = true;
     });
 
-    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+    final notificationsEnabled =
+        await LocalNotificationService.areNotificationsEnabled();
     final autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
-    
+
     setState(() {
       _notificationsEnabled = notificationsEnabled;
       _autoOpenEnabled = autoOpenEnabled;
@@ -55,16 +56,16 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       final prefs = await SharedPreferences.getInstance();
       final deviceId = await _receptorService.getLinkedDeviceId();
       await prefs.remove(ReceptorService.KEY_LINKED_DEVICE_ID);
-      
+
       if (deviceId != null) {
         final firebaseservice = FirebaseService();
         await firebaseservice.updateLinkStatus(false, deviceId);
       }
-      
+
       await PreferencesService.saveUseAsReceptor(false);
       await LocalNotificationService.setNotificationsEnabled(false);
       await NotificationListenerService.instance.setListeningEnabled(false);
-      
+
       setState(() {
         _notificationsEnabled = false;
       });
@@ -99,35 +100,41 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
                 // Opciones de Dispositivo
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(15.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'Opciones de Dispositivo',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          onPressed: _unlinkDevice,
-                          icon: const Icon(Icons.link_off),
-                          label: const Text(
-                            'Desvincular Dispositivo',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
                           ),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(48),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            backgroundColor: customColor[400],
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                          child: ElevatedButton.icon(
+                            onPressed: _unlinkDevice,
+                            icon: const Icon(Icons.link_off),
+                            label: const Text(
+                              'Desvincular Dispositivo',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              backgroundColor: customColor[400],
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ),
@@ -135,42 +142,84 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 8),
 
                 // Configuración de Notificaciones
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(8.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Configuración de Notificaciones',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          child: Text(
+                            'Configuración de Notificaciones',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        
-                        // Apertura automática
-                        SwitchListTile(
-                          title: const Text('Abrir aplicación automáticamente'),
-                          subtitle: const Text(
-                            'Abre la aplicación automáticamente cuando llega una notificación'
-                          ),
-                          value: _autoOpenEnabled,
-                          onChanged: _toggleAutoOpen,
-                          activeColor: customColor[700],
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 15),
+                                  child: Text(
+                                    'Abrir aplicación automáticamente',
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.only(left: 15),
+                                  child: Text(
+                                    'Abre la aplicación automáticamente \ncuando llega una notificación',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: _autoOpenEnabled,
+                              onChanged: _toggleAutoOpen,
+                              activeColor: Colors.green,
+                              inactiveTrackColor: customColor[200],
+                              inactiveThumbColor: Colors.grey[300],
+                            ),
+                          ],
                         ),
-                        
                         const Divider(),
-                        
                         // Botón para configuraciones avanzadas
                         ListTile(
-                          title: const Text('Configuraciones Avanzadas'),
-                          subtitle: const Text('Sonido, vibración y más opciones'),
+                          title: const Text(
+                            'Configuraciones Avanzadas',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Sonido, vibración y más opciones',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
                           trailing: const Icon(Icons.arrow_forward_ios),
                           onTap: () {
                             Navigator.pushNamed(
@@ -188,10 +237,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            height: 3,
-            color: customColor[700],
-          ),
+          Container(height: 3, color: customColor[700]),
           BottomNavigationBar(
             currentIndex: 0,
             onTap: (index) {
