@@ -290,7 +290,22 @@ class ReceptorService {
   bool _shouldFilterNotification(Map<String, dynamic> notification) {
     final String packageName = notification['packageName'] ?? '';
     
-    // Solo aplicar filtros a WhatsApp
+    // Filtro universal: Notificaciones vacías (aplicar a todas las aplicaciones)
+    final String title = (notification['title'] ?? '').toString().trim();
+    final String text = (notification['text'] ?? '').toString().trim();
+    final String bigText = (notification['bigText'] ?? '').toString().trim();
+    final String body = (notification['body'] ?? '').toString().trim();
+    final String mensaje = (notification['mensaje'] ?? '').toString().trim();
+    final String contenido = (notification['contenido'] ?? '').toString().trim();
+    
+    // Si todos los campos de contenido están vacíos, filtrar la notificación
+    if (title.isEmpty && text.isEmpty && bigText.isEmpty && 
+        body.isEmpty && mensaje.isEmpty && contenido.isEmpty) {
+      print('Notificación filtrada: Contenido vacío - Package: $packageName');
+      return true;
+    }
+    
+    // Solo aplicar filtros específicos a WhatsApp
     if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
       // Recopilar TODOS los textos posibles de la notificación
       final List<String> allTexts = [
@@ -320,7 +335,7 @@ class ReceptorService {
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
       
-      // Filtros actualizados (mismo código que en FirebaseService)
+      // Filtros específicos de WhatsApp...
       final List<RegExp> messagePatterns = [
         RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
         RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
@@ -358,7 +373,7 @@ class ReceptorService {
         }
       }
       
-      // Nuevos filtros
+      // Filtros genéricos para WhatsApp
       final List<String> genericKeywords = [
         'nueva notificacion', 'new notification', 'contenido no disponible',
         'content not available', 'content unavailable', 'mensaje no disponible',
@@ -451,7 +466,7 @@ class ReceptorService {
       await _updateNotificationVisualizationStatus(notificationId, true);
     }
   }
-  
+
   // Nuevo método para actualizar el estado de visualización en Firebase
   Future<void> _updateNotificationVisualizationStatus(String notificationId, bool visualized) async {
     try {
@@ -468,7 +483,9 @@ class ReceptorService {
           .collection('notificaciones')
           .doc(dateId);
           
+      // Actualizar ambos campos de estado de visualización
       await docRef.update({
+        'notificaciones.$notificationId.status-visualizacion': visualized,
         'notificaciones.$notificationId.visualizada': visualized,
       });
       

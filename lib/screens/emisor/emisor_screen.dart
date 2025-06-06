@@ -221,7 +221,7 @@ class _EmisorScreenState extends State<EmisorScreen>
 
         final String dateId = '$year-$month-$day';
 
-        await _firebaseService.updateNotificationVisualizationStatus(
+        await _firebaseService.updateVisualizationStatus(
           notification.id,
           dateId,
           true,

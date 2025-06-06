@@ -259,7 +259,22 @@ class FirebaseService {
   bool _shouldFilterNotification(Map<String, dynamic> notification) {
     final String packageName = notification['packageName'] ?? '';
     
-    // Solo aplicar filtros a WhatsApp
+    // Filtro universal: Notificaciones vacías (aplicar a todas las aplicaciones)
+    final String title = (notification['title'] ?? '').toString().trim();
+    final String text = (notification['text'] ?? '').toString().trim();
+    final String bigText = (notification['bigText'] ?? '').toString().trim();
+    final String body = (notification['body'] ?? '').toString().trim();
+    final String mensaje = (notification['mensaje'] ?? '').toString().trim();
+    final String contenido = (notification['contenido'] ?? '').toString().trim();
+    
+    // Si todos los campos de contenido están vacíos, filtrar la notificación
+    if (title.isEmpty && text.isEmpty && bigText.isEmpty && 
+        body.isEmpty && mensaje.isEmpty && contenido.isEmpty) {
+      print('Notificación filtrada: Contenido vacío - Package: $packageName');
+      return true;
+    }
+    
+    // Solo aplicar filtros específicos a WhatsApp
     if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
       // Recopilar TODOS los textos posibles de la notificación
       final List<String> allTexts = [
@@ -409,24 +424,23 @@ class FirebaseService {
     print('Notificación guardada con ID: ${notificationData.id}');
   }
 
-  // Actualiza el estado de visualización de una notificación
-  Future<void> updateNotificationVisualizationStatus(
+  // Actualiza el estado de visualización de una notificación específica
+  Future<void> updateVisualizationStatus(
     String notificationId,
     String dateId,
     bool visualizado,
   ) async {
     final deviceId = await getDeviceId();
-
-    // Referencia al documento que contiene la notificación
     final dayDocRef = _firestore
         .collection('dispositivos')
         .doc(deviceId)
         .collection('notificaciones')
         .doc(dateId);
 
-    // Actualizar solo el campo de estado de visualización
+    // Actualizar ambos campos de estado de visualización
     await dayDocRef.update({
       'notificaciones.$notificationId.status-visualizacion': visualizado,
+      'notificaciones.$notificationId.visualizada': visualizado,
     });
 
     print(

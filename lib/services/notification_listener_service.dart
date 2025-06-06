@@ -262,13 +262,15 @@ class NotificationListenerService {
           .collection('notificaciones')
           .doc(dateId);
           
+      // Actualizar ambos campos de estado de visualización
       await docRef.update({
+        'notificaciones.$notificationId.status-visualizacion': true,
         'notificaciones.$notificationId.visualizada': true,
       });
       
       print('NotificationListenerService: Estado de visualización actualizado: $notificationId');
     } catch (e) {
-      print('NotificationListenerService: Error al actualizar visualización: $e');
+      print('NotificationListenerService: Error al actualizar estado: $e');
     }
   }
 
