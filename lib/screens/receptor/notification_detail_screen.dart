@@ -111,7 +111,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                     ),
                     const SizedBox(height: 12),
                     _buildInfoRow('Aplicación:', appName),
-                    _buildInfoRow('Paquete:', packageName),
+                    // _buildInfoRow('Paquete:', packageName),
                     _buildInfoRow('Fecha y Hora:', formattedTime),
                   ],
                 ),
