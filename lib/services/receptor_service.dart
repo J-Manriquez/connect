@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ReceptorService {
   final FirebaseService _firebaseService = FirebaseService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  DateTime? _initializationTime;
 
   // Clave para almacenar el ID del dispositivo emisor vinculado
   static const String KEY_LINKED_DEVICE_ID = 'linked_device_id';
@@ -193,78 +194,179 @@ class ReceptorService {
     }
   }
 
+  // Nuevo método para mostrar notificación local sin verificaciones de estado
+  Future<void> _showLocalNotificationWithoutChecks(
+    Map<String, dynamic> notificationData,
+    String notificationId,
+  ) async {
+    // Extraer el contenido dinámico de la notificación
+    String title = 'Nueva notificación';
+    String body = 'Contenido no disponible';
+
+    // Intentar obtener título de diferentes campos posibles
+    if (notificationData['title'] != null &&
+        notificationData['title'].toString().isNotEmpty) {
+      title = notificationData['title'].toString();
+    } else if (notificationData['titulo'] != null &&
+        notificationData['titulo'].toString().isNotEmpty) {
+      title = notificationData['titulo'].toString();
+    }
+
+    // Intentar obtener contenido de diferentes campos posibles
+    if (notificationData['text'] != null &&
+        notificationData['text'].toString().isNotEmpty) {
+      body = notificationData['text'].toString();
+    } else if (notificationData['body'] != null &&
+        notificationData['body'].toString().isNotEmpty) {
+      body = notificationData['body'].toString();
+    } else if (notificationData['bigText'] != null &&
+        notificationData['bigText'].toString().isNotEmpty) {
+      body = notificationData['bigText'].toString();
+    } else if (notificationData['mensaje'] != null &&
+        notificationData['mensaje'].toString().isNotEmpty) {
+      body = notificationData['mensaje'].toString();
+    } else if (notificationData['contenido'] != null &&
+        notificationData['contenido'].toString().isNotEmpty) {
+      body = notificationData['contenido'].toString();
+    }
+
+    // Mostrar la notificación local con todos los datos
+    await LocalNotificationService.showNotification(
+      title: title,
+      body: body,
+      packageName:
+          notificationData['packageName'] ?? notificationData['paquete'] ?? '',
+      appName:
+          notificationData['appName'] ??
+          notificationData['aplicacion'] ??
+          'Aplicación desconocida',
+      notificationId: notificationId,
+      fullNotificationData: notificationData, // Pasar todos los datos
+    );
+
+    // Marcar como procesada y visualizada en caché local
+    await NotificationCacheService.markAsProcessed(notificationId);
+    await NotificationCacheService.markAsVisualized(notificationId);
+
+    print('Notificación local mostrada: $notificationId');
+  }
+
+  // Nuevo método para procesar notificaciones nuevas
+  Future<void> _processNewNotification(
+    Map<String, dynamic> notificationData,
+    String notificationId,
+  ) async {
+    try {
+      print('Procesando notificación nueva: $notificationId');
+
+      // Verificar si la notificación debe ser filtrada
+      if (_shouldFilterNotification(notificationData)) {
+        print('Notificación filtrada en receptor: $notificationId');
+        return;
+      }
+
+      // Verificar si es pre-existente
+      if (await NotificationCacheService.isPreExisting(notificationId)) {
+        print('Notificación pre-existente ignorada: $notificationId');
+        return;
+      }
+
+      // Verificar si ya fue procesada
+      if (await NotificationCacheService.isProcessed(notificationId)) {
+        print('Notificación ya procesada: $notificationId');
+        return;
+      }
+
+      // Solo procesar si la notificación no ha sido visualizada
+      if (notificationData['status-visualizacion'] == false) {
+        // 1. Primero actualizar el estado en Firebase
+        await _updateNotificationVisualizationStatus(notificationId, true);
+
+        // 2. Luego mostrar la notificación local
+        await _showLocalNotificationWithoutChecks(
+          notificationData,
+          notificationId,
+        );
+      }
+    } catch (e) {
+      print('Error al procesar notificación nueva $notificationId: $e');
+    }
+  }
+
   // Iniciar escucha de notificaciones desde Firebase
   // Modificar el método listenForNotifications
   Stream<List<Map<String, dynamic>>> listenForNotifications() async* {
-  try {
-    final deviceId = await getLinkedDeviceId();
-    if (deviceId == null) {
-      print('No hay dispositivo emisor vinculado');
-      yield [];
-      return;
-    }
-
-    final DateTime now = DateTime.now();
-    final String dateId =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-    final dayDocRef = _firestore
-        .collection('dispositivos')
-        .doc(deviceId)
-        .collection('notificaciones')
-        .doc(dateId);
-
-    // Variable para controlar si es la primera carga
-    bool isFirstLoad = true;
-
-    yield* dayDocRef.snapshots().map((snapshot) {
-      if (!snapshot.exists ||
-          !snapshot.data()!.containsKey('notificaciones')) {
-        return <Map<String, dynamic>>[];
+    try {
+      final deviceId = await getLinkedDeviceId();
+      if (deviceId == null) {
+        print('No hay dispositivo emisor vinculado');
+        yield [];
+        return;
       }
 
-      final Map<String, dynamic> notificationsMap =
-          snapshot.data()!['notificaciones'] as Map<String, dynamic>;
+      final DateTime now = DateTime.now();
+      final String dateId =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
-      final List<Map<String, dynamic>> notificationsList = notificationsMap
-          .entries
-          .map((entry) {
-            final notif = Map<String, dynamic>.from(entry.value as Map);
-            notif['notificationId'] = entry.key;
+      final dayDocRef = _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones')
+          .doc(dateId);
 
-            if (notif['timestamp'] is Timestamp) {
-              // Solo procesar notificaciones nuevas después de la primera carga
-              if (!isFirstLoad) {
-                _showLocalNotificationIfNew(notif, entry.key);
+      yield* dayDocRef.snapshots().map((snapshot) {
+        if (!snapshot.exists ||
+            !snapshot.data()!.containsKey('notificaciones')) {
+          return <Map<String, dynamic>>[];
+        }
+
+        final Map<String, dynamic> notificationsMap =
+            snapshot.data()!['notificaciones'] as Map<String, dynamic>;
+
+        final List<Map<String, dynamic>> notificationsList = notificationsMap
+            .entries
+            .map((entry) {
+              final notif = Map<String, dynamic>.from(entry.value as Map);
+              notif['notificationId'] = entry.key;
+
+              if (notif['timestamp'] is Timestamp) {
+                // Verificar si la notificación es nueva (posterior a la inicialización)
+                final notificationTime = (notif['timestamp'] as Timestamp)
+                    .toDate();
+                final isNewNotification =
+                    _initializationTime != null &&
+                    notificationTime.isAfter(_initializationTime!);
+
+                // Solo procesar si es una notificación nueva
+                if (isNewNotification) {
+                  _processNewNotification(notif, entry.key);
+                }
+                return notif;
+              } else {
+                return null;
               }
-              return notif;
-            } else {
-              return null;
-            }
-          })
-          .where((notif) => notif != null)
-          .cast<Map<String, dynamic>>()
-          .toList();
+            })
+            .where((notif) => notif != null)
+            .cast<Map<String, dynamic>>()
+            .toList();
 
-      // Marcar que ya no es la primera carga
-      isFirstLoad = false;
+        notificationsList.sort((a, b) {
+          final DateTime timeA = (a['timestamp'] as Timestamp).toDate();
+          final DateTime timeB = (b['timestamp'] as Timestamp).toDate();
+          return timeB.compareTo(timeA);
+        });
 
-      notificationsList.sort((a, b) {
-        final DateTime timeA = (a['timestamp'] as Timestamp).toDate();
-        final DateTime timeB = (b['timestamp'] as Timestamp).toDate();
-        return timeB.compareTo(timeA);
+        return notificationsList;
       });
-
-      return notificationsList;
-    });
-  } catch (e) {
-    print('Error al escuchar notificaciones: $e');
-    yield <Map<String, dynamic>>[];
+    } catch (e) {
+      print('Error al escuchar notificaciones: $e');
+      yield <Map<String, dynamic>>[];
+    }
   }
-}
 
   // Método privado para mostrar notificación local cuando se detecta una nueva
   // Método mejorado para inicializar el receptor sin mostrar notificaciones existentes
+
   Future<void> initializeReceptorWithoutNotifications() async {
     try {
       final deviceId = await getLinkedDeviceId();
@@ -272,18 +374,23 @@ class ReceptorService {
         print('No hay dispositivo emisor vinculado');
         return;
       }
-  
+
+      // Registrar el tiempo de inicialización
+      _initializationTime = DateTime.now();
+
       // Obtener todas las notificaciones existentes
       final existingNotifications = await getStoredNotifications();
-  
+
       // Crear un Set con los IDs de notificaciones existentes
       final Set<String> existingNotificationIds = existingNotifications
           .map((notification) => notification.id)
           .toSet();
-  
+
       // Usar el nuevo servicio de caché
-      await NotificationCacheService.registerPreExistingNotifications(existingNotificationIds);
-  
+      await NotificationCacheService.registerPreExistingNotifications(
+        existingNotificationIds,
+      );
+
       print(
         'Receptor inicializado. ${existingNotificationIds.length} notificaciones existentes registradas como pre-existentes.',
       );
@@ -296,22 +403,28 @@ class ReceptorService {
   // Método mejorado para verificar si una notificación debe ser filtrada
   bool _shouldFilterNotification(Map<String, dynamic> notification) {
     final String packageName = notification['packageName'] ?? '';
-    
+
     // Filtro universal: Notificaciones vacías (aplicar a todas las aplicaciones)
     final String title = (notification['title'] ?? '').toString().trim();
     final String text = (notification['text'] ?? '').toString().trim();
     final String bigText = (notification['bigText'] ?? '').toString().trim();
     final String body = (notification['body'] ?? '').toString().trim();
     final String mensaje = (notification['mensaje'] ?? '').toString().trim();
-    final String contenido = (notification['contenido'] ?? '').toString().trim();
-    
+    final String contenido = (notification['contenido'] ?? '')
+        .toString()
+        .trim();
+
     // Si todos los campos de contenido están vacíos, filtrar la notificación
-    if (title.isEmpty && text.isEmpty && bigText.isEmpty && 
-        body.isEmpty && mensaje.isEmpty && contenido.isEmpty) {
+    if (title.isEmpty &&
+        text.isEmpty &&
+        bigText.isEmpty &&
+        body.isEmpty &&
+        mensaje.isEmpty &&
+        contenido.isEmpty) {
       print('Notificación filtrada: Contenido vacío - Package: $packageName');
       return true;
     }
-    
+
     // Solo aplicar filtros específicos a WhatsApp
     if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
       // Recopilar TODOS los textos posibles de la notificación
@@ -328,7 +441,7 @@ class ReceptorService {
         notification['contenido'] ?? '',
         notification['titulo'] ?? '',
       ];
-      
+
       // Combinar todos los textos y normalizar
       final String allContent = allTexts.join(' ').toLowerCase();
       final String normalizedContent = allContent
@@ -341,7 +454,7 @@ class ReceptorService {
           .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
-      
+
       // Filtros específicos de WhatsApp...
       final List<RegExp> messagePatterns = [
         RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
@@ -350,56 +463,73 @@ class ReceptorService {
         RegExp(r'\d+\s*new\s*messages?'),
         RegExp(r'\d+\s*mensajes?\s*nuevos?'),
       ];
-      
+
       for (final pattern in messagePatterns) {
         if (pattern.hasMatch(normalizedContent)) {
           return true;
         }
       }
-      
+
       final List<String> callKeywords = [
-        'llamando', 'calling', 'llamada entrante', 'incoming call',
-        'llamada perdida', 'missed call', 'llamada de', 'call from',
-        'videollamada', 'video call',
+        'llamando',
+        'calling',
+        'llamada entrante',
+        'incoming call',
+        'llamada perdida',
+        'missed call',
+        'llamada de',
+        'call from',
+        'videollamada',
+        'video call',
       ];
-      
+
       for (final keyword in callKeywords) {
         if (normalizedContent.contains(keyword)) {
           return true;
         }
       }
-      
+
       final List<String> backupKeywords = [
-        'copia de seguridad', 'backup', 'respaldo', 'copia de seg',
-        'backing up', 'guardando copia',
+        'copia de seguridad',
+        'backup',
+        'respaldo',
+        'copia de seg',
+        'backing up',
+        'guardando copia',
       ];
-      
+
       for (final keyword in backupKeywords) {
         if (normalizedContent.contains(keyword)) {
           return true;
         }
       }
-      
+
       // Filtros genéricos para WhatsApp
       final List<String> genericKeywords = [
-        'nueva notificacion', 'new notification', 'contenido no disponible',
-        'content not available', 'content unavailable', 'mensaje no disponible',
-        'message not available', 'sin contenido', 'no content',
+        'nueva notificacion',
+        'new notification',
+        'contenido no disponible',
+        'content not available',
+        'content unavailable',
+        'mensaje no disponible',
+        'message not available',
+        'sin contenido',
+        'no content',
       ];
-      
+
       for (final keyword in genericKeywords) {
         if (normalizedContent.contains(keyword)) {
           return true;
         }
       }
     }
-    
+
     return false;
   }
 
-
   // Método actualizado para mostrar notificaciones locales
-  void _showLocalNotificationIfNew(
+
+  Future<void> _showLocalNotificationIfNew(
     Map<String, dynamic> notificationData,
     String notificationId,
   ) async {
@@ -423,94 +553,57 @@ class ReceptorService {
 
     // Solo mostrar si la notificación no ha sido visualizada
     if (notificationData['status-visualizacion'] == false) {
-      // Extraer el contenido dinámico de la notificación
-      String title = 'Nueva notificación';
-      String body = 'Contenido no disponible';
-
-      // Intentar obtener título de diferentes campos posibles
-      if (notificationData['title'] != null &&
-          notificationData['title'].toString().isNotEmpty) {
-        title = notificationData['title'].toString();
-      } else if (notificationData['titulo'] != null &&
-          notificationData['titulo'].toString().isNotEmpty) {
-        title = notificationData['titulo'].toString();
-      }
-
-      // Intentar obtener contenido de diferentes campos posibles
-      if (notificationData['text'] != null &&
-          notificationData['text'].toString().isNotEmpty) {
-        body = notificationData['text'].toString();
-      } else if (notificationData['body'] != null &&
-          notificationData['body'].toString().isNotEmpty) {
-        body = notificationData['body'].toString();
-      } else if (notificationData['bigText'] != null &&
-          notificationData['bigText'].toString().isNotEmpty) {
-        body = notificationData['bigText'].toString();
-      } else if (notificationData['mensaje'] != null &&
-          notificationData['mensaje'].toString().isNotEmpty) {
-        body = notificationData['mensaje'].toString();
-      } else if (notificationData['contenido'] != null &&
-          notificationData['contenido'].toString().isNotEmpty) {
-        body = notificationData['contenido'].toString();
-      }
-
-      // Mostrar la notificación local con todos los datos
-      await LocalNotificationService.showNotification(
-        title: title,
-        body: body,
-        packageName: notificationData['packageName'] ??
-            notificationData['paquete'] ??
-            '',
-        appName: notificationData['appName'] ??
-            notificationData['aplicacion'] ??
-            'Aplicación desconocida',
-        notificationId: notificationId,
-        fullNotificationData: notificationData, // Pasar todos los datos
+      await _showLocalNotificationWithoutChecks(
+        notificationData,
+        notificationId,
       );
-      
-      // Marcar como procesada y visualizada
-      await NotificationCacheService.markAsProcessed(notificationId);
-      await NotificationCacheService.markAsVisualized(notificationId);
-      
+
       // Actualizar estado en Firebase (solo para notificaciones nuevas)
       await _updateNotificationVisualizationStatus(notificationId, true);
     }
   }
 
   // Método mejorado para actualizar el estado de visualización en Firebase
-  Future<void> _updateNotificationVisualizationStatus(String notificationId, bool visualized) async {
+  Future<void> _updateNotificationVisualizationStatus(
+    String notificationId,
+    bool visualized,
+  ) async {
     try {
       // Verificar si es una notificación pre-existente
       if (await NotificationCacheService.isPreExisting(notificationId)) {
-        print('No se actualiza estado de notificación pre-existente: $notificationId');
+        print(
+          'No se actualiza estado de notificación pre-existente: $notificationId',
+        );
         return;
       }
-      
+
       final deviceId = await getLinkedDeviceId();
       if (deviceId == null) return;
-      
+
       // Extraer la fecha del ID de notificación
       final dateId = _extractDateFromNotificationId(notificationId);
       if (dateId == null) return;
-      
+
       final docRef = _firestore
           .collection('dispositivos')
           .doc(deviceId)
           .collection('notificaciones')
           .doc(dateId);
-          
+
       // Actualizar ambos campos de estado de visualización
       await docRef.update({
         'notificaciones.$notificationId.status-visualizacion': visualized,
         'notificaciones.$notificationId.visualizada': visualized,
       });
-      
-      print('Estado de visualización actualizado para $notificationId: $visualized');
+
+      print(
+        'Estado de visualización actualizado para $notificationId: $visualized',
+      );
     } catch (e) {
       print('Error al actualizar estado de visualización: $e');
     }
   }
-  
+
   // Método auxiliar para extraer la fecha del ID de notificación
   String? _extractDateFromNotificationId(String notificationId) {
     try {

@@ -12,8 +12,10 @@ Connect es una aplicación Android que permite sincronizar notificaciones entre 
 ### MODO RECEPTOR
 - Escucha notificaciones almacenadas en Firebase
 - Muestra las notificaciones recibidas como notificaciones locales en la barra de estado
+- Cambia el campo status-visualizacion a true en firebase, de cada notificacion local recibida despues de que esta se muestre en la barra de notificaciones, no es necesario que toque la notificacion para cambiar su estado, solo que se muestre localmente, por eso debe actualizarce el status despues de mostrarse localmente, todo esto para que se visualice como notificacion recibida en la pantalla notificaciones screen
 - Permite configurar sonido, vibración y apertura automática
 - NO captura notificaciones del dispositivo local
+- Cuando se crea una notificacion local, el usuario al tocarla es redirigido a la pantalla de detalle de notificacion
 
 ## Arquitectura Técnica
 
