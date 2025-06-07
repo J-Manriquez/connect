@@ -22,13 +22,15 @@ class _AppListScreenState extends State<AppListScreen> {
   String? _error;
   String _lastUpdateDate = 'Desconocido';
   bool _showActiveApps = true;
-  // Agregar esta variable para controlar el modal de carga
-  bool _isLoadingApps = false;
+  bool _isLoadingApps = true; // Siempre empezar con true
 
   @override
   void initState() {
     super.initState();
-    _loadApps();
+    // Agregar un pequeño delay para asegurar que el modal se muestre
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadApps();
+    });
 
     // Configurar listener para actualizaciones desde el código nativo
     platform.setMethodCallHandler(_handleMethodCall);
@@ -54,13 +56,16 @@ class _AppListScreenState extends State<AppListScreen> {
 
   Future<void> _loadApps() async {
     try {
+      // Asegurar que el modal se muestre por al menos 500ms
+      final loadingFuture = Future.delayed(const Duration(milliseconds: 500));
+      
       setState(() {
         _isLoading = true;
-        _isLoadingApps = true; // Mostrar modal de carga
+        _isLoadingApps = true;
         _error = null;
       });
 
-      // Obtener la lista de aplicaciones desde el código nativo
+      // Obtener la lista de aplicaciones
       final List<dynamic> result = await platform.invokeMethod(
         'getInstalledApps',
       );
@@ -76,25 +81,28 @@ class _AppListScreenState extends State<AppListScreen> {
         return app;
       }).toList();
 
+      // Esperar el tiempo mínimo antes de ocultar el modal
+      await loadingFuture;
+
       // Actualizar el estado con las aplicaciones cargadas
       setState(() {
         _apps = apps;
         _lastUpdateDate = lastUpdateDate;
         _filterApps();
         _isLoading = false;
-        _isLoadingApps = false; // Ocultar modal de carga
+        _isLoadingApps = false;
       });
     } on PlatformException catch (e) {
       setState(() {
         _error = "Error al cargar aplicaciones: ${e.message}";
         _isLoading = false;
-        _isLoadingApps = false; // Ocultar modal de carga
+        _isLoadingApps = false;
       });
     } catch (e) {
       setState(() {
         _error = "Error inesperado: $e";
         _isLoading = false;
-        _isLoadingApps = false; // Ocultar modal de carga
+        _isLoadingApps = false;
       });
     }
   }
