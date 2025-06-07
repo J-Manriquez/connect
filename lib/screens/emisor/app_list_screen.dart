@@ -21,7 +21,9 @@ class _AppListScreenState extends State<AppListScreen> {
   String _searchQuery = '';
   String? _error;
   String _lastUpdateDate = 'Desconocido';
-  bool _showActiveApps = true; // Add this state variable
+  bool _showActiveApps = true;
+  // Agregar esta variable para controlar el modal de carga
+  bool _isLoadingApps = false;
 
   @override
   void initState() {
@@ -54,10 +56,11 @@ class _AppListScreenState extends State<AppListScreen> {
     try {
       setState(() {
         _isLoading = true;
+        _isLoadingApps = true; // Mostrar modal de carga
         _error = null;
       });
 
-      // Obtener la lista de aplicaciones desde el código nativo (primero intenta desde SharedPreferences)
+      // Obtener la lista de aplicaciones desde el código nativo
       final List<dynamic> result = await platform.invokeMethod(
         'getInstalledApps',
       );
@@ -69,7 +72,6 @@ class _AppListScreenState extends State<AppListScreen> {
 
       // Convertir correctamente cada elemento a Map<String, dynamic>
       final List<Map<String, dynamic>> apps = result.map((item) {
-        // Convertir explícitamente cada elemento a Map<String, dynamic>
         final Map<String, dynamic> app = Map<String, dynamic>.from(item as Map);
         return app;
       }).toList();
@@ -80,16 +82,19 @@ class _AppListScreenState extends State<AppListScreen> {
         _lastUpdateDate = lastUpdateDate;
         _filterApps();
         _isLoading = false;
+        _isLoadingApps = false; // Ocultar modal de carga
       });
     } on PlatformException catch (e) {
       setState(() {
         _error = "Error al cargar aplicaciones: ${e.message}";
         _isLoading = false;
+        _isLoadingApps = false; // Ocultar modal de carga
       });
     } catch (e) {
       setState(() {
         _error = "Error inesperado: $e";
         _isLoading = false;
+        _isLoadingApps = false; // Ocultar modal de carga
       });
     }
   }
@@ -98,6 +103,7 @@ class _AppListScreenState extends State<AppListScreen> {
     try {
       setState(() {
         _isLoading = true;
+        _isLoadingApps = true; // Mostrar modal de carga
         _error = null;
       });
 
@@ -123,6 +129,7 @@ class _AppListScreenState extends State<AppListScreen> {
         _lastUpdateDate = lastUpdateDate;
         _filterApps();
         _isLoading = false;
+        _isLoadingApps = false; // Ocultar modal de carga
       });
 
       // Sincronizar con Firebase después de recargar las aplicaciones
@@ -131,11 +138,13 @@ class _AppListScreenState extends State<AppListScreen> {
       setState(() {
         _error = "Error al recargar aplicaciones: ${e.message}";
         _isLoading = false;
+        _isLoadingApps = false; // Ocultar modal de carga
       });
     } catch (e) {
       setState(() {
         _error = "Error inesperado: $e";
         _isLoading = false;
+        _isLoadingApps = false; // Ocultar modal de carga
       });
     }
   }
@@ -190,215 +199,246 @@ class _AppListScreenState extends State<AppListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Contar aplicaciones habilitadas
     final enabledAppsCount = _apps
         .where((app) => app['isEnabled'] == true)
         .length;
     final activeApps = _apps.where((app) => app['isEnabled'] == true).toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lista de Aplicaciones'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _reloadAppsFromSystem,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Opción para mostrar aplicaciones del sistema
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: IconButton(
-                    icon: Icon(
-                      _showActiveApps ? Icons.visibility : Icons.visibility_off,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _showActiveApps = !_showActiveApps;
-                      });
-                    },
-                  ),
-                  title: const Text('Aplicaciones Activas'),
-                ),
-                if (_showActiveApps)
-                  Column(
-                    children: activeApps.map((app) {
-                      final packageName = app['packageName'] as String? ?? '';
-                      final appName = app['appName'] as String? ?? 'Sin nombre';
-                      return ListTile(
-                        leading: _buildAppIcon(app['icon'] as String?),
-                        title: Text(appName),
-                        subtitle: Text(packageName),
-                        trailing: Switch(
-                          value: true,
-                          onChanged: (value) {
-                            _updateAppState(
-                              packageName,
-                              false,
-                            ); // Deactivate app
-                          },
-                          activeColor: Colors.green,
-                          inactiveTrackColor: customColor[200],
-                          inactiveThumbColor: Colors.grey[300],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-              ],
-            ),
-          ),
-
-          // Información de última actualización
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              'Última actualización: $_lastUpdateDate',
-              style: const TextStyle(
-                fontStyle: FontStyle.italic,
-                color: Colors.grey,
-              ),
-            ),
-          ),
-
-          // Barra de búsqueda
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              decoration: const InputDecoration(
-                labelText: 'Buscar aplicaciones',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Colors.black),
-                ),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                  _filterApps();
-                });
-              },
-            ),
-          ),
-
-          // Contador de aplicaciones
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Mostrando ${_filteredApps.length} de ${_apps.length} aplicaciones',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Habilitadas: $enabledAppsCount',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color.fromARGB(255, 0, 0, 0),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Lista de aplicaciones
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                ? Center(
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  )
-                : _filteredApps.isEmpty
-                ? const Center(child: Text('No se encontraron aplicaciones'))
-                : ListView.builder(
-                    itemCount: _filteredApps.length,
-                    itemBuilder: (context, index) {
-                      final app = _filteredApps[index];
-                      final packageName = app['packageName'] as String? ?? '';
-                      final isEnabled = app['isEnabled'] as bool? ?? false;
-
-                      return ListTile(
-                        leading: _buildAppIcon(app['icon'] as String?),
-                        title: Text(app['appName'] as String? ?? 'Sin nombre'),
-                        subtitle: Text(packageName),
-                        trailing: Switch(
-                          value: isEnabled,
-                          onChanged: (value) {
-                            _updateAppState(packageName, value);
-                          },
-                          inactiveTrackColor:
-                              customColor[200], // <-- add this line
-                          inactiveThumbColor: Colors.grey[300], // <-- optional
-                        ),
-                      );
-                    },
-                  ),
-          ),
-
-          // Card for active apps
-        ],
-      ),
-      // Agregar el Bottom Navigation Bar con barra divisoria
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            height: 3,
-            color: customColor[700], // Barra divisoria con customColor
-          ),
-          BottomNavigationBar(
-            currentIndex:
-                2, // Índice actual (Aplicaciones - ahora a la derecha)
-            onTap: (index) {
-              // Navegar a la pantalla correspondiente según el índice
-              switch (index) {
-                case 0:
-                  Navigator.pushReplacementNamed(context, '/settings');
-                  break;
-                case 1:
-                  Navigator.pushReplacementNamed(context, '/');
-                  break;
-                case 2:
-                  // Ya estamos en la pantalla de lista de apps
-                  break;
-              }
-            },
-            selectedFontSize: 14.0,
-            unselectedFontSize: 12.0,
-            selectedIconTheme: const IconThemeData(size: 37.5),
-            unselectedIconTheme: const IconThemeData(size: 22.5),
-            selectedItemColor:
-                customColor[700], // Color para el ítem seleccionado
-            unselectedItemColor:
-                Colors.black, // Color para los ítems no seleccionados
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.settings),
-                label: 'Configuración',
-              ),
-              BottomNavigationBarItem(icon: Icon(Icons.send), label: 'Emisor'),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.apps),
-                label: 'Aplicaciones',
+    return Stack(
+      children: [
+        Scaffold(
+          appBar: AppBar(
+            title: const Text('Lista de Aplicaciones'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _isLoadingApps ? null : _reloadAppsFromSystem, // Deshabilitar durante carga
               ),
             ],
           ),
-        ],
-      ),
+          body: Column(
+            children: [
+              // Opción para mostrar aplicaciones del sistema
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: IconButton(
+                        icon: Icon(
+                          _showActiveApps ? Icons.visibility : Icons.visibility_off,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _showActiveApps = !_showActiveApps;
+                          });
+                        },
+                      ),
+                      title: const Text('Aplicaciones Activas'),
+                    ),
+                    if (_showActiveApps)
+                      Column(
+                        children: activeApps.map((app) {
+                          final packageName = app['packageName'] as String? ?? '';
+                          final appName = app['appName'] as String? ?? 'Sin nombre';
+                          return ListTile(
+                            leading: _buildAppIcon(app['icon'] as String?),
+                            title: Text(appName),
+                            subtitle: Text(packageName),
+                            trailing: Switch(
+                              value: true,
+                              onChanged: (value) {
+                                _updateAppState(
+                                  packageName,
+                                  false,
+                                ); // Deactivate app
+                              },
+                              activeColor: Colors.green,
+                              inactiveTrackColor: customColor[200],
+                              inactiveThumbColor: Colors.grey[300],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Información de última actualización
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'Última actualización: $_lastUpdateDate',
+                  style: const TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+
+              // Barra de búsqueda
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Buscar aplicaciones',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.black),
+                    ),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                      _filterApps();
+                    });
+                  },
+                ),
+              ),
+
+              // Contador de aplicaciones
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16.0,
+                  vertical: 8.0,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Mostrando ${_filteredApps.length} de ${_apps.length} aplicaciones',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Habilitadas: $enabledAppsCount',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color.fromARGB(255, 0, 0, 0),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Lista de aplicaciones
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null
+                    ? Center(
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      )
+                    : _filteredApps.isEmpty
+                    ? const Center(child: Text('No se encontraron aplicaciones'))
+                    : ListView.builder(
+                        itemCount: _filteredApps.length,
+                        itemBuilder: (context, index) {
+                          final app = _filteredApps[index];
+                          final packageName = app['packageName'] as String? ?? '';
+                          final isEnabled = app['isEnabled'] as bool? ?? false;
+
+                          return ListTile(
+                            leading: _buildAppIcon(app['icon'] as String?),
+                            title: Text(app['appName'] as String? ?? 'Sin nombre'),
+                            subtitle: Text(packageName),
+                            trailing: Switch(
+                              value: isEnabled,
+                              onChanged: (value) {
+                                _updateAppState(packageName, value);
+                              },
+                              inactiveTrackColor:
+                                  customColor[200], // <-- add this line
+                              inactiveThumbColor: Colors.grey[300], // <-- optional
+                            ),
+                          );
+                        },
+                      ),
+              ),
+
+              // Card for active apps
+            ],
+          ),
+          bottomNavigationBar: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 3,
+                color: customColor[700],
+              ),
+              BottomNavigationBar(
+                currentIndex: 2,
+                onTap: _isLoadingApps ? null : (index) { // Deshabilitar durante carga
+                  switch (index) {
+                    case 0:
+                      Navigator.pushReplacementNamed(context, '/settings');
+                      break;
+                    case 1:
+                      Navigator.pushReplacementNamed(context, '/');
+                      break;
+                    case 2:
+                      break;
+                  }
+                },
+                selectedFontSize: 14.0,
+                unselectedFontSize: 12.0,
+                selectedIconTheme: const IconThemeData(size: 37.5),
+                unselectedIconTheme: const IconThemeData(size: 22.5),
+                selectedItemColor: customColor[700],
+                unselectedItemColor: Colors.black,
+                items: const [
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.settings),
+                    label: 'Configuración',
+                  ),
+                  BottomNavigationBarItem(icon: Icon(Icons.send), label: 'Emisor'),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.apps),
+                    label: 'Aplicaciones',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // Modal de carga
+        if (_isLoadingApps)
+          Container(
+            color: Colors.black54,
+            child: const Center(
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text(
+                        'Cargando aplicaciones...',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Por favor espere',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
