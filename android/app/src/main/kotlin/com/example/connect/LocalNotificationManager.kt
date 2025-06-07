@@ -42,7 +42,7 @@ class LocalNotificationManager(private val context: Context) {
                 setBypassDnd(true)
             }
             notificationManager.createNotificationChannel(channel)
-            Log.d("LocalNotificationManager", "Canal de notificaciones creado")
+            //Log.d("LocalNotificationManager", "Canal de notificaciones creado")
         }
     }
     
@@ -59,7 +59,7 @@ class LocalNotificationManager(private val context: Context) {
         try {
             // Verificar si esta notificación fue cancelada por el usuario
             if (cancelledNotifications.contains(notificationId)) {
-                Log.d("LocalNotificationManager", "Notificación previamente cancelada, no se muestra: $notificationId")
+                //Log.d("LocalNotificationManager", "Notificación previamente cancelada, no se muestra: $notificationId")
                 return
             }
             
@@ -108,7 +108,7 @@ class LocalNotificationManager(private val context: Context) {
             
             // Mostrar la notificación usando el ID único
             notificationManager.notify(uniqueNotificationId, notificationBuilder.build())
-            Log.d("LocalNotificationManager", "Notificación mostrada: $title (ID: $uniqueNotificationId)")
+            //Log.d("LocalNotificationManager", "Notificación mostrada: $title (ID: $uniqueNotificationId)")
             
         } catch (e: Exception) {
             Log.e("LocalNotificationManager", "Error al mostrar notificación", e)
@@ -132,12 +132,12 @@ class LocalNotificationManager(private val context: Context) {
         notificationManager.cancel(uniqueNotificationId)
         // Marcar como cancelada por el usuario
         cancelledNotifications.add(notificationId)
-        Log.d("LocalNotificationManager", "Notificación cancelada: $notificationId")
+        //Log.d("LocalNotificationManager", "Notificación cancelada: $notificationId")
     }
     
     fun cancelAllNotifications() {
         notificationManager.cancelAll()
-        Log.d("LocalNotificationManager", "Todas las notificaciones canceladas")
+        //Log.d("LocalNotificationManager", "Todas las notificaciones canceladas")
     }
     
     // Método para limpiar notificaciones canceladas (llamar periódicamente)

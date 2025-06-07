@@ -45,15 +45,14 @@ void main() async {
 void initializeNotificationHandling() {
   // Configurar el callback para manejar cuando se toca una notificación
   LocalNotificationService.onNotificationTapped = (Map<String, dynamic> data) {
-    print('Notificación tocada: $data');
-    
+    //print('Notificación tocada: $data');
+
     // Siempre navegar a la pantalla de detalle cuando se toca una notificación
     if (navigatorKey.currentContext != null) {
       Navigator.of(navigatorKey.currentContext!).push(
         MaterialPageRoute(
-          builder: (context) => NotificationDetailScreen(
-            notificationData: data,
-          ),
+          builder: (context) =>
+              NotificationDetailScreen(notificationData: data),
         ),
       );
     }
@@ -111,7 +110,7 @@ class _MainAppState extends State<MainApp> {
       // Obtener el estado de guardado desde Firebase
       _isSavingToFirebase = await _firebaseService.getSaveStatus();
 
-      print('Estructura de datos inicializada en Firebase');
+      //print('Estructura de datos inicializada en Firebase');
     } catch (e) {
       print('Error al inicializar datos en Firebase: $e');
     }
@@ -132,7 +131,7 @@ class _MainAppState extends State<MainApp> {
         setState(() {
           _notifications.add(notificationData);
         });
-        print('Received notification: $notificationData');
+        //print('Received notification: $notificationData');
 
         // Si está habilitado el guardado en Firebase, verificar si la notificación debe guardarse
         if (_isSavingToFirebase) {
@@ -150,7 +149,7 @@ class _MainAppState extends State<MainApp> {
             // Solo guardar la notificación si debe mostrarse
             if (shouldShow) {
               await _firebaseService.saveNotification(notificationData);
-              print('Notificación guardada en Firebase: $packageName');
+              //print('Notificación guardada en Firebase: $packageName');
             } else {
               print(
                 'Notificación filtrada, no se guarda en Firebase: $packageName',
@@ -166,7 +165,7 @@ class _MainAppState extends State<MainApp> {
         setState(() {
           _isServiceRunning = true;
         });
-        print('Notification service connected.');
+        //print('Notification service connected.');
 
         // Actualizar el estado del servicio en Firebase
         try {
@@ -179,7 +178,7 @@ class _MainAppState extends State<MainApp> {
         setState(() {
           _isServiceRunning = false;
         });
-        print('Notification service disconnected.');
+        //print('Notification service disconnected.');
 
         // Actualizar el estado del servicio en Firebase
         try {
@@ -202,7 +201,7 @@ class _MainAppState extends State<MainApp> {
       setState(() {
         _isPermissionGranted = isEnabled;
       });
-      print('Permission granted: $_isPermissionGranted');
+      //print('Permission granted: $_isPermissionGranted');
     } on PlatformException catch (e) {
       print("Failed to check permission status: '${e.message}'.");
     }
@@ -215,7 +214,7 @@ class _MainAppState extends State<MainApp> {
       setState(() {
         _isServiceRunning = isRunning;
       });
-      print('Service running: $_isServiceRunning');
+      //print('Service running: $_isServiceRunning');
     } on PlatformException catch (e) {
       print("Failed to check service status: '${e.message}'.");
     }
@@ -229,10 +228,10 @@ class _MainAppState extends State<MainApp> {
         'startNotificationService',
       );
       if (started) {
-        print('Service start intent sent.');
+        //print('Service start intent sent.');
         // El estado _isServiceRunning se actualizará cuando el servicio llame a serviceConnected
       } else {
-        print('Permission not granted, opened settings.');
+        //print('Permission not granted, opened settings.');
         // El estado _isPermissionGranted se actualizará después de que el usuario regrese de settings
       }
     } on PlatformException catch (e) {
@@ -244,7 +243,7 @@ class _MainAppState extends State<MainApp> {
   Future<void> _stopService() async {
     try {
       await platform.invokeMethod('stopNotificationService');
-      print('Service stop intent sent.');
+      //print('Service stop intent sent.');
       // El estado _isServiceRunning se actualizará cuando el servicio llame a serviceDisconnected o onDestroy
     } on PlatformException catch (e) {
       print("Failed to stop service: '${e.message}'.");
@@ -255,7 +254,7 @@ class _MainAppState extends State<MainApp> {
   Future<void> _openNotificationSettings() async {
     try {
       await platform.invokeMethod('openNotificationSettings');
-      print('Opened notification settings.');
+      //print('Opened notification settings.');
       // Puedes añadir un listener para cuando la app vuelve a primer plano para verificar el permiso después
     } on PlatformException catch (e) {
       print("Failed to open settings: '${e.message}'.");
@@ -278,7 +277,7 @@ class _MainAppState extends State<MainApp> {
         await NotificationFilterService.syncEnabledAppsWithFirebase();
       }
 
-      print('Estado de guardado en Firebase actualizado: $isSaving');
+      //print('Estado de guardado en Firebase actualizado: $isSaving');
     } catch (e) {
       print('Error al actualizar estado de guardado en Firebase: $e');
       // Revertir el cambio local si hay error
@@ -291,42 +290,42 @@ class _MainAppState extends State<MainApp> {
   // Método para verificar la ruta inicial según las preferencias del usuario
   Future<void> _checkInitialRoute() async {
     try {
-      print('[DEBUG] _checkInitialRoute: Start');
+      //print('[DEBUG] _checkInitialRoute: Start');
       final receptorService = ReceptorService();
       final deviceId = await receptorService.getLinkedDeviceId();
-      print(
-        '[DEBUG] _checkInitialRoute: deviceId from SharedPreferences = \$deviceId',
-      );
+      // print(
+      //   '[DEBUG] _checkInitialRoute: deviceId from SharedPreferences = \$deviceId',
+      // );
       final linkStatus = await _firebaseService.getLinkStatus();
-      print(
-        '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',
-      );
+      // print(
+      //   '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',
+      // );
       // En el método _checkInitialRoute, después de verificar el linkStatus
       // En _checkInitialRoute, líneas 308-312
       if (linkStatus) {
-      print('[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor');
-      
-      // CAMBIO: Inicializar el receptor ANTES de navegar
-      final receptorService = ReceptorService();
-      await receptorService.initializeReceptorWithoutNotifications();
-      
-      // Navegar a la pantalla del receptor
-      Navigator.pushReplacementNamed(context, '/receptor');
+        //print('[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor');
+
+        // CAMBIO: Inicializar el receptor ANTES de navegar
+        final receptorService = ReceptorService();
+        await receptorService.initializeReceptorWithoutNotifications();
+
+        // Navegar a la pantalla del receptor
+        Navigator.pushReplacementNamed(context, '/receptor');
       } else {
-      print('[DEBUG] _checkInitialRoute: Dispositivo no vinculado, mantener en emisor');
+        //print('[DEBUG] _checkInitialRoute: Dispositivo no vinculado, mantener en emisor');
       }
       final useAsReceptor = await PreferencesService.getUseAsReceptor();
-      print(
-        '[DEBUG] _checkInitialRoute: useAsReceptor = \$useAsReceptor, _isPermissionGranted = \$_isPermissionGranted',
-      );
+      // print(
+      //   '[DEBUG] _checkInitialRoute: useAsReceptor = \$useAsReceptor, _isPermissionGranted = \$_isPermissionGranted',
+      // );
       if (useAsReceptor && _isPermissionGranted) {
-        print('[DEBUG] _checkInitialRoute: Navigating to /receptor');
+        //print('[DEBUG] _checkInitialRoute: Navigating to /receptor');
         Navigator.pushReplacementNamed(context, '/receptor');
       }
-      print('[DEBUG] _checkInitialRoute: Staying on EmisorScreen');
+      //print('[DEBUG] _checkInitialRoute: Staying on EmisorScreen');
     } catch (e, stack) {
       print('Error al verificar ruta inicial: $e');
-      print('Stacktrace: $stack');
+      //print('Stacktrace: $stack');
     }
   }
 
@@ -385,7 +384,9 @@ class _MainAppState extends State<MainApp> {
             const UnreadNotificationsScreen(), // Añadir esta nueva ruta
         '/notification_settings': (context) =>
             const NotificationSettingsScreen(), // Add the new route
-        '/notification_detail': (context) => const NotificationDetailScreen(notificationData: {},), // Add this line
+        '/notification_detail': (context) => const NotificationDetailScreen(
+          notificationData: {},
+        ), // Add this line
       },
     );
   }

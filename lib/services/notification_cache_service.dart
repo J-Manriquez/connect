@@ -13,7 +13,7 @@ class NotificationCacheService {
   static Future<void> registerPreExistingNotifications(Set<String> notificationIds) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_preExistingNotificationsKey, notificationIds.toList());
-    print('NotificationCacheService: ${notificationIds.length} notificaciones pre-existentes registradas');
+    //print('NotificationCacheService: ${notificationIds.length} notificaciones pre-existentes registradas');
   }
   
   // Verificar si una notificación existía antes de la vinculación
@@ -89,6 +89,6 @@ class NotificationCacheService {
       await prefs.setStringList(_visualizedNotificationsKey, newVisualized);
     }
     
-    print('NotificationCacheService: Caché limpiado');
+    //print('NotificationCacheService: Caché limpiado');
   }
 }

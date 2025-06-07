@@ -26,7 +26,7 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("NotificationListener", "Service created")
+        //Log.d("NotificationListener", "Service created")
         // Crear canal de notificación para Android O y superior
         createNotificationChannel()
         // Iniciar el servicio en primer plano inmediatamente
@@ -43,7 +43,7 @@ class NotificationListener : NotificationListenerService() {
             }
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
-            Log.d("NotificationListener", "Canal de notificación creado")
+            //Log.d("NotificationListener", "Canal de notificación creado")
         }
     }
 
@@ -62,13 +62,13 @@ class NotificationListener : NotificationListenerService() {
             startForeground(NOTIFICATION_ID, notification)
         }
         
-        Log.d("NotificationListener", "Servicio iniciado en primer plano")
+        //Log.d("NotificationListener", "Servicio iniciado en primer plano")
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         isRunning = true
-        Log.d("NotificationListener", "Servicio de escucha de notificaciones conectado")
+        //Log.d("NotificationListener", "Servicio de escucha de notificaciones conectado")
         // Notificar a Flutter que el servicio está conectado
         methodChannel?.invokeMethod("serviceConnected", null)
     }
@@ -76,7 +76,7 @@ class NotificationListener : NotificationListenerService() {
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         isRunning = false
-        Log.d("NotificationListener", "Servicio de escucha de notificaciones desconectado")
+        //Log.d("NotificationListener", "Servicio de escucha de notificaciones desconectado")
         // Notificar a Flutter que el servicio está desconectado
         methodChannel?.invokeMethod("serviceDisconnected", null)
     }
@@ -100,7 +100,7 @@ class NotificationListener : NotificationListenerService() {
 
         // Filtrar las notificaciones de paquetes excluidos
         if (excludedPackages.contains(packageName)) {
-            Log.d("NotificationListener", "Ignorando notificación de paquete excluido: $packageName")
+            //Log.d("NotificationListener", "Ignorando notificación de paquete excluido: $packageName")
             return
         }
 
@@ -125,7 +125,7 @@ class NotificationListener : NotificationListenerService() {
             "time" to time.toString() // Convertir a String para enviarlo
         )
 
-        Log.d("NotificationListener", "Notificación capturada para EMISOR: $notificationData")
+        //Log.d("NotificationListener", "Notificación capturada para EMISOR: $notificationData")
 
         // SOLO enviar la notificación a Flutter para procesamiento (guardar en Firebase)
         // NO mostrar notificación local aquí - eso es responsabilidad del RECEPTOR
@@ -137,13 +137,13 @@ class NotificationListener : NotificationListenerService() {
         super.onNotificationRemoved(sbn)
         sbn?.let {
             val packageName = it.packageName
-            Log.d("NotificationListener", "Notification Removed: Package: $packageName")
+            //Log.d("NotificationListener", "Notification Removed: Package: $packageName")
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
-        Log.d("NotificationListener", "Service destroyed")
+        //Log.d("NotificationListener", "Service destroyed")
     }
 }

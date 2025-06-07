@@ -10,7 +10,7 @@ class NotificationDeleteReceiver : BroadcastReceiver() {
         val notificationId = intent.getStringExtra("notification_id")
         if (notificationId != null) {
             // Marcar la notificación como cancelada por el usuario
-            Log.d("NotificationDeleteReceiver", "Usuario eliminó notificación: $notificationId")
+            //Log.d("NotificationDeleteReceiver", "Usuario eliminó notificación: $notificationId")
             // Aquí podrías comunicar de vuelta a Flutter si es necesario
         }
     }

@@ -22,12 +22,12 @@ class ReceptorService {
 
       for (var doc in querySnapshot.docs) {
         if (doc.id == code) {
-          print('Dispositivo encontrado con ID: ${doc.id}');
+          //print('Dispositivo encontrado con ID: ${doc.id}');
           return doc.id;
         }
       }
 
-      print('No se encontró ningún dispositivo con el código: $code');
+      //print('No se encontró ningún dispositivo con el código: $code');
       return null;
     } catch (e) {
       print('Error al verificar código de vinculación: $e');
@@ -43,7 +43,7 @@ class ReceptorService {
 
       await _firebaseService.updateLinkStatus(true, deviceId);
 
-      print('ID del dispositivo emisor guardado: $deviceId');
+      //print('ID del dispositivo emisor guardado: $deviceId');
       return true;
     } catch (e) {
       print('Error al guardar ID del dispositivo emisor: $e');
@@ -54,10 +54,10 @@ class ReceptorService {
   // Obtener el ID del dispositivo emisor vinculado
   Future<String?> getLinkedDeviceId() async {
     try {
-      print('[DEBUG] getLinkedDeviceId: Start');
+      //print('[DEBUG] getLinkedDeviceId: Start');
       final prefs = await SharedPreferences.getInstance();
       final id = prefs.getString(KEY_LINKED_DEVICE_ID);
-      print('[DEBUG] getLinkedDeviceId: Result = $id');
+      //print('[DEBUG] getLinkedDeviceId: Result = $id');
       return id;
     } catch (e) {
       print('Error al obtener ID del dispositivo emisor: $e');
@@ -73,18 +73,18 @@ class ReceptorService {
     try {
       final deviceId = await getLinkedDeviceId();
       if (deviceId == null) {
-        print('No hay dispositivo emisor vinculado');
+        //print('No hay dispositivo emisor vinculado');
         return;
       }
 
       final uniqueId = notificationId;
       final int millisecondsSinceEpoch = int.parse(uniqueId);
-      print('Milisegundos (int): $millisecondsSinceEpoch');
+      //print('Milisegundos (int): $millisecondsSinceEpoch');
 
       final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
         millisecondsSinceEpoch,
       );
-      print('Objeto DateTime: $dateTimeObject');
+      //print('Objeto DateTime: $dateTimeObject');
 
       final String year = dateTimeObject.year.toString();
       final String month = dateTimeObject.month.toString().padLeft(2, '0');
@@ -189,7 +189,7 @@ class ReceptorService {
       return allNotifications;
     } catch (e, stackTrace) {
       print('Error al obtener notificaciones almacenadas: $e');
-      print('Stack trace: $stackTrace');
+      //print('Stack trace: $stackTrace');
       return [];
     }
   }
@@ -248,7 +248,7 @@ class ReceptorService {
     await NotificationCacheService.markAsProcessed(notificationId);
     await NotificationCacheService.markAsVisualized(notificationId);
 
-    print('Notificación local mostrada: $notificationId');
+    //print('Notificación local mostrada: $notificationId');
   }
 
   // Nuevo método para procesar notificaciones nuevas
@@ -257,23 +257,23 @@ class ReceptorService {
     String notificationId,
   ) async {
     try {
-      print('Procesando notificación nueva: $notificationId');
+      //print('Procesando notificación nueva: $notificationId');
 
       // Verificar si la notificación debe ser filtrada
       if (_shouldFilterNotification(notificationData)) {
-        print('Notificación filtrada en receptor: $notificationId');
+        //print('Notificación filtrada en receptor: $notificationId');
         return;
       }
 
       // Verificar si es pre-existente
       if (await NotificationCacheService.isPreExisting(notificationId)) {
-        print('Notificación pre-existente ignorada: $notificationId');
+        //print('Notificación pre-existente ignorada: $notificationId');
         return;
       }
 
       // Verificar si ya fue procesada
       if (await NotificationCacheService.isProcessed(notificationId)) {
-        print('Notificación ya procesada: $notificationId');
+        //print('Notificación ya procesada: $notificationId');
         return;
       }
 
@@ -299,7 +299,7 @@ class ReceptorService {
     try {
       final deviceId = await getLinkedDeviceId();
       if (deviceId == null) {
-        print('No hay dispositivo emisor vinculado');
+        //print('No hay dispositivo emisor vinculado');
         yield [];
         return;
       }
@@ -371,7 +371,7 @@ class ReceptorService {
     try {
       final deviceId = await getLinkedDeviceId();
       if (deviceId == null) {
-        print('No hay dispositivo emisor vinculado');
+        //print('No hay dispositivo emisor vinculado');
         return;
       }
 
@@ -421,7 +421,7 @@ class ReceptorService {
         body.isEmpty &&
         mensaje.isEmpty &&
         contenido.isEmpty) {
-      print('Notificación filtrada: Contenido vacío - Package: $packageName');
+      //print('Notificación filtrada: Contenido vacío - Package: $packageName');
       return true;
     }
 
@@ -535,19 +535,19 @@ class ReceptorService {
   ) async {
     // Verificar si la notificación debe ser filtrada
     if (_shouldFilterNotification(notificationData)) {
-      print('Notificación filtrada en receptor: $notificationId');
+      //print('Notificación filtrada en receptor: $notificationId');
       return;
     }
 
     // Verificar si es pre-existente
     if (await NotificationCacheService.isPreExisting(notificationId)) {
-      print('Notificación pre-existente ignorada: $notificationId');
+      //print('Notificación pre-existente ignorada: $notificationId');
       return;
     }
 
     // Verificar si ya fue procesada
     if (await NotificationCacheService.isProcessed(notificationId)) {
-      print('Notificación ya procesada: $notificationId');
+      //print('Notificación ya procesada: $notificationId');
       return;
     }
 

@@ -38,7 +38,7 @@ class MainActivity: FlutterActivity() {
         // Canal para EMISOR (NotificationListener)
         emisorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EMISOR_CHANNEL)
         NotificationListener.methodChannel = emisorChannel
-        Log.d("MainActivity", "Canal EMISOR asignado a NotificationListener")
+        //Log.d("MainActivity", "Canal EMISOR asignado a NotificationListener")
         
         // Canal para lista de aplicaciones
         appListChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_LIST_CHANNEL)
@@ -51,7 +51,7 @@ class MainActivity: FlutterActivity() {
             val serviceIntent = Intent(this, NotificationListener::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(serviceIntent)
-                Log.d("MainActivity", "Iniciando servicio EMISOR automáticamente")
+                //Log.d("MainActivity", "Iniciando servicio EMISOR automáticamente")
             } else {
                 startService(serviceIntent)
             }
@@ -64,7 +64,7 @@ class MainActivity: FlutterActivity() {
                     if (!isNotificationServiceEnabled()) {
                         openNotificationListenerSettings()
                         result.success(false)
-                        Log.d("MainActivity", "Servicio EMISOR no habilitado, abriendo configuración.")
+                        //Log.d("MainActivity", "Servicio EMISOR no habilitado, abriendo configuración.")
                     } else {
                         val serviceIntent = Intent(this, NotificationListener::class.java)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -73,18 +73,18 @@ class MainActivity: FlutterActivity() {
                             startService(serviceIntent)
                         }
                         result.success(true)
-                        Log.d("MainActivity", "Servicio EMISOR iniciado.")
+                        //Log.d("MainActivity", "Servicio EMISOR iniciado.")
                     }
                 }
                 "stopNotificationService" -> {
                     val serviceIntent = Intent(this, NotificationListener::class.java)
                     stopService(serviceIntent)
                     result.success(true)
-                    Log.d("MainActivity", "Servicio EMISOR detenido.")
+                    //Log.d("MainActivity", "Servicio EMISOR detenido.")
                 }
                 "isServiceRunning" -> {
                     result.success(NotificationListener.isRunning)
-                    Log.d("MainActivity", "Estado servicio EMISOR: ${NotificationListener.isRunning}")
+                    //Log.d("MainActivity", "Estado servicio EMISOR: ${NotificationListener.isRunning}")
                 }
                 "isNotificationServiceEnabled" -> {
                     result.success(isNotificationServiceEnabled())
@@ -106,7 +106,7 @@ class MainActivity: FlutterActivity() {
                     try {
                         val apps = appListService.getInstalledApps()
                         result.success(apps)
-                        Log.d("MainActivity", "Obtenidas ${apps.size} aplicaciones instaladas")
+                        //Log.d("MainActivity", "Obtenidas ${apps.size} aplicaciones instaladas")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al obtener aplicaciones instaladas", e)
                         result.error("ERROR", "Error al obtener aplicaciones: ${e.message}", null)
@@ -116,7 +116,7 @@ class MainActivity: FlutterActivity() {
                     try {
                         val apps = appListService.loadAppsFromSystem()
                         result.success(apps)
-                        Log.d("MainActivity", "Forzada carga de ${apps.size} aplicaciones desde el sistema")
+                        //Log.d("MainActivity", "Forzada carga de ${apps.size} aplicaciones desde el sistema")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al obtener aplicaciones desde el sistema", e)
                         result.error("ERROR", "Error al obtener aplicaciones: ${e.message}", null)
@@ -126,7 +126,7 @@ class MainActivity: FlutterActivity() {
                     try {
                         val date = appListService.getLastUpdateDate()
                         result.success(date)
-                        Log.d("MainActivity", "Fecha de última actualización: $date")
+                        //Log.d("MainActivity", "Fecha de última actualización: $date")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al obtener fecha de actualización", e)
                         result.error("ERROR", "Error al obtener fecha: ${e.message}", null)
@@ -140,7 +140,7 @@ class MainActivity: FlutterActivity() {
                         if (packageName != null && isEnabled != null) {
                             appListService.updateAppState(packageName, isEnabled)
                             result.success(true)
-                            Log.d("MainActivity", "Estado de la aplicación $packageName actualizado a $isEnabled")
+                            //Log.d("MainActivity", "Estado de la aplicación $packageName actualizado a $isEnabled")
                         } else {
                             result.error("INVALID_ARGS", "Argumentos inválidos", null)
                         }
@@ -153,7 +153,7 @@ class MainActivity: FlutterActivity() {
                     try {
                         val enabledPackages = appListService.getEnabledPackages()
                         result.success(enabledPackages.toList())
-                        Log.d("MainActivity", "Obtenidos ${enabledPackages.size} paquetes habilitados")
+                        //Log.d("MainActivity", "Obtenidos ${enabledPackages.size} paquetes habilitados")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al obtener paquetes habilitados", e)
                         result.error("ERROR", "Error al obtener paquetes habilitados: ${e.message}", null)
@@ -184,7 +184,7 @@ class MainActivity: FlutterActivity() {
                             soundEnabled, vibrationEnabled, autoOpenEnabled
                         )
                         result.success(true)
-                        Log.d("MainActivity", "Notificación RECEPTOR mostrada: $title")
+                        //Log.d("MainActivity", "Notificación RECEPTOR mostrada: $title")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al mostrar notificación RECEPTOR", e)
                         result.error("ERROR", "Error al mostrar notificación: ${e.message}", null)
@@ -195,7 +195,7 @@ class MainActivity: FlutterActivity() {
                         val notificationId = call.argument<String>("notificationId") ?: ""
                         localNotificationManager.cancelNotification(notificationId)
                         result.success(true)
-                        Log.d("MainActivity", "Notificación RECEPTOR cancelada: $notificationId")
+                        //Log.d("MainActivity", "Notificación RECEPTOR cancelada: $notificationId")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al cancelar notificación RECEPTOR", e)
                         result.error("ERROR", "Error al cancelar notificación: ${e.message}", null)
@@ -238,7 +238,7 @@ class MainActivity: FlutterActivity() {
                 )
                 
                 receptorChannel.invokeMethod("onNotificationTapped", notificationData)
-                Log.d("MainActivity", "Notificación RECEPTOR tocada, enviando datos a Flutter")
+                //Log.d("MainActivity", "Notificación RECEPTOR tocada, enviando datos a Flutter")
             }
         }
     }

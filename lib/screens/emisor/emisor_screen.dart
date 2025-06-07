@@ -178,7 +178,7 @@ class _EmisorScreenState extends State<EmisorScreen>
         _isLoading = false;
       });
 
-      // print('Notificaciones cargadas desde Firebase: ${notifications.length}');
+      // //print('Notificaciones cargadas desde Firebase: ${notifications.length}');
     } catch (e) {
       print('Error al cargar notificaciones desde Firebase: $e');
       setState(() {
@@ -196,7 +196,7 @@ class _EmisorScreenState extends State<EmisorScreen>
         final uniqueId = notification.id;
         // 2. Convertir el String de milisegundos a un entero
         final int millisecondsSinceEpoch = int.parse(uniqueId);
-        print('Milisegundos (int): $millisecondsSinceEpoch');
+        //print('Milisegundos (int): $millisecondsSinceEpoch');
 
         // 3. Crear un objeto DateTime a partir de los milisegundos
         final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
@@ -240,7 +240,7 @@ class _EmisorScreenState extends State<EmisorScreen>
       final uniqueId = notification.id;
       // 2. Convertir el String de milisegundos a un entero
       final int millisecondsSinceEpoch = int.parse(uniqueId);
-      print('Milisegundos (int): $millisecondsSinceEpoch');
+      //print('Milisegundos (int): $millisecondsSinceEpoch');
 
       // 3. Crear un objeto DateTime a partir de los milisegundos
       final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
@@ -909,6 +909,6 @@ Future<void> _checkInitialRoute(BuildContext context) async {
     }
   } catch (e, stack) {
     print('Error al verificar ruta inicial: $e');
-    print('Stacktrace: $stack');
+    //print('Stacktrace: $stack');
   }
 }

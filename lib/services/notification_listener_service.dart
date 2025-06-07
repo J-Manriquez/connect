@@ -40,7 +40,7 @@ class NotificationListenerService {
       
       Future.delayed(const Duration(seconds: 5), () {
         _isInitialLoad = false;
-        print('NotificationListenerService: Período inicial completado');
+        //print('NotificationListenerService: Período inicial completado');
       });
     } else if (!enabled && _isListening) {
       stopListening();
@@ -75,9 +75,9 @@ class NotificationListenerService {
       // Registrar todas las notificaciones existentes como pre-existentes
       await NotificationCacheService.registerPreExistingNotifications(allExistingIds);
       
-      print('NotificationListenerService: ${allExistingIds.length} notificaciones marcadas como conocidas');
+      //print('NotificationListenerService: ${allExistingIds.length} notificaciones marcadas como conocidas');
     } catch (e) {
-      print('NotificationListenerService: Error al marcar notificaciones existentes: $e');
+      //print('NotificationListenerService: Error al marcar notificaciones existentes: $e');
     }
   }
 
@@ -86,7 +86,7 @@ class NotificationListenerService {
     
     final deviceId = await _firebaseService.getDeviceId();
     if (deviceId.isEmpty) {
-      print('NotificationListenerService: Device ID not available.');
+      //print('NotificationListenerService: Device ID not available.');
       return;
     }
 
@@ -103,17 +103,17 @@ class NotificationListenerService {
           } else if (change.type == DocumentChangeType.removed) {
             final String dateId = change.doc.id;
             _lastKnownNotificationIds.remove(dateId);
-            print('NotificationListenerService: Documento diario eliminado: $dateId');
+            //print('NotificationListenerService: Documento diario eliminado: $dateId');
           }
         }
       },
       onError: (error) {
-        print('NotificationListenerService: Error listening for notifications: $error');
+        //print('NotificationListenerService: Error listening for notifications: $error');
       },
     );
     
     _isListening = true;
-    print('NotificationListenerService: Started listening for notifications.');
+    //print('NotificationListenerService: Started listening for notifications.');
   }
 
   // Optimización: Procesar solo las notificaciones nuevas
@@ -130,7 +130,7 @@ class NotificationListenerService {
     final newNotificationIds = currentIds.difference(lastKnownIds);
 
     if (newNotificationIds.isNotEmpty) {
-      print('NotificationListenerService: ${newNotificationIds.length} nuevas notificaciones en $dateId');
+      //print('NotificationListenerService: ${newNotificationIds.length} nuevas notificaciones en $dateId');
       
       for (final notificationId in newNotificationIds) {
         await _processNewNotification(
@@ -152,13 +152,13 @@ class NotificationListenerService {
   ) async {
     try {
       if (notificationDataMap == null || notificationDataMap is! Map<String, dynamic>) {
-        print('NotificationListenerService: Datos inválidos para $notificationId');
+        //print('NotificationListenerService: Datos inválidos para $notificationId');
         return;
       }
 
       // Verificar si ya fue procesada
       if (await NotificationCacheService.isProcessed(notificationId)) {
-        print('NotificationListenerService: Notificación ya procesada: $notificationId');
+        //print('NotificationListenerService: Notificación ya procesada: $notificationId');
         return;
       }
 
@@ -169,13 +169,13 @@ class NotificationListenerService {
       final notificationData = NotificationData.fromMap(fullNotificationDataMap);
 
       if (_shouldShowLocalNotification()) {
-        print('NotificationListenerService: Procesando nueva notificación: ${notificationData.title}');
+        //print('NotificationListenerService: Procesando nueva notificación: ${notificationData.title}');
         await _showLocalNotification(notificationData.toMap());
       } else {
-        print('NotificationListenerService: Notificación no mostrada (límite de frecuencia)');
+        //print('NotificationListenerService: Notificación no mostrada (límite de frecuencia)');
       }
     } catch (e) {
-      print('NotificationListenerService: Error al procesar $notificationId: $e');
+      //print('NotificationListenerService: Error al procesar $notificationId: $e');
     }
   }
 
@@ -186,7 +186,7 @@ class NotificationListenerService {
     _notificationStreamSubscription = null;
     _lastKnownNotificationIds.clear();
     _isListening = false;
-    print('NotificationListenerService: Stopped listening for notifications.');
+    //print('NotificationListenerService: Stopped listening for notifications.');
   }
 
   Future<void> _showLocalNotification(Map<String, dynamic> notification) async {
@@ -194,36 +194,36 @@ class NotificationListenerService {
       final String notificationId = notification['id'];
       
       if (_isInitialLoad) {
-        print('NotificationListenerService: Notificación ignorada durante carga inicial: $notificationId');
+        //print('NotificationListenerService: Notificación ignorada durante carga inicial: $notificationId');
         return;
       }
       
       // Verificar si es pre-existente
       if (await NotificationCacheService.isPreExisting(notificationId)) {
-        print('NotificationListenerService: Notificación pre-existente ignorada: $notificationId');
+        //print('NotificationListenerService: Notificación pre-existente ignorada: $notificationId');
         return;
       }
       
       // Verificar si ya fue visualizada
       if (await NotificationCacheService.isVisualized(notificationId)) {
-        print('NotificationListenerService: Notificación ya visualizada: $notificationId');
+        //print('NotificationListenerService: Notificación ya visualizada: $notificationId');
         return;
       }
       
       if (await DismissedNotificationsService.isDismissed(notificationId)) {
-        print('NotificationListenerService: Notificación previamente eliminada: $notificationId');
+        //print('NotificationListenerService: Notificación previamente eliminada: $notificationId');
         return;
       }
       
       if (!_shouldShowLocalNotification()) {
-        print('NotificationListenerService: Notificación no mostrada por intervalo mínimo: $notificationId');
+        //print('NotificationListenerService: Notificación no mostrada por intervalo mínimo: $notificationId');
         return;
       }
       
       if (_serviceStartTime != null && notification['timestamp'] is Timestamp) {
         final notificationTime = (notification['timestamp'] as Timestamp).toDate();
         if (notificationTime.isBefore(_serviceStartTime!)) {
-          print('NotificationListenerService: Notificación anterior al inicio del servicio: $notificationId');
+          //print('NotificationListenerService: Notificación anterior al inicio del servicio: $notificationId');
           return;
         }
       }
@@ -247,7 +247,7 @@ class NotificationListenerService {
       await _updateVisualizationStatus(notificationId, notification['dateId']);
       
     } catch (e) {
-      print('NotificationListenerService: Error al mostrar notificación local: $e');
+      //print('NotificationListenerService: Error al mostrar notificación local: $e');
     }
   }
 
@@ -257,7 +257,7 @@ class NotificationListenerService {
     try {
       // Verificar si es una notificación pre-existente
       if (await NotificationCacheService.isPreExisting(notificationId)) {
-        print('NotificationListenerService: No se actualiza estado de notificación pre-existente: $notificationId');
+        //print('NotificationListenerService: No se actualiza estado de notificación pre-existente: $notificationId');
         return;
       }
       
@@ -274,9 +274,9 @@ class NotificationListenerService {
         'notificaciones.$notificationId.visualizada': true,
       });
       
-      print('NotificationListenerService: Estado de visualización actualizado: $notificationId');
+      //print('NotificationListenerService: Estado de visualización actualizado: $notificationId');
     } catch (e) {
-      print('NotificationListenerService: Error al actualizar estado: $e');
+      //print('NotificationListenerService: Error al actualizar estado: $e');
     }
   }
 

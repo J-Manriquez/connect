@@ -34,12 +34,12 @@ class AppListService(private val context: Context) {
         // Primero intentamos cargar desde SharedPreferences
         val cachedApps = loadAppsFromPrefs()
         if (cachedApps.isNotEmpty()) {
-            Log.d(TAG, "Cargando ${cachedApps.size} aplicaciones desde SharedPreferences")
+            //Log.d(TAG, "Cargando ${cachedApps.size} aplicaciones desde SharedPreferences")
             return cachedApps
         }
         
         // Si no hay datos en SharedPreferences, cargamos del sistema
-        Log.d(TAG, "No hay datos en SharedPreferences, cargando desde el sistema")
+        //Log.d(TAG, "No hay datos en SharedPreferences, cargando desde el sistema")
         return loadAppsFromSystem()
     }
     
@@ -113,8 +113,8 @@ class AppListService(private val context: Context) {
             
             editor.apply()
             
-            Log.d(TAG, "Guardadas ${apps.size} aplicaciones en SharedPreferences")
-            Log.d(TAG, "Aplicaciones habilitadas: ${enabledPackages.size}")
+            //Log.d(TAG, "Guardadas ${apps.size} aplicaciones en SharedPreferences")
+            //Log.d(TAG, "Aplicaciones habilitadas: ${enabledPackages.size}")
             
             // Notificar a Flutter para sincronizar con Firebase
             MainActivity.instance?.let { activity ->
@@ -132,7 +132,7 @@ class AppListService(private val context: Context) {
         try {
             val status = sharedPreferences.getString(KEY_STATUS, null)
             if (status != "activo") {
-                Log.d(TAG, "Estado no activo en SharedPreferences")
+                //Log.d(TAG, "Estado no activo en SharedPreferences")
                 return emptyList()
             }
             
@@ -152,7 +152,7 @@ class AppListService(private val context: Context) {
                 appsList.add(app)
             }
             
-            Log.d(TAG, "Cargadas ${appsList.size} aplicaciones desde SharedPreferences")
+            //Log.d(TAG, "Cargadas ${appsList.size} aplicaciones desde SharedPreferences")
             return appsList
         } catch (e: Exception) {
             Log.e(TAG, "Error al cargar aplicaciones desde SharedPreferences", e)
@@ -191,7 +191,7 @@ class AppListService(private val context: Context) {
             // Guardar la lista actualizada
             saveAppsToPrefs(updatedApps)
             
-            Log.d(TAG, "Estado de la aplicación $packageName actualizado a $isEnabled")
+            //Log.d(TAG, "Estado de la aplicación $packageName actualizado a $isEnabled")
         } catch (e: Exception) {
             Log.e(TAG, "Error al actualizar el estado de la aplicación", e)
         }

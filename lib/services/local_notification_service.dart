@@ -54,7 +54,7 @@ class LocalNotificationService {
     
     // Verificar si la notificación fue eliminada previamente
     if (await DismissedNotificationsService.isDismissed(notificationId)) {
-      print('Notificación previamente eliminada, no se muestra: $notificationId');
+      //print('Notificación previamente eliminada, no se muestra: $notificationId');
       return;
     }
     

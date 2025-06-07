@@ -36,7 +36,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       final notificationId = widget.notificationData['notificationId'] as String?;
       if (notificationId != null) {
         await _receptorService.updateNotificationVisualizationStatus(notificationId, true);
-        print('Notificación marcada como leída: $notificationId');
+        //print('Notificación marcada como leída: $notificationId');
       }
     } catch (e) {
       print('Error al marcar notificación como leída: $e');

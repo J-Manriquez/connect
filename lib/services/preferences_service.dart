@@ -9,7 +9,7 @@ class PreferencesService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(KEY_USE_AS_RECEPTOR, useAsReceptor);
-      print('Preferencia de usar como receptor guardada: $useAsReceptor');
+      //print('Preferencia de usar como receptor guardada: $useAsReceptor');
       return true;
     } catch (e) {
       print('Error al guardar preferencia de usar como receptor: $e');

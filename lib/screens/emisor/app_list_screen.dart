@@ -41,7 +41,7 @@ class _AppListScreenState extends State<AppListScreen> {
         await NotificationFilterService.syncEnabledAppsWithFirebase();
         break;
       default:
-        print('Método desconocido: ${call.method}');
+        //print('Método desconocido: ${call.method}');
     }
   }
 
