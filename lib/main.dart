@@ -45,13 +45,17 @@ void main() async {
 void initializeNotificationHandling() {
   // Configurar el callback para manejar cuando se toca una notificación
   LocalNotificationService.onNotificationTapped = (Map<String, dynamic> data) {
-    final autoOpen = data['autoOpen'] as bool? ?? false;
-
-    if (autoOpen) {
-      // Navegar automáticamente a la pantalla de detalle
-      Navigator.of(
-        navigatorKey.currentContext!,
-      ).pushNamed('/notification_detail', arguments: data);
+    print('Notificación tocada: $data');
+    
+    // Siempre navegar a la pantalla de detalle cuando se toca una notificación
+    if (navigatorKey.currentContext != null) {
+      Navigator.of(navigatorKey.currentContext!).push(
+        MaterialPageRoute(
+          builder: (context) => NotificationDetailScreen(
+            notificationData: data,
+          ),
+        ),
+      );
     }
   };
 
@@ -298,10 +302,11 @@ class _MainAppState extends State<MainApp> {
         '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',
       );
       // En el método _checkInitialRoute, después de verificar el linkStatus
+      // En _checkInitialRoute, líneas 308-312
       if (linkStatus) {
       print('[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor');
       
-      // Inicializar el receptor sin mostrar notificaciones existentes
+      // CAMBIO: Inicializar el receptor ANTES de navegar
       final receptorService = ReceptorService();
       await receptorService.initializeReceptorWithoutNotifications();
       

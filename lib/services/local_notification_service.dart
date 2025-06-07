@@ -45,6 +45,7 @@ class LocalNotificationService {
     required String packageName,
     required String appName,
     required String notificationId,
+    Map<String, dynamic>? fullNotificationData, // Nuevo parámetro
   }) async {
     // Verificar si las notificaciones están habilitadas
     if (!await areNotificationsEnabled()) {
@@ -64,7 +65,8 @@ class LocalNotificationService {
     final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
     
     try {
-      await _channel.invokeMethod('showNotification', {
+      // Preparar datos completos para enviar al callback
+      final Map<String, dynamic> notificationPayload = {
         'title': title,
         'body': body,
         'packageName': packageName,
@@ -73,7 +75,11 @@ class LocalNotificationService {
         'soundEnabled': soundEnabled,
         'vibrationEnabled': vibrationEnabled,
         'autoOpenEnabled': autoOpenEnabled,
-      });
+        // Incluir todos los datos adicionales de la notificación
+        if (fullNotificationData != null) ...fullNotificationData,
+      };
+      
+      await _channel.invokeMethod('showNotification', notificationPayload);
     } catch (e) {
       print('Error al mostrar notificación: $e');
     }

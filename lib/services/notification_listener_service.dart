@@ -255,6 +255,12 @@ class NotificationListenerService {
     if (dateId == null) return;
     
     try {
+      // Verificar si es una notificación pre-existente
+      if (await NotificationCacheService.isPreExisting(notificationId)) {
+        print('NotificationListenerService: No se actualiza estado de notificación pre-existente: $notificationId');
+        return;
+      }
+      
       final deviceId = await _firebaseService.getDeviceId();
       final docRef = _firestore
           .collection('dispositivos')
