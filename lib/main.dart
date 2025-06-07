@@ -45,19 +45,23 @@ void main() async {
 void initializeNotificationHandling() {
   // Configurar el callback para manejar cuando se toca una notificación
   LocalNotificationService.onNotificationTapped = (Map<String, dynamic> data) {
-    final autoOpen = data['autoOpen'] as bool? ?? false;
+    //print('Notificación tocada: $data');
 
-    if (autoOpen) {
-      // Navegar automáticamente a la pantalla de detalle
-      Navigator.of(
-        navigatorKey.currentContext!,
-      ).pushNamed('/notification_detail', arguments: data);
+    // Siempre navegar a la pantalla de detalle cuando se toca una notificación
+    if (navigatorKey.currentContext != null) {
+      Navigator.of(navigatorKey.currentContext!).push(
+        MaterialPageRoute(
+          builder: (context) =>
+              NotificationDetailScreen(notificationData: data),
+        ),
+      );
     }
   };
 
   // Inicializar el servicio
   LocalNotificationService.initialize();
 }
+
 
 class MainApp extends StatefulWidget {
   const MainApp({super.key});
