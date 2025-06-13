@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/screens/receptor/notification_detail_screen.dart';
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
@@ -134,7 +135,18 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                             itemCount: _unreadNotifications.length,
                             itemBuilder: (context, index) {
                               final notification = _unreadNotifications[index];
-                              return Card(
+                              return 
+                              GestureDetector(
+                                onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                   NotificationDetailScreen(notificationData: notification),
+                                              ),
+                                            );
+                                          },
+                                child: Card(
                                 margin: const EdgeInsets.only(left: 5, right: 5, bottom: 5, top: 5),
                                 child: ListTile(
                                   title: Text(
@@ -176,6 +188,8 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                                     ],
                                   ),
                                 ),
+                              )
+                            
                               );
                             },
                           ),

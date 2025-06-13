@@ -10,6 +10,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:connect/services/local_notification_service.dart';
+import 'package:connect/screens/receptor/notification_detail_screen.dart';
+
 
 class NotificacionesScreen extends StatefulWidget {
   const NotificacionesScreen({Key? key}) : super(key: key);
@@ -411,7 +413,18 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                                         onDismissed: (direction) async {
                                           await _deleteNotification(notification);
                                         },
-                                        child: Card(
+                                        child: 
+                                        GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                   NotificationDetailScreen(notificationData: notification),
+                                              ),
+                                            );
+                                          },
+                                          child: Card(
                                           margin: const EdgeInsets.only(bottom: 8.0, left: 1, right: 1),
                                           child: ListTile(
                                             title: Text(notification['title'] ?? 'Sin título'),
@@ -425,6 +438,9 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                                             trailing: Text(_formatTimestamp(notification['timestamp']), style: const TextStyle(fontSize: 12)),
                                           ),
                                         ),
+                                      
+                                        ),
+                                      
                                       );
                                     }).toList(),
                                 ],
