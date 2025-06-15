@@ -258,6 +258,21 @@ class FirebaseService {
   // Método mejorado para verificar si una notificación debe ser filtrada
   bool _shouldFilterNotification(Map<String, dynamic> notification) {
     final String packageName = notification['packageName'] ?? '';
+
+    // Filtro universal: Notificaciones vacías (aplicar a todas las aplicaciones)
+    final String title = (notification['title'] ?? '').toString().trim();
+    final String text = (notification['text'] ?? '').toString().trim();
+    final String bigText = (notification['bigText'] ?? '').toString().trim();
+    final String body = (notification['body'] ?? '').toString().trim();
+    final String mensaje = (notification['mensaje'] ?? '').toString().trim();
+    final String contenido = (notification['contenido'] ?? '').toString().trim();
+    
+    // Si todos los campos de contenido están vacíos, filtrar la notificación
+    if (title.isEmpty && text.isEmpty && bigText.isEmpty && 
+        body.isEmpty && mensaje.isEmpty && contenido.isEmpty) {
+      //print('Notificación filtrada: Contenido vacío - Package: $packageName');
+      return true;
+    }
     
     // Solo aplicar filtros a WhatsApp
     if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
