@@ -9,6 +9,8 @@ import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.view.WindowManager // ✅ Agregar import
+
 
 class MainActivity: FlutterActivity() {
     // CANALES SEPARADOS PARA EMISOR Y RECEPTOR
@@ -219,27 +221,78 @@ class MainActivity: FlutterActivity() {
     }
     
     private fun handleNotificationIntent(intent: Intent?) {
-        if (intent?.action == LocalNotificationManager.NOTIFICATION_ACTION_OPEN) {
-            val notificationId = intent.getStringExtra(LocalNotificationManager.EXTRA_NOTIFICATION_DATA)
-            val title = intent.getStringExtra("title")
-            val body = intent.getStringExtra("body")
-            val packageName = intent.getStringExtra("packageName")
-            val appName = intent.getStringExtra("appName")
-            val autoOpen = intent.getBooleanExtra("autoOpen", false)
-            
-            if (notificationId != null) {
-                val notificationData = mapOf(
-                    "notificationId" to notificationId,
-                    "title" to (title ?: ""),
-                    "body" to (body ?: ""),
-                    "packageName" to (packageName ?: ""),
-                    "appName" to (appName ?: ""),
-                    "autoOpen" to autoOpen
-                )
-                
-                receptorChannel.invokeMethod("onNotificationTapped", notificationData)
-                Log.d("MainActivity", "Notificación RECEPTOR tocada, enviando datos a Flutter")
+        when (intent?.action) {
+            LocalNotificationManager.NOTIFICATION_ACTION_OPEN -> {
+                // Manejo normal cuando se toca la notificación
+                handleNormalNotificationTap(intent)
             }
+            LocalNotificationManager.NOTIFICATION_ACTION_AUTO_OPEN -> {
+                // ✅ Manejo especial para auto-apertura
+                handleAutoOpenNotification(intent)
+            }
+        }
+    }
+    
+    private fun handleNormalNotificationTap(intent: Intent) {
+        val notificationId = intent.getStringExtra(LocalNotificationManager.EXTRA_NOTIFICATION_DATA)
+        val title = intent.getStringExtra("title")
+        val body = intent.getStringExtra("body")
+        val packageName = intent.getStringExtra("packageName")
+        val appName = intent.getStringExtra("appName")
+        val autoOpen = intent.getBooleanExtra("autoOpen", false)
+        
+        if (notificationId != null) {
+            val notificationData = mapOf(
+                "notificationId" to notificationId,
+                "title" to (title ?: ""),
+                "body" to (body ?: ""),
+                "packageName" to (packageName ?: ""),
+                "appName" to (appName ?: ""),
+                "autoOpen" to autoOpen
+            )
+            
+            receptorChannel.invokeMethod("onNotificationTapped", notificationData)
+            Log.d("MainActivity", "Notificación RECEPTOR tocada, enviando datos a Flutter")
+        }
+    }
+    
+    // ✅ Nuevo método para manejar auto-apertura
+    private fun handleAutoOpenNotification(intent: Intent) {
+        if (intent?.action == LocalNotificationManager.NOTIFICATION_ACTION_AUTO_OPEN) {
+            Log.d("MainActivity", "Setting window flags to show over lock screen")
+            try {
+                window.addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+                Log.d("MainActivity", "Window flags set successfully")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error setting window flags", e)
+            }
+        }
+
+        val notificationId = intent.getStringExtra(LocalNotificationManager.EXTRA_NOTIFICATION_DATA)
+        val title = intent.getStringExtra("title")
+        val body = intent.getStringExtra("body")
+        val packageName = intent.getStringExtra("packageName")
+        val appName = intent.getStringExtra("appName")
+        
+        if (notificationId != null) {
+            val notificationData = mapOf(
+                "notificationId" to notificationId,
+                "title" to (title ?: ""),
+                "body" to (body ?: ""),
+                "packageName" to (packageName ?: ""),
+                "appName" to (appName ?: ""),
+                "autoOpen" to true,
+                "isAutoOpened" to true // ✅ Indicador especial para auto-apertura
+            )
+            
+            // ✅ Usar método especial para auto-apertura
+            receptorChannel.invokeMethod("onNotificationAutoOpened", notificationData)
+            Log.d("MainActivity", "Notificación RECEPTOR auto-abierta, enviando datos a Flutter")
         }
     }
 

@@ -5,14 +5,13 @@ import 'package:intl/intl.dart';
 
 class NotificationDetailScreen extends StatefulWidget {
   final Map<String, dynamic> notificationData;
-  
-  const NotificationDetailScreen({
-    Key? key,
-    required this.notificationData,
-  }) : super(key: key);
+
+  const NotificationDetailScreen({Key? key, required this.notificationData})
+    : super(key: key);
 
   @override
-  State<NotificationDetailScreen> createState() => _NotificationDetailScreenState();
+  State<NotificationDetailScreen> createState() =>
+      _NotificationDetailScreenState();
 }
 
 class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
@@ -27,15 +26,19 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
 
   Future<void> _markAsRead() async {
     if (_isMarkingAsRead) return;
-    
+
     setState(() {
       _isMarkingAsRead = true;
     });
-    
+
     try {
-      final notificationId = widget.notificationData['notificationId'] as String?;
+      final notificationId =
+          widget.notificationData['notificationId'] as String?;
       if (notificationId != null) {
-        await _receptorService.updateNotificationVisualizationStatus(notificationId, true);
+        await _receptorService.updateNotificationVisualizationStatus(
+          notificationId,
+          true,
+        );
         //print('Notificación marcada como leída: $notificationId');
       }
     } catch (e) {
@@ -51,18 +54,22 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   Widget build(BuildContext context) {
     // Extraer datos de diferentes campos posibles
     final title = _getFieldValue(['title', 'titulo']) ?? 'Sin título';
-    final body = _getFieldValue(['text', 'body', 'bigText', 'mensaje', 'contenido']) ?? 'Sin contenido';
-    final appName = _getFieldValue(['appName', 'aplicacion']) ?? 'Aplicación desconocida';
+    final body =
+        _getFieldValue(['text', 'body', 'bigText', 'mensaje', 'contenido']) ??
+        'Sin contenido';
+    final appName =
+        _getFieldValue(['appName', 'aplicacion']) ?? 'Aplicación desconocida';
     final packageName = _getFieldValue(['packageName', 'paquete']) ?? '';
     final subText = _getFieldValue(['subText', 'subtexto']);
     final summaryText = _getFieldValue(['summaryText', 'resumen']);
     final infoText = _getFieldValue(['infoText', 'info']);
     final contentInfo = _getFieldValue(['contentInfo', 'infoContenido']);
-    
+
     // Intentar obtener timestamp si está disponible
     String formattedTime = 'Hora no disponible';
     try {
-      final notificationId = widget.notificationData['notificationId'] as String?;
+      final notificationId =
+          widget.notificationData['notificationId'] as String?;
       if (notificationId != null) {
         final timestamp = int.tryParse(notificationId.split('_')[0]);
         if (timestamp != null) {
@@ -85,41 +92,6 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Información de la aplicación
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.apps,
-                          color: customColor[700],
-                          size: 24,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Información de la Aplicación',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildInfoRow('Aplicación:', appName),
-                    // _buildInfoRow('Paquete:', packageName),
-                    _buildInfoRow('Fecha y Hora:', formattedTime),
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
             // Contenido principal de la notificación
             Card(
               child: Padding(
@@ -129,11 +101,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          Icons.message,
-                          color: customColor[700],
-                          size: 24,
-                        ),
+                        Icon(Icons.message, color: customColor[700], size: 24),
                         const SizedBox(width: 8),
                         const Text(
                           'Contenido Principal',
@@ -145,7 +113,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    
+
                     _buildContentField('Título', title),
                     const SizedBox(height: 12),
                     _buildContentField('Mensaje', body),
@@ -153,12 +121,13 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                 ),
               ),
             ),
-            
+            const SizedBox(height: 16),
+
             // Contenido adicional (solo si existe)
-            if (subText != null || summaryText != null || infoText != null || contentInfo != null)
-              const SizedBox(height: 16),
-            
-            if (subText != null || summaryText != null || infoText != null || contentInfo != null)
+            if (subText != null ||
+                summaryText != null ||
+                infoText != null ||
+                contentInfo != null)
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -183,7 +152,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      
+
                       if (subText != null) ...[
                         _buildContentField('Subtexto', subText),
                         const SizedBox(height: 8),
@@ -203,9 +172,38 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   ),
                 ),
               ),
-            
             const SizedBox(height: 16),
-            
+            // Información de la aplicación
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.apps, color: customColor[700], size: 24),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Información de la Aplicación',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildInfoRow('Aplicación:', appName),
+                    // _buildInfoRow('Paquete:', packageName),
+                    _buildInfoRow('Fecha y Hora:', formattedTime),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             // Estado de lectura
             if (_isMarkingAsRead)
               Card(
@@ -230,11 +228,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 20,
-                      ),
+                      Icon(Icons.check_circle, color: Colors.green, size: 20),
                       const SizedBox(width: 12),
                       const Text(
                         'Notificación marcada como leída',
@@ -252,7 +246,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       ),
     );
   }
-  
+
   // Método auxiliar para obtener valores de diferentes campos
   String? _getFieldValue(List<String> fieldNames) {
     for (final fieldName in fieldNames) {
@@ -263,7 +257,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     }
     return null;
   }
-  
+
   // Método auxiliar para construir campos de contenido
   Widget _buildContentField(String label, String content) {
     return Container(
@@ -286,17 +280,12 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            content,
-            style: const TextStyle(
-              fontSize: 16,
-            ),
-          ),
+          Text(content, style: const TextStyle(fontSize: 16)),
         ],
       ),
     );
   }
-  
+
   Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -313,12 +302,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
               ),
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 16),
-            ),
-          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 16))),
         ],
       ),
     );

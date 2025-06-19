@@ -6,6 +6,7 @@ import 'dart:math';
 
 class FirebaseService {
   static const String _deviceIdKey = 'device_id';
+  static const String _lastNotificationKey = 'last_notification_hash';
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Método para obtener o generar el ID del dispositivo
@@ -385,11 +386,56 @@ class FirebaseService {
     return false;
   }
 
+  // Método para generar un hash único de la notificación
+  String _generateNotificationHash(Map<String, dynamic> notification) {
+    // Crear un string único basado en los campos principales de la notificación
+    final String packageName = notification['packageName'] ?? '';
+    final String title = notification['title'] ?? '';
+    final String text = notification['text'] ?? '';
+    final String bigText = notification['bigText'] ?? '';
+    final String body = notification['body'] ?? '';
+    final String mensaje = notification['mensaje'] ?? '';
+    final String contenido = notification['contenido'] ?? '';
+    
+    // Combinar todos los campos relevantes
+    final String combinedContent = '$packageName|$title|$text|$bigText|$body|$mensaje|$contenido';
+    
+    // Generar hash simple (puedes usar crypto para algo más robusto)
+    return combinedContent.hashCode.toString();
+  }
+
+  // Método para verificar si la notificación es duplicada
+  Future<bool> _isDuplicateNotification(Map<String, dynamic> notification) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String currentHash = _generateNotificationHash(notification);
+      final String? lastHash = prefs.getString(_lastNotificationKey);
+      
+      if (lastHash != null && lastHash == currentHash) {
+        print('Notificación duplicada detectada: $currentHash');
+        return true;
+      }
+      
+      // Guardar el hash de la notificación actual
+      await prefs.setString(_lastNotificationKey, currentHash);
+      return false;
+    } catch (e) {
+      print('Error al verificar notificación duplicada: $e');
+      return false;
+    }
+  }
+
   // Guarda una notificación en Firebase
   Future<void> saveNotification(Map<String, dynamic> notification) async {
     // Verificar si la notificación debe ser filtrada
     if (_shouldFilterNotification(notification)) {
       print('Notificación filtrada, no se guardará en Firebase');
+      return;
+    }
+
+    // Verificar si es una notificación duplicada
+    if (await _isDuplicateNotification(notification)) {
+      print('Notificación duplicada, no se guardará en Firebase');
       return;
     }
 

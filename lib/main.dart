@@ -1,6 +1,7 @@
 import 'package:connect/screens/receptor/notification_detail_screen.dart';
 import 'package:connect/screens/receptor/receptor_screen.dart';
-import 'package:connect/screens/receptor/notificaciones_screen.dart'; // Añadir esta importación
+import 'package:connect/screens/receptor/notificaciones_screen.dart';
+import 'package:connect/screens/receptor/notification_detail_screen.dart'; // ✅ Asegurar importación
 import 'package:connect/services/notification_filter_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/services/receptor_service.dart';
@@ -45,15 +46,33 @@ void main() async {
 void initializeNotificationHandling() {
   // Configurar el callback para manejar cuando se toca una notificación
   LocalNotificationService.onNotificationTapped = (Map<String, dynamic> data) {
-    //print('Notificación tocada: $data');
+    print('Notificación tocada: $data');
 
-    // Siempre navegar a la pantalla de detalle cuando se toca una notificación
+    // Navegar a la pantalla de detalle cuando se toca una notificación
     if (navigatorKey.currentContext != null) {
       Navigator.of(navigatorKey.currentContext!).push(
         MaterialPageRoute(
           builder: (context) =>
               NotificationDetailScreen(notificationData: data),
         ),
+      );
+    }
+  };
+  
+  // ✅ Configurar callback para auto-apertura
+  LocalNotificationService.onNotificationAutoOpened = (Map<String, dynamic> data) {
+    print('Notificación auto-abierta: $data');
+
+    // Navegar directamente a la pantalla de detalle para auto-apertura
+    if (navigatorKey.currentContext != null) {
+      // ✅ Usar pushAndRemoveUntil para asegurar que se muestre la pantalla
+      Navigator.of(navigatorKey.currentContext!).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => NotificationDetailScreen(
+            notificationData: data,
+          ),
+        ),
+        (route) => route.isFirst, // Mantener solo la pantalla principal
       );
     }
   };

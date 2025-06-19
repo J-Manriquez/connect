@@ -16,6 +16,7 @@ class LocalNotificationManager(private val context: Context) {
         private const val CHANNEL_NAME = "Notificaciones del Receptor"
         private const val CHANNEL_DESCRIPTION = "Canal para mostrar notificaciones recibidas en el receptor"
         const val NOTIFICATION_ACTION_OPEN = "OPEN_NOTIFICATION"
+        const val NOTIFICATION_ACTION_AUTO_OPEN = "AUTO_OPEN_NOTIFICATION" // ✅ Nueva acción
         const val EXTRA_NOTIFICATION_DATA = "notification_data"
         
         // Usar un conjunto para rastrear notificaciones canceladas por el usuario
@@ -63,7 +64,12 @@ class LocalNotificationManager(private val context: Context) {
                 return
             }
             
-            // Intent para abrir la aplicación
+            // ✅ Si auto-apertura está habilitada, abrir la app inmediatamente
+            if (autoOpenEnabled) {
+                openAppAutomatically(title, body, packageName, appName, notificationId)
+            }
+            
+            // Intent para abrir la aplicación (cuando se toca la notificación)
             val launchIntent = Intent(context, MainActivity::class.java).apply {
                 action = NOTIFICATION_ACTION_OPEN
                 putExtra(EXTRA_NOTIFICATION_DATA, notificationId)
@@ -95,7 +101,7 @@ class LocalNotificationManager(private val context: Context) {
                 .setContentIntent(pendingLaunchIntent)
                 .setAutoCancel(true)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setDeleteIntent(createDeleteIntent(notificationId)) // Agregar intent para detectar eliminación
+                .setDeleteIntent(createDeleteIntent(notificationId))
             
             // Configurar sonido y vibración según las preferencias
             if (soundEnabled) {
@@ -112,6 +118,44 @@ class LocalNotificationManager(private val context: Context) {
             
         } catch (e: Exception) {
             Log.e("LocalNotificationManager", "Error al mostrar notificación", e)
+        }
+    }
+    
+    // ✅ Nuevo método para abrir la app automáticamente
+    private fun openAppAutomatically(
+        title: String,
+        body: String,
+        packageName: String,
+        appName: String,
+        notificationId: String
+    ) {
+        try {
+            Log.d("LocalNotificationManager", "Abriendo app automáticamente para notificación: $notificationId")
+            
+            // Intent para abrir la aplicación con auto-apertura
+            val autoOpenIntent = Intent(context, MainActivity::class.java).apply {
+                action = NOTIFICATION_ACTION_AUTO_OPEN
+                putExtra(EXTRA_NOTIFICATION_DATA, notificationId)
+                putExtra("title", title)
+                putExtra("body", body)
+                putExtra("packageName", packageName)
+                putExtra("appName", appName)
+                putExtra("autoOpen", true)
+                // ✅ Flags importantes para abrir desde cualquier estado
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                       Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                       Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                       Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
+            }
+            
+            // Iniciar la actividad inmediatamente
+            context.startActivity(autoOpenIntent)
+            
+            Log.d("LocalNotificationManager", "App abierta automáticamente")
+
+            
+        } catch (e: Exception) {
+            Log.e("LocalNotificationManager", "Error al abrir app automáticamente", e)
         }
     }
     

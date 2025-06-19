@@ -227,4 +227,105 @@ class AppListService(private val context: Context) {
             return ""
         }
     }
+    
+    // Modificar el método para guardar sin iconos y con paginación
+    private fun saveAppsToSharedPreferences(apps: List<Map<String, Any>>) {
+        val sharedPreferences = context.getSharedPreferences("app_list", Context.MODE_PRIVATE)
+        val editor = sharedPreferences.edit()
+        
+        try {
+            // Guardar solo información esencial (sin iconos)
+            val essentialApps = apps.map { app ->
+                mapOf(
+                    "packageName" to app["packageName"],
+                    "appName" to app["appName"]
+                    // Remover "icon" para reducir tamaño
+                )
+            }
+            
+            // Dividir en chunks para evitar límites de tamaño
+            val chunkSize = 100
+            val chunks = essentialApps.chunked(chunkSize)
+            
+            // Guardar número total de chunks
+            editor.putInt("total_chunks", chunks.size)
+            editor.putInt("total_apps", apps.size)
+            
+            // Guardar cada chunk por separado
+            chunks.forEachIndexed { index, chunk ->
+                val jsonArray = JSONArray()
+                for (app in chunk) {
+                    val jsonObject = JSONObject()
+                    jsonObject.put("packageName", app["packageName"])
+                    jsonObject.put("appName", app["appName"])
+                    jsonArray.put(jsonObject)
+                }
+                editor.putString("apps_chunk_$index", jsonArray.toString())
+            }
+            
+            // Guardar timestamp
+            editor.putLong("last_update", System.currentTimeMillis())
+            editor.apply()
+            
+            Log.d("AppListService", "Guardadas ${apps.size} aplicaciones en ${chunks.size} chunks")
+        } catch (e: Exception) {
+            Log.e("AppListService", "Error al guardar aplicaciones", e)
+        }
+    }
+    
+    // Modificar el método para cargar desde chunks
+    private fun loadAppsFromSharedPreferences(): List<Map<String, Any>> {
+        val sharedPreferences = context.getSharedPreferences("app_list", Context.MODE_PRIVATE)
+        val apps = mutableListOf<Map<String, Any>>()
+        
+        try {
+            val totalChunks = sharedPreferences.getInt("total_chunks", 0)
+            
+            if (totalChunks == 0) {
+                Log.d("AppListService", "No hay chunks guardados")
+                return emptyList()
+            }
+            
+            // Cargar cada chunk
+            for (i in 0 until totalChunks) {
+                val chunkJson = sharedPreferences.getString("apps_chunk_$i", null)
+                if (chunkJson != null) {
+                    val jsonArray = JSONArray(chunkJson)
+                    for (j in 0 until jsonArray.length()) {
+                        val jsonObject = jsonArray.getJSONObject(j)
+                        val packageName = jsonObject.getString("packageName")
+                        val appName = jsonObject.getString("appName")
+                        
+                        // Generar icono dinámicamente cuando se necesite
+                        val icon = getAppIcon(packageName)
+                        
+                        apps.add(mapOf(
+                            "packageName" to packageName,
+                            "appName" to appName,
+                            "icon" to icon
+                        ))
+                    }
+                }
+            }
+            
+            Log.d("AppListService", "Cargadas ${apps.size} aplicaciones desde chunks")
+        } catch (e: Exception) {
+            Log.e("AppListService", "Error al cargar aplicaciones desde chunks", e)
+        }
+        
+        return apps
+    }
+    
+    // Nuevo método para obtener icono dinámicamente
+    private fun getAppIcon(packageName: String): String {
+        return try {
+            val packageManager = context.packageManager
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            val drawable = packageManager.getApplicationIcon(appInfo)
+            drawableToBase64(drawable)
+        } catch (e: Exception) {
+            Log.e("AppListService", "Error al obtener icono para $packageName", e)
+            "" // Retornar string vacío si no se puede obtener el icono
+        }
+    }
 }

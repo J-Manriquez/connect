@@ -11,6 +11,7 @@ class ReceptorService {
 
   // Clave para almacenar el ID del dispositivo emisor vinculado
   static const String KEY_LINKED_DEVICE_ID = 'linked_device_id';
+  static const String _lastNotificationKey = 'receptor_last_notification_hash';
 
   // Verificar si un código de vinculación existe en Firestore
   Future<String?> verifyLinkCode(String code) async {
@@ -376,6 +377,41 @@ class ReceptorService {
   }
 
 
+  // Método para generar un hash único de la notificación (mismo que en FirebaseService)
+  String _generateNotificationHash(Map<String, dynamic> notification) {
+    final String packageName = notification['packageName'] ?? '';
+    final String title = notification['title'] ?? '';
+    final String text = notification['text'] ?? '';
+    final String bigText = notification['bigText'] ?? '';
+    final String body = notification['body'] ?? '';
+    final String mensaje = notification['mensaje'] ?? '';
+    final String contenido = notification['contenido'] ?? '';
+    
+    final String combinedContent = '$packageName|$title|$text|$bigText|$body|$mensaje|$contenido';
+    return combinedContent.hashCode.toString();
+  }
+
+  // Método para verificar si la notificación es duplicada en el receptor
+  Future<bool> _isDuplicateNotification(Map<String, dynamic> notification) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final String currentHash = _generateNotificationHash(notification);
+      final String? lastHash = prefs.getString(_lastNotificationKey);
+      
+      if (lastHash != null && lastHash == currentHash) {
+        print('Notificación duplicada detectada en receptor: $currentHash');
+        return true;
+      }
+      
+      // Guardar el hash de la notificación actual
+      await prefs.setString(_lastNotificationKey, currentHash);
+      return false;
+    } catch (e) {
+      print('Error al verificar notificación duplicada en receptor: $e');
+      return false;
+    }
+  }
+
   // Método actualizado para mostrar notificaciones locales
   void _showLocalNotificationIfNew(
     Map<String, dynamic> notificationData,
@@ -384,6 +420,12 @@ class ReceptorService {
     // Verificar si la notificación debe ser filtrada
     if (_shouldFilterNotification(notificationData)) {
       print('Notificación filtrada en receptor: $notificationId');
+      return;
+    }
+
+    // Verificar si es una notificación duplicada
+    if (await _isDuplicateNotification(notificationData)) {
+      print('Notificación duplicada en receptor, no se mostrará: $notificationId');
       return;
     }
 

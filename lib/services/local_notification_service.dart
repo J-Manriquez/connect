@@ -14,10 +14,8 @@ class LocalNotificationService {
   // Callback para manejar cuando se toca una notificación
   static Function(Map<String, dynamic>)? onNotificationTapped;
   
-  // Inicializar el servicio de notificaciones
-  static Future<void> initialize() async {
-    _channel.setMethodCallHandler(_handleMethodCall);
-  }
+  // ✅ Nuevo callback para manejar auto-apertura
+  static Function(Map<String, dynamic>)? onNotificationAutoOpened;
   
   // Manejar llamadas desde el código nativo
   static Future<void> _handleMethodCall(MethodCall call) async {
@@ -28,6 +26,12 @@ class LocalNotificationService {
           onNotificationTapped!(data);
         }
         break;
+      case 'onNotificationAutoOpened': // ✅ Nuevo caso
+        if (onNotificationAutoOpened != null) {
+          final Map<String, dynamic> data = Map<String, dynamic>.from(call.arguments);
+          onNotificationAutoOpened!(data);
+        }
+        break;
       case 'onNotificationDismissed':
         final Map<String, dynamic> data = Map<String, dynamic>.from(call.arguments);
         final String notificationId = data['notificationId'] ?? '';
@@ -36,6 +40,11 @@ class LocalNotificationService {
         }
         break;
     }
+  }
+  
+  // Inicializar el servicio de notificaciones
+  static Future<void> initialize() async {
+    _channel.setMethodCallHandler(_handleMethodCall);
   }
   
   // Mostrar una notificación (método modificado)

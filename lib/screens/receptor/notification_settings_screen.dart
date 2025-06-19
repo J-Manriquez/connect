@@ -14,6 +14,7 @@ class _NotificationSettingsScreenState
     extends State<NotificationSettingsScreen> {
   bool _soundEnabled = true;
   bool _vibrationEnabled = true;
+  bool _autoOpenEnabled = false; // ✅ Agregar variable para auto-apertura
   bool _isLoading = true;
 
   @override
@@ -30,10 +31,12 @@ class _NotificationSettingsScreenState
     final soundEnabled = await LocalNotificationService.isSoundEnabled();
     final vibrationEnabled =
         await LocalNotificationService.isVibrationEnabled();
+    final autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled(); // ✅ Cargar configuración
 
     setState(() {
       _soundEnabled = soundEnabled;
       _vibrationEnabled = vibrationEnabled;
+      _autoOpenEnabled = autoOpenEnabled; // ✅ Asignar valor
       _isLoading = false;
     });
   }
@@ -51,6 +54,14 @@ class _NotificationSettingsScreenState
       _vibrationEnabled = value;
     });
   }
+
+  // // ✅ Agregar método para toggle de auto-apertura
+  // Future<void> _toggleAutoOpen(bool value) async {
+  //   await LocalNotificationService.setAutoOpenEnabled(value);
+  //   setState(() {
+  //     _autoOpenEnabled = value;
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +98,24 @@ class _NotificationSettingsScreenState
                   inactiveTrackColor: customColor[200],
                   inactiveThumbColor: Colors.grey[300],
                 ),
+                const SizedBox(height: 24), // ✅ Separador
+                // const Text(
+                //   'Opciones de Apertura Automática',
+                //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                // ),
+                // const SizedBox(height: 8),
+                // // ✅ Agregar switch para auto-apertura
+                // SwitchListTile(
+                //   title: const Text('Abrir Aplicación Automáticamente'),
+                //   subtitle: const Text(
+                //     'Abrir la app y mostrar el detalle cuando llega una notificación',
+                //   ),
+                //   value: _autoOpenEnabled,
+                //   onChanged: _toggleAutoOpen,
+                //   activeColor: Colors.green,
+                //   inactiveTrackColor: customColor[200],
+                //   inactiveThumbColor: Colors.grey[300],
+                // ),
               ],
             ),
     );
