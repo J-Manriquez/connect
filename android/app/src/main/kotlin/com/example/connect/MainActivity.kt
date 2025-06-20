@@ -101,7 +101,7 @@ class MainActivity: FlutterActivity() {
             }
         }
         
-        // Configurar el manejador para el canal de lista de aplicaciones
+        // En la sección donde se configura el manejador para el canal de lista de aplicaciones
         appListChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getInstalledApps" -> {
@@ -122,6 +122,27 @@ class MainActivity: FlutterActivity() {
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al obtener aplicaciones desde el sistema", e)
                         result.error("ERROR", "Error al obtener aplicaciones: ${e.message}", null)
+                    }
+                }
+                "searchAppByPackage" -> {
+                    try {
+                        val packageName = call.argument<String>("packageName")
+                        
+                        if (packageName != null) {
+                            val app = appListService.searchAppByPackage(packageName)
+                            if (app != null) {
+                                result.success(app)
+                                Log.d("MainActivity", "Aplicación encontrada: $packageName")
+                            } else {
+                                result.success(null) // Devolver null si no se encuentra
+                                Log.d("MainActivity", "Aplicación no encontrada: $packageName")
+                            }
+                        } else {
+                            result.error("INVALID_ARGS", "Nombre de paquete no proporcionado", null)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al buscar aplicación", e)
+                        result.error("ERROR", "Error al buscar aplicación: ${e.message}", null)
                     }
                 }
                 "getLastUpdateDate" -> {
@@ -159,6 +180,15 @@ class MainActivity: FlutterActivity() {
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al obtener paquetes habilitados", e)
                         result.error("ERROR", "Error al obtener paquetes habilitados: ${e.message}", null)
+                    }
+                }
+                "getAllowedSystemPackages" -> {
+                    try {
+                        result.success(AppListService.ALLOWED_SYSTEM_PACKAGES)
+                        Log.d("MainActivity", "Enviados ${AppListService.ALLOWED_SYSTEM_PACKAGES.size} paquetes del sistema permitidos")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al obtener paquetes del sistema permitidos", e)
+                        result.error("ERROR", "Error al obtener paquetes permitidos: ${e.message}", null)
                     }
                 }
                 else -> {

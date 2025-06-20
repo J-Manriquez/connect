@@ -25,9 +25,95 @@ class AppListService(private val context: Context) {
         private const val KEY_LAST_UPDATE = "last_update"
         private const val KEY_STATUS = "status_list_apps"
         private const val KEY_ENABLED_PACKAGES = "enabled_packages"
+        private const val KEY_CUSTOM_PACKAGES = "custom_packages"
+        
+        // Lista de paquetes de aplicaciones del sistema que queremos incluir
+        val ALLOWED_SYSTEM_PACKAGES = listOf(
+            "com.google.android.gm",           // Gmail
+            "com.google.android.apps.messaging", // Mensajes de Google
+            "com.android.messaging",           // Mensajes (AOSP)
+            "com.android.dialer",             // Teléfono (AOSP)
+            "com.google.android.dialer",      // Teléfono de Google
+            "com.android.phone",              // Servicio de telefonía
+            "com.samsung.android.messaging",  // Mensajes Samsung
+            "com.samsung.android.dialer",     // Teléfono Samsung
+            "com.android.mms",                // MMS
+            "com.android.contacts",           // Contactos
+            "com.google.android.contacts",    // Contactos de Google
+            "com.samsung.android.contacts",   // Contactos Samsung
+            "com.android.calendar",           // Calendario
+            "com.google.android.calendar"     // Calendario de Google
+        )
     }
     
     private val sharedPreferences: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    
+    // Nuevo método para buscar una aplicación por su paquete
+    fun searchAppByPackage(packageName: String): Map<String, Any>? {
+        try {
+            val packageManager = context.packageManager
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            
+            val appName = packageManager.getApplicationLabel(appInfo).toString()
+            val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            
+            // Convertir el icono a Base64
+            val iconDrawable = packageManager.getApplicationIcon(appInfo)
+            val iconBase64 = drawableToBase64(iconDrawable)
+            
+            // Verificar si la aplicación ya estaba habilitada
+            val enabledPackages = getEnabledPackages()
+            val isEnabled = enabledPackages.contains(packageName)
+            
+            // Crear el mapa con la información de la aplicación
+            val appMap = mapOf(
+                "appName" to appName,
+                "packageName" to packageName,
+                "isSystemApp" to isSystemApp,
+                "icon" to iconBase64,
+                "isEnabled" to isEnabled
+            )
+            
+            // Añadir a la lista de aplicaciones si no existe
+            addAppToList(appMap)
+            
+            return appMap
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.e(TAG, "Aplicación no encontrada: $packageName", e)
+            return null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error al buscar aplicación: $packageName", e)
+            return null
+        }
+    }
+    
+    // Método para añadir una aplicación a la lista si no existe
+    private fun addAppToList(appMap: Map<String, Any>) {
+        val packageName = appMap["packageName"] as String
+        
+        // Cargar las aplicaciones actuales
+        val apps = loadAppsFromPrefs().toMutableList()
+        
+        // Verificar si la aplicación ya existe en la lista
+        val appExists = apps.any { it["packageName"] == packageName }
+        
+        if (!appExists) {
+            // Añadir la aplicación a la lista
+            apps.add(appMap)
+            
+            // Guardar la lista actualizada
+            saveAppsToPrefs(apps)
+            
+            Log.d(TAG, "Aplicación añadida a la lista: $packageName")
+            
+            // Notificar a Flutter para sincronizar con Firebase
+            MainActivity.instance?.let { activity ->
+                if (activity is MainActivity) {
+                    activity.notifyAppListUpdated()
+                }
+            }
+        }
+    }
     
     // Obtener todas las aplicaciones instaladas
     fun getInstalledApps(): List<Map<String, Any>> {
@@ -44,6 +130,7 @@ class AppListService(private val context: Context) {
     }
     
     // Cargar aplicaciones desde el sistema
+    // Cargar aplicaciones desde el sistema
     fun loadAppsFromSystem(): List<Map<String, Any>> {
         val packageManager = context.packageManager
         val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
@@ -51,7 +138,41 @@ class AppListService(private val context: Context) {
         // Cargar los paquetes habilitados existentes
         val enabledPackages = getEnabledPackages()
         
-        val appsList = installedApps.map { appInfo ->
+        val filteredApps = installedApps.filter { appInfo ->
+            val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            
+            // Incluir la app si:
+            // 1. No es una app del sistema (app de terceros)
+            // 2. O es una app del sistema pero está en nuestra lista de permitidas
+            val shouldInclude = !isSystemApp || (isSystemApp && ALLOWED_SYSTEM_PACKAGES.contains(appInfo.packageName))
+            
+            // Log para debug
+            if (isSystemApp && ALLOWED_SYSTEM_PACKAGES.contains(appInfo.packageName)) {
+                Log.d(TAG, "Aplicación del sistema permitida encontrada: ${appInfo.packageName}")
+            }
+            
+            shouldInclude
+        }
+        
+        Log.d(TAG, "Total de apps instaladas: ${installedApps.size}, Filtradas: ${filteredApps.size}")
+        
+        // Separar aplicaciones del sistema permitidas y aplicaciones de terceros
+        val systemApps = filteredApps.filter { appInfo ->
+            val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            isSystemApp && ALLOWED_SYSTEM_PACKAGES.contains(appInfo.packageName)
+        }
+        
+        val thirdPartyApps = filteredApps.filter { appInfo ->
+            val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            !isSystemApp
+        }
+        
+        Log.d(TAG, "Aplicaciones del sistema permitidas: ${systemApps.size}, Aplicaciones de terceros: ${thirdPartyApps.size}")
+        
+        // Crear la lista combinada: primero las del sistema permitidas, luego las de terceros
+        val combinedApps = systemApps + thirdPartyApps
+        
+        val appsList = combinedApps.map { appInfo ->
             val appName = packageManager.getApplicationLabel(appInfo).toString()
             val packageName = appInfo.packageName
             val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
@@ -70,7 +191,7 @@ class AppListService(private val context: Context) {
                 "icon" to iconBase64,
                 "isEnabled" to isEnabled
             )
-        }.sortedBy { it["appName"] as String }
+        }
         
         // Guardar en SharedPreferences
         saveAppsToPrefs(appsList)
