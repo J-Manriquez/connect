@@ -4,6 +4,12 @@ class DismissedNotificationsService {
   static const String _keyDismissedNotifications = 'dismissed_notifications';
   static const String _keyDismissedTimestamp = 'dismissed_timestamp';
   
+  // ✅ Nuevo método público para obtener la lista de notificaciones eliminadas
+  static Future<List<String>> getDismissedNotificationIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_keyDismissedNotifications) ?? [];
+  }
+  
   // Marcar una notificación como eliminada
   static Future<void> markAsDismissed(String notificationId) async {
     final prefs = await SharedPreferences.getInstance();

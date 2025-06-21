@@ -233,10 +233,40 @@ class MainActivity: FlutterActivity() {
                         result.error("ERROR", "Error al cancelar notificación: ${e.message}", null)
                     }
                 }
+                "syncCancelledNotifications" -> {
+                    try {
+                        val cancelledIds = call.argument<List<String>>("cancelledIds") ?: emptyList()
+                        
+                        // Limpiar la lista actual y agregar las IDs desde Flutter
+                        LocalNotificationManager.clearCancelledNotifications()
+                        cancelledIds.forEach { id ->
+                            LocalNotificationManager.addToCancelledNotifications(id)
+                        }
+                        
+                        result.success(true)
+                        Log.d("MainActivity", "Sincronizadas ${cancelledIds.size} notificaciones canceladas desde Flutter")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al sincronizar notificaciones canceladas", e)
+                        result.error("ERROR", "Error al sincronizar: ${e.message}", null)
+                    }
+                }
                 else -> {
                     result.notImplemented()
                 }
             }
+        }
+    }
+
+
+    // ✅ Método público para notificar a Flutter sobre notificaciones eliminadas
+    fun notifyNotificationDismissed(notificationId: String) {
+        try {
+            receptorChannel.invokeMethod("onNotificationDismissed", mapOf(
+                "notificationId" to notificationId
+            ))
+            Log.d("MainActivity", "Notificación eliminada comunicada a Flutter: $notificationId")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error al comunicar eliminación de notificación a Flutter", e)
         }
     }
     
@@ -351,4 +381,5 @@ class MainActivity: FlutterActivity() {
     fun notifyAppListUpdated() {
         appListChannel.invokeMethod("onAppListUpdated", null)
     }
+    
 }

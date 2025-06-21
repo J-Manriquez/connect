@@ -16,11 +16,28 @@ class LocalNotificationManager(private val context: Context) {
         private const val CHANNEL_NAME = "Notificaciones del Receptor"
         private const val CHANNEL_DESCRIPTION = "Canal para mostrar notificaciones recibidas en el receptor"
         const val NOTIFICATION_ACTION_OPEN = "OPEN_NOTIFICATION"
-        const val NOTIFICATION_ACTION_AUTO_OPEN = "AUTO_OPEN_NOTIFICATION" // ✅ Nueva acción
+        const val NOTIFICATION_ACTION_AUTO_OPEN = "AUTO_OPEN_NOTIFICATION"
         const val EXTRA_NOTIFICATION_DATA = "notification_data"
         
-        // Usar un conjunto para rastrear notificaciones canceladas por el usuario
+        // ✅ Hacer el conjunto público para acceso desde NotificationDeleteReceiver
         private val cancelledNotifications = mutableSetOf<String>()
+        
+        // ✅ Método público para agregar notificaciones canceladas
+        fun addToCancelledNotifications(notificationId: String) {
+            cancelledNotifications.add(notificationId)
+            Log.d("LocalNotificationManager", "Notificación agregada a canceladas: $notificationId")
+        }
+        
+        // ✅ Método público para verificar si una notificación está cancelada
+        fun isNotificationCancelled(notificationId: String): Boolean {
+            return cancelledNotifications.contains(notificationId)
+        }
+        
+        // ✅ Método público para limpiar notificaciones canceladas
+        fun clearCancelledNotifications() {
+            cancelledNotifications.clear()
+            Log.d("LocalNotificationManager", "Lista de notificaciones canceladas limpiada")
+        }
     }
     
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

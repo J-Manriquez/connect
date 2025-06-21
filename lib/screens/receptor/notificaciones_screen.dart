@@ -36,8 +36,20 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   void initState() {
     super.initState();
     _loadLinkedDevice();
-    _loadNotificationSettings(); // Load initial state for the toggle
+    _loadNotificationSettings();
     _startListeningForReadNotifications();
+    
+    // ✅ Sincronizar notificaciones canceladas al inicializar
+    _syncCancelledNotifications();
+  }
+  
+  // ✅ Nuevo método para sincronizar notificaciones canceladas
+  Future<void> _syncCancelledNotifications() async {
+    try {
+      await LocalNotificationService.syncCancelledNotificationsWithAndroid();
+    } catch (e) {
+      print('Error al sincronizar notificaciones canceladas: $e');
+    }
   }
 
   // Load initial state for the notification toggle

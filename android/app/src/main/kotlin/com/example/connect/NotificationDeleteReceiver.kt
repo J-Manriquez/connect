@@ -11,7 +11,12 @@ class NotificationDeleteReceiver : BroadcastReceiver() {
         if (notificationId != null) {
             // Marcar la notificación como cancelada por el usuario
             Log.d("NotificationDeleteReceiver", "Usuario eliminó notificación: $notificationId")
-            // Aquí podrías comunicar de vuelta a Flutter si es necesario
+            
+            // ✅ Agregar la notificación al conjunto de canceladas en LocalNotificationManager
+            LocalNotificationManager.addToCancelledNotifications(notificationId)
+            
+            // ✅ Comunicar a Flutter que la notificación fue eliminada
+            MainActivity.instance?.notifyNotificationDismissed(notificationId)
         }
     }
 }

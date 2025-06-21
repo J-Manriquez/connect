@@ -26,7 +26,7 @@ class LocalNotificationService {
           onNotificationTapped!(data);
         }
         break;
-      case 'onNotificationAutoOpened': // ✅ Nuevo caso
+      case 'onNotificationAutoOpened':
         if (onNotificationAutoOpened != null) {
           final Map<String, dynamic> data = Map<String, dynamic>.from(call.arguments);
           onNotificationAutoOpened!(data);
@@ -37,8 +37,24 @@ class LocalNotificationService {
         final String notificationId = data['notificationId'] ?? '';
         if (notificationId.isNotEmpty) {
           await DismissedNotificationsService.markAsDismissed(notificationId);
+          print('Notificación marcada como eliminada desde Android: $notificationId');
         }
         break;
+    }
+  }
+  
+  // ✅ Método corregido para sincronizar notificaciones canceladas con Android
+  static Future<void> syncCancelledNotificationsWithAndroid() async {
+    try {
+      final dismissedList = await DismissedNotificationsService.getDismissedNotificationIds();
+      
+      await _channel.invokeMethod('syncCancelledNotifications', {
+        'cancelledIds': dismissedList,
+      });
+      
+      print('Sincronizadas ${dismissedList.length} notificaciones canceladas con Android');
+    } catch (e) {
+      print('Error al sincronizar notificaciones canceladas: $e');
     }
   }
   
