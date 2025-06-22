@@ -292,7 +292,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
-                  // ✅ AGREGAR ESTA NUEVA CARD DESPUÉS DE LAS EXISTENTES
+                  // Card Configuración de Vinculación
                   Card(
                     margin: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -318,8 +318,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
-                                      'Configurar como Emisor:',
+                                    Text(_disableAutoRedirect ?
+                                      'Configurardo como Emisor:' : 'Configurardo como Receptor:',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w500,
@@ -376,7 +376,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 // Expanded(
                                   // child:
                                    Text(
-                                    'Si la aplicacion en este dispositivo sera usada para enviar las notificaciones a otro dispositivo, debes activar esta opcion. Si no, se redirigira automaticamente al receptor cuando se cuando se conecte un dispositivo como receptor mediante el codigo.',
+                                    'Si la aplicacion en este dispositivo sera usada para enviar las notificaciones a otro dispositivo, debes activar esta opcion. Si no, te redirigira automaticamente a la pantalla vincular dispositivo cuando se cuando se conecte un dispositivo como receptor mediante el codigo.',
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: Colors.blue[700],

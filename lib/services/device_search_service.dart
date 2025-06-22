@@ -4,6 +4,8 @@ import 'package:connect/services/preferences_service.dart';
 import 'package:connect/services/device_finder_service.dart';
 import 'dart:async';
 
+import 'package:connect/services/receptor_service.dart';
+
 class DeviceSearchService {
   static final DeviceSearchService _instance = DeviceSearchService._internal();
   factory DeviceSearchService() => _instance;
@@ -12,32 +14,47 @@ class DeviceSearchService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseService _firebaseService = FirebaseService();
+  final ReceptorService _receptorService = ReceptorService();
   StreamSubscription? _searchListenerSubscription;
   bool _isListening = false;
 
   // Actualizar campo buscarEmisor en Firebase
   Future<void> updateBuscarEmisor(bool value) async {
     try {
-      final deviceId = await _firebaseService.getDeviceId();
-      await _firestore.collection('dispositivos').doc(deviceId).update({
-        'buscar-emisor': value,
+      // ✅ OBTENER EL ID DEL DISPOSITIVO VINCULADO, NO EL PROPIO
+      final linkedDeviceId = await _receptorService.getLinkedDeviceId();
+      
+      if (linkedDeviceId == null || linkedDeviceId.isEmpty) {
+        throw Exception('No hay dispositivo vinculado');
+      }
+      
+      await _firestore.collection('dispositivos').doc(linkedDeviceId).update({
+        'buscar-receptor': value,
       });
-      print('Campo buscar-emisor actualizado: $value');
+      print('Campo buscar-emisor actualizado en dispositivo vinculado: $linkedDeviceId, valor: $value');
     } catch (e) {
       print('Error al actualizar buscar-emisor: $e');
+      rethrow; // ✅ PROPAGAR EL ERROR PARA MOSTRARLO EN LA UI
     }
   }
 
   // Actualizar campo buscarReceptor en Firebase
   Future<void> updateBuscarReceptor(bool value) async {
     try {
-      final deviceId = await _firebaseService.getDeviceId();
-      await _firestore.collection('dispositivos').doc(deviceId).update({
-        'buscar-receptor': value,
+      // ✅ USAR LA NUEVA FUNCIÓN getIdVinculado EN LUGAR DE getLinkedDeviceId
+      final linkedDeviceId = await getIdVinculado();
+      
+      if (linkedDeviceId == null || linkedDeviceId.isEmpty) {
+        throw Exception('No hay dispositivo vinculado en el campo idVinculado');
+      }
+      
+      await _firestore.collection('dispositivos').doc(linkedDeviceId).update({
+        'buscar-emisor': value,
       });
-      print('Campo buscar-receptor actualizado: $value');
+      print('Campo buscar-receptor actualizado usando idVinculado: $linkedDeviceId, valor: $value');
     } catch (e) {
       print('Error al actualizar buscar-receptor: $e');
+      rethrow; // ✅ PROPAGAR EL ERROR PARA MOSTRARLO EN LA UI
     }
   }
 
@@ -47,19 +64,23 @@ class DeviceSearchService {
 
     try {
       final deviceId = await _firebaseService.getDeviceId();
-      final isUseAsReceptor = await PreferencesService.getUseAsReceptor();
+      // ❌ ELIMINAR ESTA LÍNEA - no obtener isUseAsReceptor aquí
+      // final isUseAsReceptor = await PreferencesService.getUseAsReceptor();
       
       _searchListenerSubscription = _firestore
           .collection('dispositivos')
           .doc(deviceId)
           .snapshots()
-          .listen((snapshot) {
+          .listen((snapshot) async { // ✅ HACER ASYNC
         if (snapshot.exists) {
           final data = snapshot.data() as Map<String, dynamic>;
           final buscarEmisor = data['buscar-emisor'] ?? false;
           final buscarReceptor = data['buscar-receptor'] ?? false;
           
-          _handleSearchFieldChanges(buscarEmisor, buscarReceptor, isUseAsReceptor);
+          // ✅ USAR getDisableAutoRedirect EN LUGAR DE getUseAsReceptor
+          final disableAutoRedirect = await PreferencesService.getDisableAutoRedirect();
+          
+          _handleSearchFieldChanges(buscarEmisor, buscarReceptor, disableAutoRedirect);
         }
       });
       
@@ -70,23 +91,30 @@ class DeviceSearchService {
     }
   }
 
-  // Manejar cambios en los campos de búsqueda
-  void _handleSearchFieldChanges(bool buscarEmisor, bool buscarReceptor, bool isUseAsReceptor) {
-    print('Cambio detectado - buscarEmisor: $buscarEmisor, buscarReceptor: $buscarReceptor, isUseAsReceptor: $isUseAsReceptor');
+  // ✅ CORREGIR LA LÓGICA DE ROLES
+  void _handleSearchFieldChanges(bool buscarEmisor, bool buscarReceptor, bool disableAutoRedirect) {
+    print('=== CAMBIO DETECTADO ===');
+    print('buscarEmisor: $buscarEmisor');
+    print('buscarReceptor: $buscarReceptor');
+    print('disableAutoRedirect: $disableAutoRedirect (${disableAutoRedirect ? "RECEPTOR" : "EMISOR"})');
+    print('========================');
     
-    // Si el dispositivo está configurado como emisor y buscarEmisor es true
-    if (!isUseAsReceptor && buscarEmisor) {
-      print('Activando búsqueda para dispositivo EMISOR');
+    // Si el dispositivo es EMISOR (disableAutoRedirect = false) y buscarEmisor es true
+    if (!disableAutoRedirect && buscarEmisor) {
+      print('✅ Activando búsqueda para dispositivo EMISOR');
       DeviceFinderService.instance.startDeviceSearch();
-      // Resetear el campo después de activar
       updateBuscarEmisor(false);
     }
-    // Si el dispositivo está configurado como receptor y buscarReceptor es true
-    else if (isUseAsReceptor && buscarReceptor) {
-      print('Activando búsqueda para dispositivo RECEPTOR');
+    // Si el dispositivo es RECEPTOR (disableAutoRedirect = true) y buscarReceptor es true
+    else if (disableAutoRedirect && buscarReceptor) {
+      print('✅ Activando búsqueda para dispositivo RECEPTOR');
       DeviceFinderService.instance.startDeviceSearch();
-      // Resetear el campo después de activar
       updateBuscarReceptor(false);
+    }
+    else {
+      print('❌ Ninguna condición se cumplió para activar búsqueda');
+      print('   - Dispositivo es: ${disableAutoRedirect ? "RECEPTOR" : "EMISOR"}');
+      print('   - buscarEmisor: $buscarEmisor, buscarReceptor: $buscarReceptor');
     }
   }
 
@@ -102,4 +130,25 @@ class DeviceSearchService {
 
   // Verificar si está escuchando
   bool get isListening => _isListening;
+
+  // ✅ NUEVA FUNCIÓN: Obtener el ID del dispositivo vinculado desde el campo idVinculado
+  Future<String?> getIdVinculado() async {
+    try {
+      final deviceId = await _firebaseService.getDeviceId();
+      final doc = await _firestore.collection('dispositivos').doc(deviceId).get();
+      
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        final idVinculado = data['id-vinculado'] as String?;
+        print('[DEBUG] getIdVinculado: deviceId=$deviceId, idVinculado=$idVinculado');
+        return idVinculado;
+      }
+      
+      print('[DEBUG] getIdVinculado: Documento no existe para deviceId=$deviceId');
+      return null;
+    } catch (e) {
+      print('Error al obtener idVinculado: $e');
+      return null;
+    }
+  }
 }

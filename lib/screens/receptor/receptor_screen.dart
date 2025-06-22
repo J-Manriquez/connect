@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/services/firebase_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/receptor_service.dart';
@@ -82,7 +83,18 @@ class _ReceptorScreenState extends State<ReceptorScreen> {
         return;
       }
 
-      // Guardar el ID del dispositivo emisor vinculado
+      // ✅ NUEVO: Obtener el ID del dispositivo receptor actual
+      final receptorDeviceId = await FirebaseService().getDeviceId();
+      
+      // ✅ NUEVO: Actualizar el campo idVinculado en el documento del emisor
+      await FirebaseFirestore.instance
+          .collection('dispositivos')
+          .doc(deviceId) // Este es el ID del emisor
+          .update({
+        'id-vinculado': receptorDeviceId, // Guardar el ID del receptor
+      });
+
+      // Guardar el ID del dispositivo emisor vinculado (mantener funcionalidad existente)
       final success = await _receptorService.saveLinkedDeviceId(deviceId);
       if (success) {
         // Guardar preferencia de usar como receptor

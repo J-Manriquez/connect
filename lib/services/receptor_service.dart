@@ -35,6 +35,8 @@ class ReceptorService {
     }
   }
 
+
+
   // Guardar el ID del dispositivo emisor vinculado en SharedPreferences
   Future<bool> saveLinkedDeviceId(String deviceId) async {
     try {
@@ -42,6 +44,7 @@ class ReceptorService {
       await prefs.setString(KEY_LINKED_DEVICE_ID, deviceId);
 
       await _firebaseService.updateLinkStatus(true, deviceId);
+      
 
       print('ID del dispositivo emisor guardado: $deviceId');
       return true;

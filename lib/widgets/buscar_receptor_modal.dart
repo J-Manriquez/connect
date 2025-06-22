@@ -143,11 +143,11 @@ class _BuscarReceptorModalState extends State<BuscarReceptorModal> {
         );
         
         // Cerrar el modal después de un breve delay
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            Navigator.of(context).pop();
-          }
-        });
+        // Future.delayed(const Duration(milliseconds: 500), () {
+        //   if (mounted) {
+        //     Navigator.of(context).pop();
+        //   }
+        // });
       }
     } catch (e) {
       if (mounted) {

@@ -9,6 +9,7 @@ class DeviceData {
   final bool buscarReceptor; // ✅ NUEVO CAMPO
   final List<ActualizacionData> ultimaActualizacion;
   final List<AppData> listaApps;
+  final String? idVinculado; // ✅ NUEVO CAMPO
 
   DeviceData({
     required this.id,
@@ -19,6 +20,7 @@ class DeviceData {
     this.buscarReceptor = false, // ✅ VALOR POR DEFECTO
     required this.ultimaActualizacion,
     required this.listaApps,
+    this.idVinculado, // ✅ NUEVO CAMPO    
   });
 
   factory DeviceData.fromMap(Map<String, dynamic> map) {
@@ -39,6 +41,7 @@ class DeviceData {
           (x) => AppData.fromMap(x),
         ),
       ),
+      idVinculado: map['id-vinculado']?? '', // ✅ NUEVO CAMPO
     );
   }
 
@@ -52,6 +55,7 @@ class DeviceData {
       'buscar-receptor': buscarReceptor, // ✅ NUEVO CAMPO
       'ultima-actualizacion': ultimaActualizacion.map((x) => x.toMap()).toList(),
       'lista-apps': listaApps.map((x) => x.toMap()).toList(),
+      'id-vinculado': idVinculado, // ✅ NUEVO CAMPO
     };
   }
 }
