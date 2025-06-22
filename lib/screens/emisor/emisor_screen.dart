@@ -893,20 +893,32 @@ class _EmisorScreenState extends State<EmisorScreen>
     );
   }
 }
-
 Future<void> _checkInitialRoute(BuildContext context) async {
   try {
     final receptorService = ReceptorService();
     final deviceId = await receptorService.getLinkedDeviceId();
     final linkStatus = await FirebaseService().getLinkStatus();
-    if (linkStatus) {
+    
+    // ✅ VERIFICAR SI EL BLOQUEO AUTOMÁTICO ESTÁ DESACTIVADO
+    final disableAutoRedirect = await PreferencesService.getDisableAutoRedirect();
+    
+    // Solo redirigir si está vinculado Y el bloqueo automático NO está desactivado
+    if (linkStatus && !disableAutoRedirect) {
       Navigator.pushReplacementNamed(context, '/notificaciones');
       return;
     }
+    
     final useAsReceptor = await PreferencesService.getUseAsReceptor();
-    if (useAsReceptor) {
+    // Solo redirigir si quiere usar como receptor Y el bloqueo automático NO está desactivado
+    if (useAsReceptor && !disableAutoRedirect) {
       Navigator.pushReplacementNamed(context, '/receptor');
     }
+    
+    // ✅ AGREGAR LOG PARA DEBUG
+    if (linkStatus && disableAutoRedirect) {
+      print('[DEBUG] Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor');
+    }
+    
   } catch (e, stack) {
     print('Error al verificar ruta inicial: $e');
     print('Stacktrace: $stack');

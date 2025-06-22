@@ -290,9 +290,25 @@ class ReceptorService {
   // Método mejorado para verificar si una notificación debe ser filtrada
   bool _shouldFilterNotification(Map<String, dynamic> notification) {
     final String packageName = notification['packageName'] ?? '';
+
+    // Filtro universal: Notificaciones vacías (aplicar a todas las aplicaciones)
+    final String title = (notification['title'] ?? '').toString().trim();
+    final String text = (notification['text'] ?? '').toString().trim();
+    final String bigText = (notification['bigText'] ?? '').toString().trim();
+    final String body = (notification['body'] ?? '').toString().trim();
+    final String mensaje = (notification['mensaje'] ?? '').toString().trim();
+    final String contenido = (notification['contenido'] ?? '').toString().trim();
     
-    // Solo aplicar filtros a WhatsApp
-    if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
+    // Si todos los campos de contenido están vacíos, filtrar la notificación
+    if (title.isEmpty && text.isEmpty && bigText.isEmpty && 
+        body.isEmpty && mensaje.isEmpty && contenido.isEmpty) {
+      //print('Notificación filtrada: Contenido vacío - Package: $packageName');
+      return true;
+    }
+    
+    // Solo aplicar filtros a WhatsApp e Instagram
+    if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b' || 
+        packageName == 'com.instagram.android') {
       // Recopilar TODOS los textos posibles de la notificación
       final List<String> allTexts = [
         notification['title'] ?? '',
@@ -310,6 +326,7 @@ class ReceptorService {
       
       // Combinar todos los textos y normalizar
       final String allContent = allTexts.join(' ').toLowerCase();
+      // Normalizar: remover acentos, caracteres especiales y espacios múltiples
       final String normalizedContent = allContent
           .replaceAll(RegExp(r'[áàäâ]'), 'a')
           .replaceAll(RegExp(r'[éèëê]'), 'e')
@@ -321,54 +338,143 @@ class ReceptorService {
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
       
-      // Filtros actualizados (mismo código que en FirebaseService)
-      final List<RegExp> messagePatterns = [
-        RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
-        RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
-        RegExp(r'\d+\s*nuevos?\s*mensajes?'),
-        RegExp(r'\d+\s*new\s*messages?'),
-        RegExp(r'\d+\s*mensajes?\s*nuevos?'),
-      ];
+      print('Contenido normalizado para filtro: "$normalizedContent"');
       
-      for (final pattern in messagePatterns) {
-        if (pattern.hasMatch(normalizedContent)) {
-          return true;
+      // Filtros específicos para Instagram
+      if (packageName == 'com.instagram.android') {
+        // Filtro 1: Subida de contenido multimedia
+        final List<String> uploadKeywords = [
+          'subiendo contenido multimedia',
+          'uploading media content',
+          'subiendo contenido',
+          'uploading content',
+        ];
+        
+        for (final keyword in uploadKeywords) {
+          if (normalizedContent.contains(keyword)) {
+            print('Notificación filtrada: Subida de contenido - "$normalizedContent"');
+            return true;
+          }
+        }
+        
+        // Filtro 2: Historias
+        final List<String> storyKeywords = [
+          'subiendo historia',
+          'uploading story',
+          'se subio la historia',
+          'story uploaded',
+          'historia subida',
+          'story posted',
+        ];
+        
+        for (final keyword in storyKeywords) {
+          if (normalizedContent.contains(keyword)) {
+            print('Notificación filtrada: Historia - "$normalizedContent"');
+            return true;
+          }
+        }
+        
+        // Filtro 3: Llamadas y videollamadas (similar a WhatsApp)
+        final List<String> callKeywords = [
+          'llamando',
+          'llamada en curso',
+          'calling',
+          'llamada entrante',
+          'incoming call',
+          'llamada perdida',
+          'missed call',
+          'llamada de',
+          'call from',
+          'videollamada',
+          'video call',
+          'video calling',
+          'llamada de video',
+        ];
+        
+        for (final keyword in callKeywords) {
+          if (normalizedContent.contains(keyword)) {
+            print('Notificación filtrada: Llamada Instagram - "$normalizedContent"');
+            return true;
+          }
         }
       }
       
-      final List<String> callKeywords = [
-        'llamando', 'calling', 'llamada entrante', 'incoming call',
-        'llamada perdida', 'missed call', 'llamada de', 'call from',
-        'videollamada', 'video call',
-      ];
-      
-      for (final keyword in callKeywords) {
-        if (normalizedContent.contains(keyword)) {
-          return true;
+      // Filtros existentes para WhatsApp (mantener como están)
+      if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
+        // Filtro 1: Resúmenes de mensajes
+        final List<RegExp> messagePatterns = [
+          RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
+          RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
+          RegExp(r'\d+\s*nuevos?\s*mensajes?'),
+          RegExp(r'\d+\s*new\s*messages?'),
+          RegExp(r'\d+\s*mensajes?\s*nuevos?'), // Nuevo filtro
+        ];
+        
+        for (final pattern in messagePatterns) {
+          if (pattern.hasMatch(normalizedContent)) {
+            print('Notificación filtrada: Resumen de mensajes - "$normalizedContent"');
+            return true;
+          }
         }
-      }
-      
-      final List<String> backupKeywords = [
-        'copia de seguridad', 'backup', 'respaldo', 'copia de seg',
-        'backing up', 'guardando copia',
-      ];
-      
-      for (final keyword in backupKeywords) {
-        if (normalizedContent.contains(keyword)) {
-          return true;
+        
+        // Filtro 2: Llamadas
+        final List<String> callKeywords = [
+          'llamando',
+          'Llamada en curso'
+          'calling',
+          'llamada entrante',
+          'incoming call',
+          'llamada perdida',
+          'missed call',
+          'llamada de',
+          'call from',
+          'videollamada',
+          'video call',
+        ];
+        
+        for (final keyword in callKeywords) {
+          if (normalizedContent.contains(keyword)) {
+            print('Notificación filtrada: Llamada - "$normalizedContent"');
+            return true;
+          }
         }
-      }
-      
-      // Nuevos filtros
-      final List<String> genericKeywords = [
-        'nueva notificacion', 'new notification', 'contenido no disponible',
-        'content not available', 'content unavailable', 'mensaje no disponible',
-        'message not available', 'sin contenido', 'no content',
-      ];
-      
-      for (final keyword in genericKeywords) {
-        if (normalizedContent.contains(keyword)) {
-          return true;
+        
+        // Filtro 3: Copias de seguridad
+        final List<String> backupKeywords = [
+          'copia de seguridad',
+          'backup',
+          'respaldo',
+          'copia de seg',
+          'backing up',
+          'guardando copia',
+        ];
+        
+        for (final keyword in backupKeywords) {
+          if (normalizedContent.contains(keyword)) {
+            print('Notificación filtrada: Copia de seguridad - "$normalizedContent"');
+            return true;
+          }
+        }
+        
+        // Filtro 4: Notificaciones genéricas y contenido no disponible (NUEVOS FILTROS)
+        final List<String> genericKeywords = [
+          'nueva notificacion',
+          'new notification',
+          'contenido no disponible',
+          'content not available',
+          'content unavailable',
+          'mensaje no disponible',
+          'message not available',
+          'sin contenido',
+          'no content',
+          
+        ];
+        
+        for (final keyword in genericKeywords) {
+          if (normalizedContent.contains(keyword)) {
+            print('Notificación filtrada: Contenido genérico - "$normalizedContent"');
+            return true;
+          }
         }
       }
     }

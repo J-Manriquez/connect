@@ -1,5 +1,6 @@
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:connect/services/preferences_service.dart'; // ✅ AGREGAR IMPORT
 
 class SettingsScreen extends StatefulWidget {
   final bool isServiceRunning;
@@ -29,6 +30,27 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoadingFirebase = false;
+  bool _disableAutoRedirect = false; // ✅ NUEVA VARIABLE DE ESTADO
+  bool _isLoadingAutoRedirect = false; // ✅ LOADING STATE
+
+  // ✅ AGREGAR EN initState()
+  @override
+  void initState() {
+    super.initState();
+    _loadAutoRedirectPreference(); // Cargar la preferencia al inicializar
+  }
+
+  // ✅ NUEVO MÉTODO PARA CARGAR LA PREFERENCIA
+  Future<void> _loadAutoRedirectPreference() async {
+    try {
+      final disable = await PreferencesService.getDisableAutoRedirect();
+      setState(() {
+        _disableAutoRedirect = disable;
+      });
+    } catch (e) {
+      print('Error al cargar preferencia de redirección automática: $e');
+    }
+  }
 
   Future<void> _handleFirebaseToggle(bool value) async {
     setState(() {
@@ -36,12 +58,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      // Llamar a la función original que puede cargar aplicaciones
       await widget.toggleSaveToFirebase(value);
     } finally {
       if (mounted) {
         setState(() {
           _isLoadingFirebase = false;
+        });
+      }
+    }
+  }
+
+  // ✅ NUEVO MÉTODO PARA MANEJAR EL TOGGLE DE REDIRECCIÓN AUTOMÁTICA
+  Future<void> _handleAutoRedirectToggle(bool value) async {
+    setState(() {
+      _isLoadingAutoRedirect = true;
+    });
+
+    try {
+      final success = await PreferencesService.saveDisableAutoRedirect(value);
+      if (success) {
+        setState(() {
+          _disableAutoRedirect = value;
+        });
+
+      }
+    } catch (e) {
+      print('Error al cambiar preferencia de redirección automática: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al guardar la configuración'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingAutoRedirect = false;
         });
       }
     }
@@ -65,7 +119,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     elevation: 3,
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -82,10 +139,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 8),
                           Center(
                             child: Text(
-                              widget.isServiceRunning ? 'Corriendo' : 'Detenido',
+                              widget.isServiceRunning
+                                  ? 'Corriendo'
+                                  : 'Detenido',
                               style: TextStyle(
                                 fontSize: 16,
-                                color: widget.isServiceRunning ? Colors.green : Colors.red,
+                                color: widget.isServiceRunning
+                                    ? Colors.green
+                                    : Colors.red,
                               ),
                             ),
                           ),
@@ -100,7 +161,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 8),
                           Center(
                             child: Text(
-                              widget.isPermissionGranted ? 'Concedido' : 'No concedido',
+                              widget.isPermissionGranted
+                                  ? 'Concedido'
+                                  : 'No concedido',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: widget.isPermissionGranted
@@ -159,7 +222,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                   ),
-                                  onPressed: widget.isServiceRunning ? null : widget.startService,
+                                  onPressed: widget.isServiceRunning
+                                      ? null
+                                      : widget.startService,
                                   child: const Text('Iniciar Servicio'),
                                 ),
                               ),
@@ -176,7 +241,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                   ),
-                                  onPressed: widget.isServiceRunning ? widget.stopService : null,
+                                  onPressed: widget.isServiceRunning
+                                      ? widget.stopService
+                                      : null,
                                   child: const Text('Detener Servicio'),
                                 ),
                               ),
@@ -187,7 +254,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     elevation: 3,
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -203,12 +273,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                           const SizedBox(height: 16),
                           SwitchListTile(
-                            title: const Text('Guardar notificaciones en Firebase'),
+                            title: const Text(
+                              'Guardar notificaciones en Firebase',
+                            ),
                             subtitle: const Text(
                               'Las notificaciones se guardarán automáticamente en la base de datos',
                             ),
                             value: widget.isSavingToFirebase,
-                            onChanged: _isLoadingFirebase ? null : _handleFirebaseToggle, // Deshabilitar durante carga
+                            onChanged: _isLoadingFirebase
+                                ? null
+                                : _handleFirebaseToggle, // Deshabilitar durante carga
                             activeColor: Colors.green,
                             inactiveTrackColor: customColor[200],
                             inactiveThumbColor: Colors.grey[300],
@@ -218,8 +292,110 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
+                  // ✅ AGREGAR ESTA NUEVA CARD DESPUÉS DE LAS EXISTENTES
                   Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    elevation: 3,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Configuración de Vinculación:',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Configurar como Emisor:',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _disableAutoRedirect
+                                          ? 'No serás redirigido al receptor cuando un dispositivo sea vinculado'
+                                          : 'Serás redirigido al receptor cuando un dispositivo sea vinculado',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: _disableAutoRedirect
+                                            ? Colors.green[700]
+                                            : Colors.red[700],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _isLoadingAutoRedirect
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Switch(
+                                      value: _disableAutoRedirect,
+                                      onChanged: _handleAutoRedirectToggle,
+                                      activeColor: Colors.green,
+                                      inactiveTrackColor: customColor[200],
+                                      inactiveThumbColor: Colors.grey[300],
+                                    ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue[200]!),
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Colors.blue[700],
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                // Expanded(
+                                  // child:
+                                   Text(
+                                    'Si la aplicacion en este dispositivo sera usada para enviar las notificaciones a otro dispositivo, debes activar esta opcion. Si no, se redirigira automaticamente al receptor cuando se cuando se conecte un dispositivo como receptor mediante el codigo.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.blue[700],
+                                    ),
+                                  ),
+                                // ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
                     elevation: 3,
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -268,18 +444,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Container(height: 3, color: customColor[700]),
               BottomNavigationBar(
                 currentIndex: 0,
-                onTap: _isLoadingFirebase ? null : (index) { // Deshabilitar durante carga
-                  switch (index) {
-                    case 0:
-                      break;
-                    case 1:
-                      Navigator.pushReplacementNamed(context, '/');
-                      break;
-                    case 2:
-                      Navigator.pushReplacementNamed(context, '/app_list');
-                      break;
-                  }
-                },
+                onTap: _isLoadingFirebase
+                    ? null
+                    : (index) {
+                        // Deshabilitar durante carga
+                        switch (index) {
+                          case 0:
+                            break;
+                          case 1:
+                            Navigator.pushReplacementNamed(context, '/');
+                            break;
+                          case 2:
+                            Navigator.pushReplacementNamed(
+                              context,
+                              '/app_list',
+                            );
+                            break;
+                        }
+                      },
                 selectedFontSize: 14.0,
                 unselectedFontSize: 12.0,
                 selectedIconTheme: const IconThemeData(size: 37.5),
@@ -291,7 +473,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     icon: Icon(Icons.settings),
                     label: 'Configuración',
                   ),
-                  BottomNavigationBarItem(icon: Icon(Icons.send), label: 'Emisor'),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.send),
+                    label: 'Emisor',
+                  ),
                   BottomNavigationBarItem(
                     icon: Icon(Icons.apps),
                     label: 'Aplicaciones',
@@ -324,10 +509,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SizedBox(height: 8),
                       Text(
                         'Por favor espere',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
                     ],
                   ),

@@ -308,6 +308,7 @@ class _MainAppState extends State<MainApp> {
   }
 
   // Método para verificar la ruta inicial según las preferencias del usuario
+  // ✅ MODIFICAR EL MÉTODO _checkInitialRoute (líneas 311-350)
   Future<void> _checkInitialRoute() async {
     try {
       print('[DEBUG] _checkInitialRoute: Start');
@@ -320,24 +321,32 @@ class _MainAppState extends State<MainApp> {
       print(
         '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',
       );
+      
+      // ✅ VERIFICAR SI EL BLOQUEO AUTOMÁTICO ESTÁ DESACTIVADO
+      final disableAutoRedirect = await PreferencesService.getDisableAutoRedirect();
+      print('[DEBUG] _checkInitialRoute: disableAutoRedirect = $disableAutoRedirect');
+      
       // En el método _checkInitialRoute, después de verificar el linkStatus
-      if (linkStatus) {
-      print('[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor');
-      
-      // Inicializar el receptor sin mostrar notificaciones existentes
-      final receptorService = ReceptorService();
-      await receptorService.initializeReceptorWithoutNotifications();
-      
-      // Navegar a la pantalla del receptor
-      Navigator.pushReplacementNamed(context, '/receptor');
+      if (linkStatus && !disableAutoRedirect) {
+        print('[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor');
+        
+        // Inicializar el receptor sin mostrar notificaciones existentes
+        final receptorService = ReceptorService();
+        await receptorService.initializeReceptorWithoutNotifications();
+        
+        // Navegar a la pantalla del receptor
+        Navigator.pushReplacementNamed(context, '/receptor');
+      } else if (linkStatus && disableAutoRedirect) {
+        print('[DEBUG] _checkInitialRoute: Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor');
       } else {
-      print('[DEBUG] _checkInitialRoute: Dispositivo no vinculado, mantener en emisor');
+        print('[DEBUG] _checkInitialRoute: Dispositivo no vinculado, mantener en emisor');
       }
+      
       final useAsReceptor = await PreferencesService.getUseAsReceptor();
       print(
         '[DEBUG] _checkInitialRoute: useAsReceptor = \$useAsReceptor, _isPermissionGranted = \$_isPermissionGranted',
       );
-      if (useAsReceptor && _isPermissionGranted) {
+      if (useAsReceptor && _isPermissionGranted && !disableAutoRedirect) {
         print('[DEBUG] _checkInitialRoute: Navigating to /receptor');
         Navigator.pushReplacementNamed(context, '/receptor');
       }
