@@ -5,6 +5,7 @@ import 'package:connect/models/notification_data.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
 import 'package:connect/services/receptor_service.dart';
+import 'package:connect/widgets/buscar_receptor_modal.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/notification_filter_service.dart'; // Add this import
 import 'package:connect/theme_colors.dart';
@@ -484,44 +485,53 @@ class _EmisorScreenState extends State<EmisorScreen>
                 ],
               ),
             ),
-
-            // Contenedor para el estado de vinculación
-            Container(
-              margin: const EdgeInsets.only(
-                left: 16.0,
-                right: 16.0,
-                bottom: 10.0,
-              ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8.0,
-                vertical: 16.0,
-              ),
-              decoration: BoxDecoration(
-                color: _isLinked ? Colors.green[100] : Colors.red[100],
-                borderRadius: BorderRadius.circular(8.0),
-                border: Border.all(
-                  color: _isLinked ? Colors.green : Colors.red,
-                  width: 1.0,
+            GestureDetector(
+              onTap: _isLinked
+                  ? () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => const BuscarReceptorModal(),
+                      );
+                    }
+                  : null,
+              child: Container(
+                margin: const EdgeInsets.only(
+                  left: 16.0,
+                  right: 16.0,
+                  bottom: 10.0,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 16.0,
+                ),
+                decoration: BoxDecoration(
+                  color: _isLinked ? Colors.green[100] : Colors.red[100],
+                  borderRadius: BorderRadius.circular(8.0),
+                  border: Border.all(
+                    color: _isLinked ? Colors.green : Colors.red,
+                    width: 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Icon(
+                      _isLinked ? Icons.link : Icons.link_off,
+                      color: _isLinked ? Colors.green : Colors.red,
+                    ),
+                    const SizedBox(width: 8.0),
+                    Text(
+                      'Estado de Vinculación: ${_isLinked ? 'Vinculado' : 'No Vinculado'}',
+                      style: TextStyle(
+                        color: _isLinked ? Colors.green[800] : Colors.red[800],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  Icon(
-                    _isLinked ? Icons.link : Icons.link_off,
-                    color: _isLinked ? Colors.green : Colors.red,
-                  ),
-                  const SizedBox(width: 8.0),
-                  Text(
-                    'Estado de Vinculación: ${_isLinked ? 'Vinculado' : 'No Vinculado'}',
-                    style: TextStyle(
-                      color: _isLinked ? Colors.green[800] : Colors.red[800],
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
             ),
+            // Contenedor para el estado de vinculación
 
             // Tarjeta para mostrar el ID del dispositivo
             Card(
@@ -893,32 +903,35 @@ class _EmisorScreenState extends State<EmisorScreen>
     );
   }
 }
+
 Future<void> _checkInitialRoute(BuildContext context) async {
   try {
     final receptorService = ReceptorService();
     final deviceId = await receptorService.getLinkedDeviceId();
     final linkStatus = await FirebaseService().getLinkStatus();
-    
+
     // ✅ VERIFICAR SI EL BLOQUEO AUTOMÁTICO ESTÁ DESACTIVADO
-    final disableAutoRedirect = await PreferencesService.getDisableAutoRedirect();
-    
+    final disableAutoRedirect =
+        await PreferencesService.getDisableAutoRedirect();
+
     // Solo redirigir si está vinculado Y el bloqueo automático NO está desactivado
     if (linkStatus && !disableAutoRedirect) {
       Navigator.pushReplacementNamed(context, '/notificaciones');
       return;
     }
-    
+
     final useAsReceptor = await PreferencesService.getUseAsReceptor();
     // Solo redirigir si quiere usar como receptor Y el bloqueo automático NO está desactivado
     if (useAsReceptor && !disableAutoRedirect) {
       Navigator.pushReplacementNamed(context, '/receptor');
     }
-    
+
     // ✅ AGREGAR LOG PARA DEBUG
     if (linkStatus && disableAutoRedirect) {
-      print('[DEBUG] Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor');
+      print(
+        '[DEBUG] Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor',
+      );
     }
-    
   } catch (e, stack) {
     print('Error al verificar ruta inicial: $e');
     print('Stacktrace: $stack');

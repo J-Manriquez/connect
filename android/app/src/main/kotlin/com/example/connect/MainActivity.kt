@@ -10,6 +10,9 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.view.WindowManager // ✅ Agregar import
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 
 
 class MainActivity: FlutterActivity() {
@@ -17,12 +20,15 @@ class MainActivity: FlutterActivity() {
     private val EMISOR_CHANNEL = "com.example.connect/notifications" // Para NotificationListener (EMISOR)
     private val APP_LIST_CHANNEL = "com.example.connect/app_list"
     private val RECEPTOR_CHANNEL = "com.example.connect/local_notifications" // Para LocalNotificationManager (RECEPTOR)
+    private val DEVICE_FINDER_CHANNEL = "com.example.connect/device_finder" // ✅ NUEVO CANAL
     
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
+    private lateinit var deviceFinderChannel: MethodChannel // ✅ NUEVO CANAL
     private lateinit var appListService: AppListService
     private lateinit var localNotificationManager: LocalNotificationManager
+    private lateinit var deviceFinderManager: DeviceFinderManager // ✅ NUEVO SERVICIO
 
     companion object {
         var instance: MainActivity? = null
@@ -36,6 +42,7 @@ class MainActivity: FlutterActivity() {
         // Inicializar servicios
         appListService = AppListService(this)
         localNotificationManager = LocalNotificationManager(this)
+        deviceFinderManager = DeviceFinderManager(this) // ✅ NUEVO SERVICIO
 
         // Canal para EMISOR (NotificationListener)
         emisorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EMISOR_CHANNEL)
@@ -47,7 +54,10 @@ class MainActivity: FlutterActivity() {
         
         // CANAL PARA RECEPTOR (LocalNotificationManager)
         receptorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, RECEPTOR_CHANNEL)
-
+        
+        // ✅ CANAL PARA BÚSQUEDA DE DISPOSITIVOS
+        deviceFinderChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_FINDER_CHANNEL)
+        
         // Iniciar automáticamente el servicio si el permiso está concedido
         if (isNotificationServiceEnabled()) {
             val serviceIntent = Intent(this, NotificationListener::class.java)
@@ -255,6 +265,37 @@ class MainActivity: FlutterActivity() {
                 }
             }
         }
+        
+        // ✅ CONFIGURAR MANEJADOR PARA CANAL DE BÚSQUEDA DE DISPOSITIVOS
+        deviceFinderChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startDeviceSearch" -> {
+                    try {
+                        deviceFinderManager.startDeviceSearch()
+                        result.success(true)
+                        Log.d("MainActivity", "Búsqueda de dispositivo iniciada")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al iniciar búsqueda de dispositivo", e)
+                        result.error("ERROR", "Error al iniciar búsqueda: ${e.message}", null)
+                    }
+                }
+                "stopDeviceSearch" -> {
+                    try {
+                        deviceFinderManager.stopDeviceSearch()
+                        result.success(true)
+                        Log.d("MainActivity", "Búsqueda de dispositivo detenida")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al detener búsqueda de dispositivo", e)
+                        result.error("ERROR", "Error al detener búsqueda: ${e.message}", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        // Verificar si se debe navegar a una pantalla específica
+        handleNavigationIntent(intent)
     }
 
 
@@ -267,6 +308,19 @@ class MainActivity: FlutterActivity() {
             Log.d("MainActivity", "Notificación eliminada comunicada a Flutter: $notificationId")
         } catch (e: Exception) {
             Log.e("MainActivity", "Error al comunicar eliminación de notificación a Flutter", e)
+        }
+    }
+    
+    private fun handleNavigationIntent(intent: Intent?) {
+        intent?.getStringExtra("navigate_to")?.let { route ->
+            // Enviar el comando de navegación a Flutter
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    deviceFinderChannel.invokeMethod("navigateToRoute", route)
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error al navegar a $route", e)
+                }
+            }, 1000) // Esperar 1 segundo para que Flutter esté listo
         }
     }
     

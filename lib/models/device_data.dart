@@ -5,6 +5,8 @@ class DeviceData {
   final bool statusServicio;
   final bool statusVinculacion;
   final bool statusGuardado;
+  final bool buscarEmisor; // ✅ NUEVO CAMPO
+  final bool buscarReceptor; // ✅ NUEVO CAMPO
   final List<ActualizacionData> ultimaActualizacion;
   final List<AppData> listaApps;
 
@@ -13,6 +15,8 @@ class DeviceData {
     required this.statusServicio,
     this.statusVinculacion = false,
     this.statusGuardado = false,
+    this.buscarEmisor = false, // ✅ VALOR POR DEFECTO
+    this.buscarReceptor = false, // ✅ VALOR POR DEFECTO
     required this.ultimaActualizacion,
     required this.listaApps,
   });
@@ -23,6 +27,8 @@ class DeviceData {
       statusServicio: map['status-servicio'] ?? false,
       statusVinculacion: map['status-vinculacion'] ?? false,
       statusGuardado: map['status-guardado'] ?? false,
+      buscarEmisor: map['buscar-emisor'] ?? false, // ✅ NUEVO CAMPO
+      buscarReceptor: map['buscar-receptor'] ?? false, // ✅ NUEVO CAMPO
       ultimaActualizacion: List<ActualizacionData>.from(
         (map['ultima-actualizacion'] as List? ?? []).map(
           (x) => ActualizacionData.fromMap(x),
@@ -42,6 +48,8 @@ class DeviceData {
       'status-servicio': statusServicio,
       'status-vinculacion': statusVinculacion,
       'status-guardado': statusGuardado,
+      'buscar-emisor': buscarEmisor, // ✅ NUEVO CAMPO
+      'buscar-receptor': buscarReceptor, // ✅ NUEVO CAMPO
       'ultima-actualizacion': ultimaActualizacion.map((x) => x.toMap()).toList(),
       'lista-apps': listaApps.map((x) => x.toMap()).toList(),
     };

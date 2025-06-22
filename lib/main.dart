@@ -1,3 +1,4 @@
+import 'package:connect/screens/buscar_emisor_screen.dart';
 import 'package:connect/screens/receptor/notification_detail_screen.dart';
 import 'package:connect/screens/receptor/receptor_screen.dart';
 import 'package:connect/screens/receptor/notificaciones_screen.dart';
@@ -22,6 +23,9 @@ import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/screens/receptor/unread_notifications_screen.dart';
 import 'package:connect/screens/receptor/notification_settings_screen.dart'; // Import the new screen
 import 'package:connect/theme_colors.dart';
+import 'package:connect/services/device_search_service.dart';
+import 'package:connect/services/device_finder_service.dart';
+import 'package:connect/screens/buscar_dispositivo_screen.dart';
 
 // Add this global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -113,13 +117,26 @@ class _MainAppState extends State<MainApp> {
 
     // Inicializar la estructura de datos en Firebase
     _initializeFirebaseData();
+    
+    // ✅ INICIALIZAR EL SERVICIO DE BÚSQUEDA DE DISPOSITIVOS
+    _initializeDeviceSearchService();
 
     // Intentar iniciar el servicio automáticamente si no está corriendo
     // y el permiso está concedido
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoStartServiceIfNeeded();
-      _checkInitialRoute(); // Añadir esta línea
+      _checkInitialRoute();
     });
+  }
+  
+  // ✅ NUEVO MÉTODO PARA INICIALIZAR EL SERVICIO DE BÚSQUEDA
+  Future<void> _initializeDeviceSearchService() async {
+    try {
+      await DeviceSearchService.instance.startListeningForSearchChanges();
+      print('DeviceSearchService inicializado correctamente');
+    } catch (e) {
+      print('Error al inicializar DeviceSearchService: $e');
+    }
   }
 
   // Método para inicializar la estructura de datos en Firebase
@@ -359,6 +376,9 @@ class _MainAppState extends State<MainApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Configurar la clave de navegación para DeviceFinderService
+    DeviceFinderService.setNavigatorKey(navigatorKey);
+    
     return MaterialApp(
       navigatorKey: navigatorKey, // Add this line
       debugShowCheckedModeBanner: false,
@@ -413,6 +433,8 @@ class _MainAppState extends State<MainApp> {
         '/notification_settings': (context) =>
             const NotificationSettingsScreen(), // Add the new route
         '/notification_detail': (context) => const NotificationDetailScreen(notificationData: {},), // Add this line
+        '/buscar_dispositivo': (context) => const BuscarDispositivoScreen(),
+        '/buscar_emisor': (context) => const BuscarEmisorScreen(), // ✅ Nueva ruta
       },
     );
   }

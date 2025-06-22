@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/models/notification_data.dart';
+import 'package:connect/screens/buscar_emisor_screen.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/theme_colors.dart';
@@ -11,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/screens/receptor/notification_detail_screen.dart';
-
 
 class NotificacionesScreen extends StatefulWidget {
   const NotificacionesScreen({Key? key}) : super(key: key);
@@ -38,11 +38,11 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     _loadLinkedDevice();
     _loadNotificationSettings();
     _startListeningForReadNotifications();
-    
+
     // ✅ Sincronizar notificaciones canceladas al inicializar
     _syncCancelledNotifications();
   }
-  
+
   // ✅ Nuevo método para sincronizar notificaciones canceladas
   Future<void> _syncCancelledNotifications() async {
     try {
@@ -59,9 +59,11 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     setState(() {
       _notificationsEnabled = notificationsEnabled;
     });
-    
+
     // Iniciar o detener el servicio según el estado del toggle
-    await NotificationListenerService.instance.setListeningEnabled(notificationsEnabled);
+    await NotificationListenerService.instance.setListeningEnabled(
+      notificationsEnabled,
+    );
   }
 
   @override
@@ -101,17 +103,17 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     }
   }
 
-
-// Iniciar escucha de notificaciones no leídas
+  // Iniciar escucha de notificaciones no leídas
   void _startListeningForReadNotifications() {
-    _notificationSubscription?.cancel(); // Cancelar suscripción anterior si existe
-    
+    _notificationSubscription
+        ?.cancel(); // Cancelar suscripción anterior si existe
+
     _notificationSubscription = _receptorService
         .listenForSeenNotifications()
         .listen(
           (notifications) {
             if (!mounted) return; // Verificar si el widget sigue montado
-            
+
             // Agrupar por día
             final Map<String, List<Map<String, dynamic>>> grouped = {};
             for (var notification in notifications) {
@@ -129,7 +131,8 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               grouped[dateKey]!.add(notification);
             }
 
-            if (mounted) { // Verificar nuevamente antes de setState
+            if (mounted) {
+              // Verificar nuevamente antes de setState
               setState(() {
                 _notifications = notifications;
                 _groupedNotifications = grouped;
@@ -163,7 +166,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
 
     // Habilitar/deshabilitar notificaciones locales
     await LocalNotificationService.setNotificationsEnabled(value);
-    
+
     if (value) {
       // Mostrar mensaje de inicialización
       if (mounted) {
@@ -175,16 +178,18 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
           ),
         );
       }
-      
+
       // Habilitar el servicio (esto manejará la inicialización automáticamente)
       await NotificationListenerService.instance.setListeningEnabled(true);
-      
+
       // Mensaje de confirmación después de la inicialización
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Notificaciones locales habilitadas. Solo se mostrarán notificaciones nuevas.'),
+              content: Text(
+                'Notificaciones locales habilitadas. Solo se mostrarán notificaciones nuevas.',
+              ),
               backgroundColor: Colors.green,
               duration: Duration(seconds: 3),
             ),
@@ -195,7 +200,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       // Deshabilitar el servicio
       await NotificationListenerService.instance.setListeningEnabled(false);
     }
-    
+
     if (mounted) {
       setState(() {
         _notificationsEnabled = value;
@@ -209,7 +214,8 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       final timestamp = notification['timestamp'] as Timestamp?;
       if (notificationId == null || timestamp == null) return;
       final date = timestamp.toDate();
-      final dateId = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      final dateId =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       // Usa tu servicio de Firebase para eliminar
       await FirebaseService().deleteNotification(notificationId, dateId);
     } catch (e) {
@@ -277,6 +283,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       ),
     );
   }
+
   // Método para formatear la fecha en formato legible
   String _formatDate(String dateKey) {
     try {
@@ -338,43 +345,55 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Padding(
               padding: const EdgeInsets.all(5.0),
-              child: SingleChildScrollView( // Wrap the Column with SingleChildScrollView
+              child: SingleChildScrollView(
+                // Wrap the Column with SingleChildScrollView
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 8),
-                    Card(
-                      margin: const EdgeInsets.all(0),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.link, color: Colors.green),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Dispositivo vinculado',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green,
+                    // card para dispositivo vinculado
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const BuscarEmisorScreen(),
+                          ),
+                        );
+                      },
+                      child: Card(
+                        margin: const EdgeInsets.all(0),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.link, color: Colors.green),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Dispositivo vinculado',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green,
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    'ID: $_linkedDeviceId',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey,
+                                    Text(
+                                      'ID: $_linkedDeviceId',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -389,11 +408,16 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                     // const SizedBox(height: 8),
                     // Remove Expanded from here
                     _groupedNotifications.isEmpty
-                        ? const Center(child: Text('No hay notificaciones recibidas'))
+                        ? const Center(
+                            child: Text('No hay notificaciones recibidas'),
+                          )
                         : ListView(
                             shrinkWrap: true, // Add shrinkWrap to ListView
-                            physics: NeverScrollableScrollPhysics(), // Disable ListView's own scrolling
-                            children: _groupedNotifications.entries.map((entry) {
+                            physics:
+                                NeverScrollableScrollPhysics(), // Disable ListView's own scrolling
+                            children: _groupedNotifications.entries.map((
+                              entry,
+                            ) {
                               final dateKey = entry.key;
                               final notifications = entry.value;
                               final isExpanded = _expandedDays[dateKey] ?? true;
@@ -401,9 +425,18 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   ListTile(
-                                    title: Text(_formatDate(dateKey), style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    title: Text(
+                                      _formatDate(dateKey),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                     trailing: IconButton(
-                                      icon: Icon(isExpanded ? Icons.expand_less : Icons.expand_more),
+                                      icon: Icon(
+                                        isExpanded
+                                            ? Icons.expand_less
+                                            : Icons.expand_more,
+                                      ),
                                       onPressed: () {
                                         setState(() {
                                           _expandedDays[dateKey] = !isExpanded;
@@ -419,47 +452,78 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                                         background: Container(
                                           color: Colors.red,
                                           alignment: Alignment.centerRight,
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                          child: const Icon(Icons.delete, color: Colors.white),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                          child: const Icon(
+                                            Icons.delete,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                         onDismissed: (direction) async {
-                                          await _deleteNotification(notification);
+                                          await _deleteNotification(
+                                            notification,
+                                          );
                                         },
-                                        child: 
-                                        GestureDetector(
+                                        child: GestureDetector(
                                           onTap: () {
                                             Navigator.push(
                                               context,
                                               MaterialPageRoute(
                                                 builder: (context) =>
-                                                   NotificationDetailScreen(notificationData: notification),
+                                                    NotificationDetailScreen(
+                                                      notificationData:
+                                                          notification,
+                                                    ),
                                               ),
                                             );
                                           },
                                           child: Card(
-                                          margin: const EdgeInsets.only(bottom: 8.0, left: 1, right: 1),
-                                          child: ListTile(
-                                            title: Text(notification['title'] ?? 'Sin título'),
-                                            subtitle: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(notification['text'] ?? 'Sin contenido'),
-                                                Text('App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
-                                              ],
+                                            margin: const EdgeInsets.only(
+                                              bottom: 8.0,
+                                              left: 1,
+                                              right: 1,
                                             ),
-                                            trailing: Text(_formatTimestamp(notification['timestamp']), style: const TextStyle(fontSize: 12)),
+                                            child: ListTile(
+                                              title: Text(
+                                                notification['title'] ??
+                                                    'Sin título',
+                                              ),
+                                              subtitle: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    notification['text'] ??
+                                                        'Sin contenido',
+                                                  ),
+                                                  Text(
+                                                    'App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontStyle:
+                                                          FontStyle.italic,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              trailing: Text(
+                                                _formatTimestamp(
+                                                  notification['timestamp'],
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      
-                                        ),
-                                      
                                       );
                                     }).toList(),
                                 ],
                               );
                             }).toList(),
                           ),
-
                   ],
                 ),
               ),

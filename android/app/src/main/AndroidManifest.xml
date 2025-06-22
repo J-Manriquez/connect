@@ -6,11 +6,19 @@
 
     <!-- Permisos para el servicio en primer plano (necesario para Android O+) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Tipo de servicio en primer plano, ajusta si es necesario -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Añadir este permiso dentro de la etiqueta <manifest> -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    
+    <!-- ✅ NUEVOS PERMISOS PARA BÚSQUEDA DE DISPOSITIVOS -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    
     <application
         android:label="Connect Ɐ2"
         android:name="${applicationName}"
@@ -61,6 +69,13 @@
             android:exported="false"/>
         <receiver android:name=".NotificationDeleteReceiver" />
 
+        <!-- ✅ REGISTRAR EL SERVICIO DE BÚSQUEDA DE DISPOSITIVOS -->
+        <service
+            android:name=".DeviceFinderService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+            
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
