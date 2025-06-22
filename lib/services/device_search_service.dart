@@ -5,6 +5,7 @@ import 'package:connect/services/device_finder_service.dart';
 import 'dart:async';
 
 import 'package:connect/services/receptor_service.dart';
+import 'package:flutter/material.dart';
 
 class DeviceSearchService {
   static final DeviceSearchService _instance = DeviceSearchService._internal();
@@ -99,6 +100,26 @@ class DeviceSearchService {
     print('disableAutoRedirect: $disableAutoRedirect (${disableAutoRedirect ? "RECEPTOR" : "EMISOR"})');
     print('========================');
     
+    // ✅ NUEVA LÓGICA: Detectar cuando se debe DETENER la búsqueda
+    if (DeviceFinderService.instance.isSearching) {
+      // Si el dispositivo es EMISOR y buscarEmisor cambió a false
+      if (!disableAutoRedirect && !buscarEmisor) {
+        print('🛑 Deteniendo búsqueda para dispositivo EMISOR (cambio remoto)');
+        DeviceFinderService.instance.stopDeviceSearch();
+        // Cerrar la pantalla de búsqueda si está abierta
+        _closeSearchScreenIfOpen();
+        return;
+      }
+      // Si el dispositivo es RECEPTOR y buscarReceptor cambió a false
+      else if (disableAutoRedirect && !buscarReceptor) {
+        print('🛑 Deteniendo búsqueda para dispositivo RECEPTOR (cambio remoto)');
+        DeviceFinderService.instance.stopDeviceSearch();
+        // Cerrar la pantalla de búsqueda si está abierta
+        _closeSearchScreenIfOpen();
+        return;
+      }
+    }
+    
     // Si el dispositivo es EMISOR (disableAutoRedirect = false) y buscarEmisor es true
     if (!disableAutoRedirect && buscarEmisor) {
       print('✅ Activando búsqueda para dispositivo EMISOR');
@@ -149,6 +170,18 @@ class DeviceSearchService {
     } catch (e) {
       print('Error al obtener idVinculado: $e');
       return null;
+    }
+  }
+
+  // ✅ NUEVA FUNCIÓN: Cerrar la pantalla de búsqueda si está abierta
+  void _closeSearchScreenIfOpen() {
+    if (DeviceFinderService.navigatorKey?.currentState != null) {
+      final context = DeviceFinderService.navigatorKey!.currentState!.context;
+      // Verificar si la ruta actual es la pantalla de búsqueda
+      final currentRoute = ModalRoute.of(context)?.settings.name;
+      if (currentRoute == '/buscar_dispositivo') {
+        DeviceFinderService.navigatorKey!.currentState!.pop();
+      }
     }
   }
 }
