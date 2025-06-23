@@ -57,7 +57,8 @@ class DeviceFinderManager(private val context: Context) {
             ).apply {
                 description = "Notificaciones para la búsqueda de dispositivos"
                 enableVibration(true)
-                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), null)
+                setSound(null, null) // Deshabilitar sonido del canal
+                // setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), null)
             }
             
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

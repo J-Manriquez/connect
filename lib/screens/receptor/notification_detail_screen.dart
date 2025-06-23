@@ -88,12 +88,13 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(8.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Contenido principal de la notificación
             Card(
+              elevation: 2,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -112,23 +113,24 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
                     _buildContentField('Título', title),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     _buildContentField('Mensaje', body),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
 
             // Contenido adicional (solo si existe)
             if (subText != null ||
                 summaryText != null ||
                 infoText != null ||
-                contentInfo != null)
+                contentInfo != null) ...[
               Card(
+                elevation: 2,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -151,7 +153,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
 
                       if (subText != null) ...[
                         _buildContentField('Subtexto', subText),
@@ -172,9 +174,11 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   ),
                 ),
               ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 10),
+            ],
             // Información de la aplicación
             Card(
+              elevation: 2,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -193,7 +197,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     _buildInfoRow('Aplicación:', appName),
                     // _buildInfoRow('Paquete:', packageName),
                     _buildInfoRow('Fecha y Hora:', formattedTime),
@@ -202,11 +206,12 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
 
             // Estado de lectura
             if (_isMarkingAsRead)
               Card(
+                elevation: 2,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
@@ -224,6 +229,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
               )
             else
               Card(
+                elevation: 2,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Row(
@@ -271,15 +277,15 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$label:',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: customColor[700],
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 4),
+          // Text(
+          //   '$label:',
+          //   style: TextStyle(
+          //     fontWeight: FontWeight.bold,
+          //     color: customColor[700],
+          //     fontSize: 14,
+          //   ),
+          // ),
+          // const SizedBox(height: 4),
           Text(content, style: const TextStyle(fontSize: 16)),
         ],
       ),
