@@ -13,6 +13,9 @@ import android.view.WindowManager // ✅ Agregar import
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.content.Context
+import android.app.ActivityManager
+
 
 
 class MainActivity: FlutterActivity() {
@@ -21,7 +24,6 @@ class MainActivity: FlutterActivity() {
     private val APP_LIST_CHANNEL = "com.example.connect/app_list"
     private val RECEPTOR_CHANNEL = "com.example.connect/local_notifications" // Para LocalNotificationManager (RECEPTOR)
     private val DEVICE_FINDER_CHANNEL = "com.example.connect/device_finder" // ✅ NUEVO CANAL
-    
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
@@ -370,20 +372,35 @@ class MainActivity: FlutterActivity() {
         }
     }
     
-    // ✅ Nuevo método para manejar auto-apertura
+    // ✅ Mejorar el método para manejar auto-apertura
     private fun handleAutoOpenNotification(intent: Intent) {
         if (intent?.action == LocalNotificationManager.NOTIFICATION_ACTION_AUTO_OPEN) {
-            Log.d("MainActivity", "Setting window flags to show over lock screen")
+            Log.d("MainActivity", "Configurando flags para mostrar sobre pantalla bloqueada")
             try {
-                window.addFlags(
-                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                )
-                Log.d("MainActivity", "Window flags set successfully")
+                // ✅ SOLUCIÓN: Configurar flags para encender pantalla y mostrar sobre bloqueo
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    setShowWhenLocked(true)
+                    setTurnScreenOn(true)
+                } else {
+                    window.addFlags(
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                    )
+                }
+                
+                // ✅ Mantener pantalla encendida temporalmente
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                
+                // ✅ CORRECCIÓN: Traer la actividad al frente usando ActivityManager
+                // 1. Obtener el servicio ActivityManager del sistema.
+                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                // 2. Llamar a moveTaskToFront. 'this.taskId' obtiene el ID de la tarea de esta actividad.
+                activityManager.moveTaskToFront(this.taskId, 0)
+                
+                Log.d("MainActivity", "Flags de ventana configurados exitosamente")
             } catch (e: Exception) {
-                Log.e("MainActivity", "Error setting window flags", e)
+                Log.e("MainActivity", "Error configurando flags de ventana", e)
             }
         }
 
@@ -401,15 +418,21 @@ class MainActivity: FlutterActivity() {
                 "packageName" to (packageName ?: ""),
                 "appName" to (appName ?: ""),
                 "autoOpen" to true,
-                "isAutoOpened" to true // ✅ Indicador especial para auto-apertura
+                "isAutoOpened" to true
             )
             
-            // ✅ Usar método especial para auto-apertura
-            receptorChannel.invokeMethod("onNotificationAutoOpened", notificationData)
-            Log.d("MainActivity", "Notificación RECEPTOR auto-abierta, enviando datos a Flutter")
+            // ✅ Usar Handler para asegurar que Flutter esté listo
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    receptorChannel.invokeMethod("onNotificationAutoOpened", notificationData)
+                    Log.d("MainActivity", "Notificación RECEPTOR auto-abierta, datos enviados a Flutter")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error enviando datos a Flutter", e)
+                }
+            }, 500) // Esperar 500ms para que Flutter esté completamente listo
         }
     }
-
+    
     private fun isNotificationServiceEnabled(): Boolean {
         val pkgName = packageName
         val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")

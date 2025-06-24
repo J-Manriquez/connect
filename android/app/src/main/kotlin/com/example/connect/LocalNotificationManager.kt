@@ -5,9 +5,13 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import android.util.Log
+import android.app.ActivityManager
+import io.flutter.embedding.android.FlutterActivity
+import android.view.WindowManager
 
 class LocalNotificationManager(private val context: Context) {
     
@@ -144,32 +148,33 @@ class LocalNotificationManager(private val context: Context) {
         body: String,
         packageName: String,
         appName: String,
-        notificationId: String
-    ) {
+        notificationId: String 
+        ) {
         try {
-            Log.d("LocalNotificationManager", "Abriendo app automáticamente para notificación: $notificationId")
+            Log.d("LocalNotificationManager", "Intentando abrir app automáticamente")
             
-            // Intent para abrir la aplicación con auto-apertura
-            val autoOpenIntent = Intent(context, MainActivity::class.java).apply {
-                action = NOTIFICATION_ACTION_AUTO_OPEN
+            // ✅ SOLUCIÓN: Crear Intent con acción específica para auto-apertura
+            val intent = Intent(context, MainActivity::class.java).apply {
+                action = NOTIFICATION_ACTION_AUTO_OPEN // Usar acción específica
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                       Intent.FLAG_ACTIVITY_CLEAR_TOP or 
+                       Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                       Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT or
+                       Intent.FLAG_ACTIVITY_REORDER_TO_FRONT // ✅ Añadir este flag
+                
+                // Añadir todos los datos de la notificación
                 putExtra(EXTRA_NOTIFICATION_DATA, notificationId)
-                putExtra("title", title)
-                putExtra("body", body)
+                putExtra( "title", title)
+                putExtra ( "body" ,
+                body)
                 putExtra("packageName", packageName)
                 putExtra("appName", appName)
                 putExtra("autoOpen", true)
-                // ✅ Flags importantes para abrir desde cualquier estado
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                       Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                       Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                       Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
             }
             
-            // Iniciar la actividad inmediatamente
-            context.startActivity(autoOpenIntent)
-            
-            Log.d("LocalNotificationManager", "App abierta automáticamente")
-
+            // ✅ SOLUCIÓN: Usar startActivity directamente para auto-apertura inmediata
+            context.startActivity(intent)
+            Log.d("LocalNotificationManager", "App abierta automáticamente con éxito")
             
         } catch (e: Exception) {
             Log.e("LocalNotificationManager", "Error al abrir app automáticamente", e)

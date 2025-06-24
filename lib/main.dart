@@ -63,25 +63,25 @@ void initializeNotificationHandling() {
     }
   };
   
-  // ✅ Configurar callback para auto-apertura
+  // ✅ Mejorar callback para auto-apertura
   LocalNotificationService.onNotificationAutoOpened = (Map<String, dynamic> data) {
     print('Notificación auto-abierta: $data');
 
-    // Navegar directamente a la pantalla de detalle para auto-apertura
-    if (navigatorKey.currentContext != null) {
-      // ✅ Usar pushAndRemoveUntil para asegurar que se muestre la pantalla
-      Navigator.of(navigatorKey.currentContext!).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (context) => NotificationDetailScreen(
-            notificationData: data,
+    // ✅ Asegurar navegación inmediata
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (navigatorKey.currentContext != null) {
+        Navigator.of(navigatorKey.currentContext!).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => NotificationDetailScreen(
+              notificationData: data,
+            ),
           ),
-        ),
-        (route) => route.isFirst, // Mantener solo la pantalla principal
-      );
-    }
+          (route) => route.isFirst,
+        );
+      }
+    });
   };
 
-  // Inicializar el servicio
   LocalNotificationService.initialize();
 }
 
