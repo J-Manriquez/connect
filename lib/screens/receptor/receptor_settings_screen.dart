@@ -14,17 +14,52 @@ class ReceptorSettingsScreen extends StatefulWidget {
   State<ReceptorSettingsScreen> createState() => _ReceptorSettingsScreenState();
 }
 
-class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
+class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> 
+    with WidgetsBindingObserver { // ✅ Añadir observer
   bool _notificationsEnabled = false;
   bool _autoOpenEnabled = false;
   bool _isLoading = true;
+  
+  // ✅ SOLUCIÓN: Añadir referencia al servicio
+  final NotificationListenerService _notificationService = NotificationListenerService.instance;
 
   final ReceptorService _receptorService = ReceptorService();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // ✅ Añadir observer
     _loadSettings();
+    _ensureNotificationServiceActive(); // ✅ Asegurar que el servicio esté activo
+  }
+  
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // ✅ Remover observer
+    super.dispose();
+  }
+  
+  // ✅ SOLUCIÓN: Detectar cuando la app vuelve al primer plano
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _ensureNotificationServiceActive();
+    }
+  }
+  
+  // ✅ SOLUCIÓN: Método para asegurar que el servicio esté activo
+  Future<void> _ensureNotificationServiceActive() async {
+    try {
+      final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+      
+      if (notificationsEnabled && !_notificationService.isListening) {
+        print('ReceptorSettingsScreen: Reactivando servicio de notificaciones');
+        await _notificationService.setListeningEnabled(true);
+      }
+    } catch (e) {
+      print('ReceptorSettingsScreen: Error al reactivar servicio: $e');
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -32,8 +67,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       _isLoading = true;
     });
 
-    final notificationsEnabled =
-        await LocalNotificationService.areNotificationsEnabled();
+    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
     final autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
 
     setState(() {
@@ -41,6 +75,9 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> {
       _autoOpenEnabled = autoOpenEnabled;
       _isLoading = false;
     });
+    
+    // ✅ SOLUCIÓN: Verificar estado del servicio después de cargar configuración
+    _ensureNotificationServiceActive();
   }
 
   Future<void> _toggleAutoOpen(bool value) async {

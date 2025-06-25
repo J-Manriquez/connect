@@ -373,11 +373,15 @@ class MainActivity: FlutterActivity() {
     }
     
     // ✅ Mejorar el método para manejar auto-apertura
+    
     private fun handleAutoOpenNotification(intent: Intent) {
         if (intent?.action == LocalNotificationManager.NOTIFICATION_ACTION_AUTO_OPEN) {
-            Log.d("MainActivity", "Configurando flags para mostrar sobre pantalla bloqueada")
+            Log.d("MainActivity", "Manejando auto-apertura de notificación")
+            
+            val fromBackground = intent.getBooleanExtra("fromBackground", false)
+            
             try {
-                // ✅ SOLUCIÓN: Configurar flags para encender pantalla y mostrar sobre bloqueo
+                // ✅ SOLUCIÓN: Configurar flags para mostrar sobre otras apps
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                     setShowWhenLocked(true)
                     setTurnScreenOn(true)
@@ -385,20 +389,29 @@ class MainActivity: FlutterActivity() {
                     window.addFlags(
                         WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                         WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                         WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
                     )
                 }
                 
-                // ✅ Mantener pantalla encendida temporalmente
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                // ✅ SOLUCIÓN: Si viene del segundo plano, forzar al frente
+                if (fromBackground) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    
+                    // ✅ Traer la tarea al frente
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                        try {
+                            // 🛠️ Corrección: Llamar al método desde la instancia de activityManager y usar la propiedad taskId de la activity
+                            activityManager.moveTaskToFront(taskId, 0) // Usamos 0 para opciones por defecto
+                            Log.d("MainActivity", "Tarea movida al frente exitosamente.")
+                        } catch (e: Exception) {
+                            Log.w("MainActivity", "No se pudo mover la tarea al frente: $e")
+                        }
+                    }
+                }
                 
-                // ✅ CORRECCIÓN: Traer la actividad al frente usando ActivityManager
-                // 1. Obtener el servicio ActivityManager del sistema.
-                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                // 2. Llamar a moveTaskToFront. 'this.taskId' obtiene el ID de la tarea de esta actividad.
-                activityManager.moveTaskToFront(this.taskId, 0)
-                
-                Log.d("MainActivity", "Flags de ventana configurados exitosamente")
+                Log.d("MainActivity", "Flags de ventana configurados - Desde segundo plano: $fromBackground")
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error configurando flags de ventana", e)
             }
@@ -409,6 +422,7 @@ class MainActivity: FlutterActivity() {
         val body = intent.getStringExtra("body")
         val packageName = intent.getStringExtra("packageName")
         val appName = intent.getStringExtra("appName")
+        val fromBackground = intent.getBooleanExtra("fromBackground", false)
         
         if (notificationId != null) {
             val notificationData = mapOf(
@@ -418,18 +432,21 @@ class MainActivity: FlutterActivity() {
                 "packageName" to (packageName ?: ""),
                 "appName" to (appName ?: ""),
                 "autoOpen" to true,
-                "isAutoOpened" to true
+                "isAutoOpened" to true,
+                "fromBackground" to fromBackground
             )
             
-            // ✅ Usar Handler para asegurar que Flutter esté listo
+            // ✅ SOLUCIÓN: Delay más largo si viene del segundo plano
+            val delay = if (fromBackground) 1000L else 500L
+            
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     receptorChannel.invokeMethod("onNotificationAutoOpened", notificationData)
-                    Log.d("MainActivity", "Notificación RECEPTOR auto-abierta, datos enviados a Flutter")
+                    Log.d("MainActivity", "Notificación auto-abierta enviada a Flutter - Delay: ${delay}ms")
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Error enviando datos a Flutter", e)
                 }
-            }, 500) // Esperar 500ms para que Flutter esté completamente listo
+            }, delay)
         }
     }
     

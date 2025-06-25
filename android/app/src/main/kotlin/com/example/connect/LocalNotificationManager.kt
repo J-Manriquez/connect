@@ -149,35 +149,68 @@ class LocalNotificationManager(private val context: Context) {
         packageName: String,
         appName: String,
         notificationId: String 
-        ) {
+    ) {
         try {
             Log.d("LocalNotificationManager", "Intentando abrir app automáticamente")
             
-            // ✅ SOLUCIÓN: Crear Intent con acción específica para auto-apertura
+            // ✅ SOLUCIÓN: Verificar si la app está en primer plano
+            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val runningTasks = activityManager.getRunningTasks(1)
+            val isAppInForeground = runningTasks.isNotEmpty() && 
+                runningTasks[0].topActivity?.packageName == context.packageName
+            
             val intent = Intent(context, MainActivity::class.java).apply {
-                action = NOTIFICATION_ACTION_AUTO_OPEN // Usar acción específica
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                       Intent.FLAG_ACTIVITY_CLEAR_TOP or 
-                       Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                       Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT or
-                       Intent.FLAG_ACTIVITY_REORDER_TO_FRONT // ✅ Añadir este flag
+                action = NOTIFICATION_ACTION_AUTO_OPEN
                 
-                // Añadir todos los datos de la notificación
+                // ✅ SOLUCIÓN: Flags diferentes según el estado de la app
+                flags = if (isAppInForeground) {
+                    // Si está en primer plano, solo traer al frente
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+                } else {
+                    // Si está en segundo plano, forzar al frente
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION // ✅ Evitar animaciones para apertura más rápida
+                }
+                
                 putExtra(EXTRA_NOTIFICATION_DATA, notificationId)
-                putExtra( "title", title)
-                putExtra ( "body" ,
-                body)
+                putExtra("title", title)
+                putExtra("body", body)
                 putExtra("packageName", packageName)
                 putExtra("appName", appName)
                 putExtra("autoOpen", true)
+                putExtra("fromBackground", !isAppInForeground) // ✅ Indicar si viene del segundo plano
             }
             
-            // ✅ SOLUCIÓN: Usar startActivity directamente para auto-apertura inmediata
-            context.startActivity(intent)
-            Log.d("LocalNotificationManager", "App abierta automáticamente con éxito")
+            // ✅ SOLUCIÓN: Usar startActivity con manejo de excepciones
+            try {
+                context.startActivity(intent)
+                Log.d("LocalNotificationManager", "App abierta automáticamente - En primer plano: $isAppInForeground")
+            } catch (e: Exception) {
+                Log.e("LocalNotificationManager", "Error al abrir con startActivity, intentando con PendingIntent", e)
+                
+                // ✅ FALLBACK: Si startActivity falla, usar PendingIntent
+                val pendingIntent = PendingIntent.getActivity(
+                    context,
+                    notificationId.hashCode(),
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                
+                try {
+                    pendingIntent.send()
+                    Log.d("LocalNotificationManager", "App abierta usando PendingIntent como fallback")
+                } catch (pendingException: Exception) {
+                    Log.e("LocalNotificationManager", "Error con PendingIntent fallback", pendingException)
+                }
+            }
             
         } catch (e: Exception) {
-            Log.e("LocalNotificationManager", "Error al abrir app automáticamente", e)
+            Log.e("LocalNotificationManager", "Error general al abrir app automáticamente", e)
         }
     }
     

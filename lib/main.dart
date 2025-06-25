@@ -93,7 +93,7 @@ class MainApp extends StatefulWidget {
   State<MainApp> createState() => _MainAppState();
 }
 
-class _MainAppState extends State<MainApp> {
+class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   // Define the MethodChannel
   static const platform = MethodChannel('com.example.connect/notifications');
 
@@ -109,6 +109,7 @@ class _MainAppState extends State<MainApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Set up the method call handler to receive notifications from native
     platform.setMethodCallHandler(_handleMethodCall);
     // Verificar el estado inicial del servicio y el permiso
@@ -321,6 +322,40 @@ class _MainAppState extends State<MainApp> {
       setState(() {
         _isSavingToFirebase = !isSaving;
       });
+    }
+  }
+
+    // ✅ SOLUCIÓN: Manejar cambios en el ciclo de vida de la app
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    switch (state) {
+      case AppLifecycleState.resumed:
+        print('App resumed - Verificando servicios');
+        _ensureServicesActive();
+        break;
+      case AppLifecycleState.paused:
+        print('App paused');
+        break;
+      case AppLifecycleState.detached:
+        print('App detached');
+        break;
+      case AppLifecycleState.inactive:
+        print('App inactive');
+        break;
+      case AppLifecycleState.hidden:
+        print('App hidden');
+        break;
+    }
+  }
+  
+  // ✅ SOLUCIÓN: Método para asegurar que los servicios estén activos
+  Future<void> _ensureServicesActive() async {
+    try {
+      await NotificationListenerService.instance.ensureServiceActive();
+    } catch (e) {
+      print('Error ensuring services active: $e');
     }
   }
 

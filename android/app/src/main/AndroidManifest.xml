@@ -19,9 +19,10 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     
-    <!-- ✅ NUEVOS PERMISOS NECESARIOS -->
+    <!-- ✅ NUEVOS PERMISOS PARA AUTO-APERTURA DESDE SEGUNDO PLANO -->
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <uses-permission android:name="android.permission.GET_TASKS" />
+    <uses-permission android:name="android.permission.BRING_TO_FOREGROUND" />
     
     <application
         android:label="Connect Ɐ2"
@@ -37,7 +38,8 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize"
             android:showWhenLocked="true"
-            android:turnScreenOn="true">
+            android:turnScreenOn="true"
+            android:excludeFromRecents="false">
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues

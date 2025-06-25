@@ -279,4 +279,52 @@ class NotificationListenerService {
     final now = DateTime.now();
     return now.difference(_lastNotificationShownTime!) >= _minShowInterval;
   }
+  
+  // ✅ SOLUCIÓN: Método para verificar y reactivar el servicio si es necesario
+  Future<void> ensureServiceActive() async {
+    if (!_isListening) {
+      print('NotificationListenerService: Servicio no activo, reactivando...');
+      
+      // Verificar si las notificaciones están habilitadas
+      final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+      
+      if (notificationsEnabled) {
+        await setListeningEnabled(true);
+        print('NotificationListenerService: Servicio reactivado exitosamente');
+      } else {
+        print('NotificationListenerService: Notificaciones deshabilitadas, no se reactiva');
+      }
+    } else {
+      print('NotificationListenerService: Servicio ya activo');
+    }
+  }
+  
+  // ✅ SOLUCIÓN: Método para verificar la salud del servicio
+  Future<bool> isServiceHealthy() async {
+    if (!_isListening) return false;
+    
+    // Verificar si la suscripción sigue activa
+    if (_notificationStreamSubscription == null) {
+      print('NotificationListenerService: Suscripción nula, servicio no saludable');
+      return false;
+    }
+    
+    return true;
+  }
+  
+  // ✅ SOLUCIÓN: Método para reiniciar el servicio si es necesario
+  Future<void> restartIfNeeded() async {
+    if (!await isServiceHealthy()) {
+      print('NotificationListenerService: Servicio no saludable, reiniciando...');
+      stopListening();
+      
+      // Esperar un momento antes de reiniciar
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+      if (notificationsEnabled) {
+        await setListeningEnabled(true);
+      }
+    }
+  }
 }
