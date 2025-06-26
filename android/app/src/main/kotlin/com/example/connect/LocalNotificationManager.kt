@@ -76,6 +76,8 @@ class LocalNotificationManager(private val context: Context) {
         notificationId: String,
         soundEnabled: Boolean,
         vibrationEnabled: Boolean,
+        // ✅ NUEVOS PARÁMETROS SEPARADOS
+        screenWakeEnabled: Boolean,
         autoOpenEnabled: Boolean
     ) {
         try {
@@ -85,9 +87,14 @@ class LocalNotificationManager(private val context: Context) {
                 return
             }
             
-            // ✅ Si auto-apertura está habilitada, abrir la app inmediatamente
-            if (autoOpenEnabled) {
-                openAppAutomatically(title, body, packageName, appName, notificationId)
+            // ✅ MANEJAR ACTIVACIÓN DE PANTALLA SEPARADAMENTE
+            if (screenWakeEnabled) {
+                wakeUpScreen()
+                
+                // ✅ SOLO ABRIR APP SI AUTO-OPEN TAMBIÉN ESTÁ HABILITADO
+                if (autoOpenEnabled) {
+                    openAppAutomatically(title, body, packageName, appName, notificationId)
+                }
             }
             
             // Intent para abrir la aplicación (cuando se toca la notificación)
@@ -242,5 +249,48 @@ class LocalNotificationManager(private val context: Context) {
     // Método para limpiar notificaciones canceladas (llamar periódicamente)
     fun clearCancelledNotifications() {
         cancelledNotifications.clear()
+    }
+    
+    // ✅ MÉTODO FALTANTE: Activar la pantalla
+    private fun wakeUpScreen() {
+        try {
+            Log.d("LocalNotificationManager", "Activando pantalla...")
+            
+            // Obtener el PowerManager para activar la pantalla
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            
+            // Verificar si la pantalla ya está encendida
+            val isScreenOn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                powerManager.isInteractive
+            } else {
+                @Suppress("DEPRECATION")
+                powerManager.isScreenOn
+            }
+            
+            if (!isScreenOn) {
+                // Crear un WakeLock para activar la pantalla
+                val wakeLock = powerManager.newWakeLock(
+                    android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or 
+                    android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    android.os.PowerManager.ON_AFTER_RELEASE,
+                    "ConnectApp:NotificationWakeUp"
+                )
+                
+                // Activar la pantalla por 3 segundos
+                wakeLock.acquire(3000)
+                
+                // Liberar el WakeLock inmediatamente (la pantalla permanecerá encendida)
+                if (wakeLock.isHeld) {
+                    wakeLock.release()
+                }
+                
+                Log.d("LocalNotificationManager", "Pantalla activada exitosamente")
+            } else {
+                Log.d("LocalNotificationManager", "La pantalla ya estaba encendida")
+            }
+            
+        } catch (e: Exception) {
+            Log.e("LocalNotificationManager", "Error al activar la pantalla", e)
+        }
     }
 }

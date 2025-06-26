@@ -210,6 +210,7 @@ class MainActivity: FlutterActivity() {
         }
         
         // CONFIGURAR MANEJADOR PARA CANAL RECEPTOR (LocalNotificationManager)
+        // En el manejador del canal RECEPTOR
         receptorChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "showNotification" -> {
@@ -221,11 +222,13 @@ class MainActivity: FlutterActivity() {
                         val notificationId = call.argument<String>("notificationId") ?: ""
                         val soundEnabled = call.argument<Boolean>("soundEnabled") ?: true
                         val vibrationEnabled = call.argument<Boolean>("vibrationEnabled") ?: true
+                        // ✅ OBTENER LOS NUEVOS PARÁMETROS SEPARADOS
+                        val screenWakeEnabled = call.argument<Boolean>("screenWakeEnabled") ?: false
                         val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
                         
                         localNotificationManager.showNotification(
                             title, body, packageName, appName, notificationId,
-                            soundEnabled, vibrationEnabled, autoOpenEnabled
+                            soundEnabled, vibrationEnabled, screenWakeEnabled, autoOpenEnabled
                         )
                         result.success(true)
                         Log.d("MainActivity", "Notificación RECEPTOR mostrada: $title")

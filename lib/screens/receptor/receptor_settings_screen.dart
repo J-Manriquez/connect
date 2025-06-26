@@ -15,8 +15,10 @@ class ReceptorSettingsScreen extends StatefulWidget {
 }
 
 class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> 
-    with WidgetsBindingObserver { // ✅ Añadir observer
+    with WidgetsBindingObserver {
   bool _notificationsEnabled = false;
+  // ✅ SEPARAR EN DOS VARIABLES
+  bool _screenWakeEnabled = false;
   bool _autoOpenEnabled = false;
   bool _isLoading = true;
   
@@ -68,16 +70,31 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     });
 
     final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+    // ✅ CARGAR LAS NUEVAS CONFIGURACIONES SEPARADAS
+    final screenWakeEnabled = await LocalNotificationService.isScreenWakeEnabled();
     final autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
 
     setState(() {
       _notificationsEnabled = notificationsEnabled;
+      _screenWakeEnabled = screenWakeEnabled;
       _autoOpenEnabled = autoOpenEnabled;
       _isLoading = false;
     });
     
-    // ✅ SOLUCIÓN: Verificar estado del servicio después de cargar configuración
     _ensureNotificationServiceActive();
+  }
+
+  // ✅ NUEVOS MÉTODOS PARA LOS DOS SWITCHES
+  Future<void> _toggleScreenWake(bool value) async {
+    await LocalNotificationService.setScreenWakeEnabled(value);
+    setState(() {
+      _screenWakeEnabled = value;
+      // Si se desactiva screen wake, también desactivar auto-open
+      if (!value && _autoOpenEnabled) {
+        _autoOpenEnabled = false;
+        LocalNotificationService.setAutoOpenEnabled(false);
+      }
+    });
   }
 
   Future<void> _toggleAutoOpen(bool value) async {
@@ -202,6 +219,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             ),
                           ),
                         ),
+                        // ✅ PRIMER SWITCH: ACTIVAR PANTALLA
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -212,7 +230,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                                 Padding(
                                   padding: const EdgeInsets.only(left: 15),
                                   child: Text(
-                                    'Abrir aplicación automáticamente',
+                                    'Activar pantalla',
                                     style: TextStyle(
                                       fontSize: 17,
                                       fontWeight: FontWeight.w500,
@@ -222,7 +240,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                                 Padding(
                                   padding: EdgeInsets.only(left: 15),
                                   child: Text(
-                                    'Abre la aplicación automáticamente \ncuando llega una notificación',
+                                    'Enciende la pantalla cuando \nllega una notificación',
                                     style: TextStyle(
                                       fontSize: 14,
                                       fontStyle: FontStyle.italic,
@@ -232,14 +250,56 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                               ],
                             ),
                             Switch(
-                              value: _autoOpenEnabled,
-                              onChanged: _toggleAutoOpen,
+                              value: _screenWakeEnabled,
+                              onChanged: _toggleScreenWake,
                               activeColor: Colors.green,
                               inactiveTrackColor: customColor[200],
                               inactiveThumbColor: Colors.grey[300],
                             ),
                           ],
                         ),
+                        // ✅ SEGUNDO SWITCH: AUTO-APERTURA (SOLO VISIBLE SI SCREEN WAKE ESTÁ ACTIVO)
+                        if (_screenWakeEnabled) ...[
+                          const SizedBox(height: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 20),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Abrir aplicación automáticamente',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                      Text(
+                                        'Abre la aplicación automáticamente \ncuando llega una notificación',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontStyle: FontStyle.italic,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Switch(
+                                  value: _autoOpenEnabled,
+                                  onChanged: _toggleAutoOpen,
+                                  activeColor: Colors.green,
+                                  inactiveTrackColor: customColor[200],
+                                  inactiveThumbColor: Colors.grey[300],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const Divider(),
                         // Botón para configuraciones avanzadas
                         ListTile(

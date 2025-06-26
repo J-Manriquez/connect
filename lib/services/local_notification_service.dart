@@ -9,6 +9,8 @@ class LocalNotificationService {
   static const String KEY_NOTIFICATIONS_ENABLED = 'local_notifications_enabled';
   static const String KEY_SOUND_ENABLED = 'local_notifications_sound';
   static const String KEY_VIBRATION_ENABLED = 'local_notifications_vibration';
+  // ✅ NUEVAS CLAVES SEPARADAS
+  static const String KEY_SCREEN_WAKE_ENABLED = 'local_notifications_screen_wake';
   static const String KEY_AUTO_OPEN_ENABLED = 'local_notifications_auto_open';
   
   // Callback para manejar cuando se toca una notificación
@@ -86,6 +88,8 @@ class LocalNotificationService {
     final prefs = await SharedPreferences.getInstance();
     final soundEnabled = prefs.getBool(KEY_SOUND_ENABLED) ?? true;
     final vibrationEnabled = prefs.getBool(KEY_VIBRATION_ENABLED) ?? true;
+    // ✅ OBTENER LAS NUEVAS CONFIGURACIONES SEPARADAS
+    final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
     final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
     
     try {
@@ -97,6 +101,8 @@ class LocalNotificationService {
         'notificationId': notificationId,
         'soundEnabled': soundEnabled,
         'vibrationEnabled': vibrationEnabled,
+        // ✅ ENVIAR LAS NUEVAS CONFIGURACIONES SEPARADAS
+        'screenWakeEnabled': screenWakeEnabled,
         'autoOpenEnabled': autoOpenEnabled,
       });
     } catch (e) {
@@ -140,9 +146,26 @@ class LocalNotificationService {
   }
   
   // Habilitar o deshabilitar apertura automática
+  // ✅ NUEVOS MÉTODOS PARA MANEJAR ACTIVACIÓN DE PANTALLA
+  static Future<void> setScreenWakeEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(KEY_SCREEN_WAKE_ENABLED, enabled);
+  }
+  
+  static Future<bool> isScreenWakeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
+  }
+  
+  // ✅ MODIFICAR MÉTODOS DE AUTO-APERTURA PARA QUE DEPENDAN DE SCREEN_WAKE
   static Future<void> setAutoOpenEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(KEY_AUTO_OPEN_ENABLED, enabled);
+  }
+  
+  static Future<bool> isAutoOpenEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
   }
   
   // Obtener configuración de sonido
@@ -155,11 +178,5 @@ class LocalNotificationService {
   static Future<bool> isVibrationEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(KEY_VIBRATION_ENABLED) ?? true;
-  }
-  
-  // Obtener configuración de apertura automática
-  static Future<bool> isAutoOpenEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
   }
 }
