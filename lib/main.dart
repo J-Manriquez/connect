@@ -63,21 +63,46 @@ void initializeNotificationHandling() {
     }
   };
   
-  // ✅ Mejorar callback para auto-apertura
+  // ✅ MEJORAR: Callback para auto-apertura más robusto
   LocalNotificationService.onNotificationAutoOpened = (Map<String, dynamic> data) {
-    print('Notificación auto-abierta: $data');
+    print('=== NOTIFICACIÓN AUTO-ABIERTA ===');
+    print('Datos recibidos: $data');
+    
+    final timestamp = data['timestamp'] as int? ?? 0;
+    final fromBackground = data['fromBackground'] as bool? ?? false;
+    
+    print('Timestamp: $timestamp');
+    print('Desde segundo plano: $fromBackground');
+    print('===============================');
 
-    // ✅ Asegurar navegación inmediata
+    // ✅ MEJORAR: Navegación más robusta con validación
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (navigatorKey.currentContext != null) {
-        Navigator.of(navigatorKey.currentContext!).pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (context) => NotificationDetailScreen(
-              notificationData: data,
+      final context = navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        // ✅ VERIFICAR: Si ya estamos en la pantalla de detalle
+        final currentRoute = ModalRoute.of(context)?.settings.name;
+        if (currentRoute == '/notification_detail') {
+          print('Ya estamos en pantalla de detalle, actualizando datos');
+          // Aquí podrías actualizar los datos si es necesario
+          return;
+        }
+        
+        try {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => NotificationDetailScreen(
+                notificationData: data,
+              ),
+              settings: const RouteSettings(name: '/notification_detail'),
             ),
-          ),
-          (route) => route.isFirst,
-        );
+            (route) => route.isFirst,
+          );
+          print('Navegación a detalle de notificación exitosa');
+        } catch (e) {
+          print('Error en navegación: $e');
+        }
+      } else {
+        print('Contexto no disponible para navegación');
       }
     });
   };

@@ -6,6 +6,7 @@ import 'package:connect/services/local_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:connect/services/preferences_service.dart';
+import 'package:connect/screens/debug_logs_screen.dart';
 
 class ReceptorSettingsScreen extends StatefulWidget {
   const ReceptorSettingsScreen({Key? key}) : super(key: key);
@@ -14,16 +15,17 @@ class ReceptorSettingsScreen extends StatefulWidget {
   State<ReceptorSettingsScreen> createState() => _ReceptorSettingsScreenState();
 }
 
-class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen> 
+class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     with WidgetsBindingObserver {
   bool _notificationsEnabled = false;
   // ✅ SEPARAR EN DOS VARIABLES
   bool _screenWakeEnabled = false;
   bool _autoOpenEnabled = false;
   bool _isLoading = true;
-  
+
   // ✅ SOLUCIÓN: Añadir referencia al servicio
-  final NotificationListenerService _notificationService = NotificationListenerService.instance;
+  final NotificationListenerService _notificationService =
+      NotificationListenerService.instance;
 
   final ReceptorService _receptorService = ReceptorService();
 
@@ -34,13 +36,13 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     _loadSettings();
     _ensureNotificationServiceActive(); // ✅ Asegurar que el servicio esté activo
   }
-  
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this); // ✅ Remover observer
     super.dispose();
   }
-  
+
   // ✅ SOLUCIÓN: Detectar cuando la app vuelve al primer plano
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -49,12 +51,13 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       _ensureNotificationServiceActive();
     }
   }
-  
+
   // ✅ SOLUCIÓN: Método para asegurar que el servicio esté activo
   Future<void> _ensureNotificationServiceActive() async {
     try {
-      final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
-      
+      final notificationsEnabled =
+          await LocalNotificationService.areNotificationsEnabled();
+
       if (notificationsEnabled && !_notificationService.isListening) {
         print('ReceptorSettingsScreen: Reactivando servicio de notificaciones');
         await _notificationService.setListeningEnabled(true);
@@ -69,39 +72,56 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       _isLoading = true;
     });
 
-    final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
-    // ✅ CARGAR LAS NUEVAS CONFIGURACIONES SEPARADAS
-    final screenWakeEnabled = await LocalNotificationService.isScreenWakeEnabled();
-    final autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
+    final notificationsEnabled =
+        await LocalNotificationService.areNotificationsEnabled();
+    // ✅ CARGAR CONFIGURACIONES SEPARADAS CON VALORES PREDETERMINADOS CORRECTOS
+    _screenWakeEnabled = await LocalNotificationService.isScreenWakeEnabled();
+    _autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
 
+    // ✅ CAMBIO: Auto-open ahora funciona independientemente de screen wake
+    // Ya no se requiere validación de dependencia
     setState(() {
       _notificationsEnabled = notificationsEnabled;
-      _screenWakeEnabled = screenWakeEnabled;
-      _autoOpenEnabled = autoOpenEnabled;
+      _screenWakeEnabled = _screenWakeEnabled;
+      _autoOpenEnabled = _autoOpenEnabled;
       _isLoading = false;
     });
-    
+
     _ensureNotificationServiceActive();
   }
 
-  // ✅ NUEVOS MÉTODOS PARA LOS DOS SWITCHES
-  Future<void> _toggleScreenWake(bool value) async {
-    await LocalNotificationService.setScreenWakeEnabled(value);
-    setState(() {
-      _screenWakeEnabled = value;
-      // Si se desactiva screen wake, también desactivar auto-open
-      if (!value && _autoOpenEnabled) {
-        _autoOpenEnabled = false;
-        LocalNotificationService.setAutoOpenEnabled(false);
-      }
-    });
+  // ✅ CAMBIO: Métodos independientes para los dos switches
+  void _toggleScreenWake(bool? value) async {
+    if (value != null) {
+      print('=== TOGGLE SCREEN WAKE ===');
+      print('Valor anterior: $_screenWakeEnabled');
+      print('Nuevo valor: $value');
+      
+      setState(() {
+        _screenWakeEnabled = value;
+        // ✅ CAMBIO: Auto-open ya no depende de screen wake
+      });
+      
+      await LocalNotificationService.setScreenWakeEnabled(value);
+      print('setScreenWakeEnabled($value) ejecutado');
+      
+      // Verificar que se guardó correctamente
+      final savedValue = await LocalNotificationService.isScreenWakeEnabled();
+      print('Valor guardado verificado: $savedValue');
+      print('========================');
+      
+      print('Screen wake ${value ? 'habilitado' : 'deshabilitado'}');
+    }
   }
 
-  Future<void> _toggleAutoOpen(bool value) async {
-    await LocalNotificationService.setAutoOpenEnabled(value);
-    setState(() {
-      _autoOpenEnabled = value;
-    });
+  void _toggleAutoOpen(bool? value) async {
+    if (value != null) { // ✅ CAMBIO: Ya no requiere validación de screen wake
+      setState(() {
+        _autoOpenEnabled = value;
+      });
+      await LocalNotificationService.setAutoOpenEnabled(value);
+      print('Auto-open ${value ? 'habilitado' : 'deshabilitado'} (independiente)');
+    }
   }
 
   // Desvincular dispositivo
@@ -258,48 +278,46 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             ),
                           ],
                         ),
-                        // ✅ SEGUNDO SWITCH: AUTO-APERTURA (SOLO VISIBLE SI SCREEN WAKE ESTÁ ACTIVO)
-                        if (_screenWakeEnabled) ...[
-                          const SizedBox(height: 8),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 20),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        // ✅ CAMBIO: SEGUNDO SWITCH: AUTO-APERTURA (AHORA INDEPENDIENTE)
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Abrir aplicación automáticamente',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.grey[700],
-                                        ),
-                                      ),
-                                      Text(
-                                        'Abre la aplicación automáticamente \ncuando llega una notificación',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontStyle: FontStyle.italic,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 15),
+                                  child: Text(
+                                    'Abrir aplicación automáticamente',
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                                Switch(
-                                  value: _autoOpenEnabled,
-                                  onChanged: _toggleAutoOpen,
-                                  activeColor: Colors.green,
-                                  inactiveTrackColor: customColor[200],
-                                  inactiveThumbColor: Colors.grey[300],
+                                Padding(
+                                  padding: EdgeInsets.only(left: 15),
+                                  child: Text(
+                                    'Abre la aplicación automáticamente \ncuando llega una notificación\n(funciona independientemente)',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
+                            Switch(
+                              value: _autoOpenEnabled,
+                              onChanged: _toggleAutoOpen,
+                              activeColor: Colors.green,
+                              inactiveTrackColor: customColor[200],
+                              inactiveThumbColor: Colors.grey[300],
+                            ),
+                          ],
+                        ),
                         const Divider(),
                         // Botón para configuraciones avanzadas
                         ListTile(
@@ -322,6 +340,70 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             Navigator.pushNamed(
                               context,
                               '/notification_settings',
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // Card de Debug Logs para Android 8.0
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          child: const Text(
+                            'Debugging Android 8.0',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.bug_report,
+                              color: Colors.orange[700],
+                              size: 24,
+                            ),
+                          ),
+                          title: const Text(
+                            'Logs de Debugging',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Ver logs en tiempo real de notificaciones\ny configuración para Android 8.0',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const DebugLogsScreen(),
+                              ),
                             );
                           },
                         ),

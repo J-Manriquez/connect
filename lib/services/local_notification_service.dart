@@ -66,6 +66,7 @@ class LocalNotificationService {
   }
   
   // Mostrar una notificación (método modificado)
+  // ✅ MEJORAR: Método showNotification con validación
   static Future<void> showNotification({
     required String title,
     required String body,
@@ -75,6 +76,7 @@ class LocalNotificationService {
   }) async {
     // Verificar si las notificaciones están habilitadas
     if (!await areNotificationsEnabled()) {
+      print('Notificaciones deshabilitadas, no se muestra: $notificationId');
       return;
     }
     
@@ -88,9 +90,28 @@ class LocalNotificationService {
     final prefs = await SharedPreferences.getInstance();
     final soundEnabled = prefs.getBool(KEY_SOUND_ENABLED) ?? true;
     final vibrationEnabled = prefs.getBool(KEY_VIBRATION_ENABLED) ?? true;
-    // ✅ OBTENER LAS NUEVAS CONFIGURACIONES SEPARADAS
     final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
     final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
+    
+    // ✅ DEBUGGING: Verificar valores en SharedPreferences
+     print('=== VALORES EN SHAREDPREFERENCES ===');
+     print('KEY_SCREEN_WAKE_ENABLED ($KEY_SCREEN_WAKE_ENABLED): $screenWakeEnabled');
+     print('KEY_AUTO_OPEN_ENABLED ($KEY_AUTO_OPEN_ENABLED): $autoOpenEnabled');
+     print('Todas las claves: ${prefs.getKeys()}');
+     print('====================================');
+    
+    // ✅ CAMBIO: Auto-open ahora funciona independientemente de screen wake
+    final effectiveAutoOpenEnabled = autoOpenEnabled; // Sin dependencia de screenWakeEnabled
+    
+    // ✅ LOGGING mejorado
+    print('=== CONFIGURACIÓN DE NOTIFICACIÓN ===');
+    print('Screen Wake Enabled: $screenWakeEnabled');
+    print('Auto Open Requested: $autoOpenEnabled');
+    print('Auto Open Effective: $effectiveAutoOpenEnabled (independiente)');
+    print('Sound Enabled: $soundEnabled');
+    print('Vibration Enabled: $vibrationEnabled');
+    print('Notification ID: $notificationId');
+    print('=====================================');
     
     try {
       await _channel.invokeMethod('showNotification', {
@@ -101,13 +122,30 @@ class LocalNotificationService {
         'notificationId': notificationId,
         'soundEnabled': soundEnabled,
         'vibrationEnabled': vibrationEnabled,
-        // ✅ ENVIAR LAS NUEVAS CONFIGURACIONES SEPARADAS
         'screenWakeEnabled': screenWakeEnabled,
-        'autoOpenEnabled': autoOpenEnabled,
+        'autoOpenEnabled': effectiveAutoOpenEnabled, // ✅ Usar valor efectivo
       });
+      
+      print('Notificación enviada exitosamente a Android');
     } catch (e) {
       print('Error al mostrar notificación: $e');
     }
+  }
+  
+  // ✅ CAMBIO: Validación simplificada sin dependencia entre configuraciones
+  static Future<bool> validateConfiguration() async {
+    // Ya no hay dependencias entre auto-open y screen wake
+    print('Configuración validada - Auto-open independiente de screen wake');
+    return true;
+  }
+  
+  // ✅ CAMBIO: setAutoOpenEnabled sin validación de screen wake
+  static Future<void> setAutoOpenEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Auto-open ahora funciona independientemente
+    await prefs.setBool(KEY_AUTO_OPEN_ENABLED, enabled);
+    print('Auto-open ${enabled ? 'habilitado' : 'deshabilitado'} (independiente de screen wake)');
   }
   
   // Cancelar una notificación
@@ -158,10 +196,7 @@ class LocalNotificationService {
   }
   
   // ✅ MODIFICAR MÉTODOS DE AUTO-APERTURA PARA QUE DEPENDAN DE SCREEN_WAKE
-  static Future<void> setAutoOpenEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(KEY_AUTO_OPEN_ENABLED, enabled);
-  }
+  // Método eliminado - ya existe una versión mejorada arriba
   
   static Future<bool> isAutoOpenEnabled() async {
     final prefs = await SharedPreferences.getInstance();

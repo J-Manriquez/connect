@@ -331,6 +331,56 @@ class MainActivity: FlutterActivity() {
     
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        
+        // ✅ MANEJO ESPECÍFICO PARA ANDROID 8: Intent de activación de pantalla
+        if (intent.action == "WAKE_SCREEN_ACTION" && intent.getBooleanExtra("wakeScreenOnly", false)) {
+            Log.d("MainActivity", "Intent de activación de pantalla recibido (Android 8.0)")
+            
+            val screenWakeEnabled = intent.getBooleanExtra("screenWakeEnabled", false)
+            if (screenWakeEnabled && Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
+                Log.d("MainActivity", "Aplicando configuración de pantalla para Android 8.0")
+                
+                // Aplicar configuración específica para Android 8.0
+                try {
+                    // Usar tanto métodos nuevos como flags tradicionales
+                    setShowWhenLocked(true)
+                    setTurnScreenOn(true)
+                    
+                    window.addFlags(
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                    )
+                    
+                    Log.d("MainActivity", "Configuración de pantalla aplicada exitosamente (Android 8.0)")
+                    
+                    // Limpiar flags después de un tiempo
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        try {
+                            setShowWhenLocked(false)
+                            setTurnScreenOn(false)
+                            window.clearFlags(
+                                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                            )
+                            Log.d("MainActivity", "Flags de pantalla limpiados (Android 8.0)")
+                        } catch (e: Exception) {
+                            Log.e("MainActivity", "Error limpiando flags de pantalla", e)
+                        }
+                    }, 3000)
+                    
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error aplicando configuración de pantalla Android 8.0", e)
+                }
+            }
+            
+            // No procesar como notificación normal
+            return
+        }
+        
         handleNotificationIntent(intent)
     }
     
@@ -375,46 +425,84 @@ class MainActivity: FlutterActivity() {
         }
     }
     
-    // ✅ Mejorar el método para manejar auto-apertura
-    
+    // ✅ CORREGIDO: Método handleAutoOpenNotification que respeta configuración
     private fun handleAutoOpenNotification(intent: Intent) {
         if (intent?.action == LocalNotificationManager.NOTIFICATION_ACTION_AUTO_OPEN) {
-            Log.d("MainActivity", "Manejando auto-apertura de notificación")
+            Log.d("MainActivity", "Procesando auto-apertura de notificación")
             
             val fromBackground = intent.getBooleanExtra("fromBackground", false)
+            val timestamp = intent.getLongExtra("timestamp", 0)
+            val screenWakeEnabled = intent.getBooleanExtra("screenWakeEnabled", false)
             
             try {
-                // ✅ SOLUCIÓN: Configurar flags para mostrar sobre otras apps
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                    setShowWhenLocked(true)
-                    setTurnScreenOn(true)
-                } else {
-                    window.addFlags(
-                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                    )
-                }
-                
-                // ✅ SOLUCIÓN: Si viene del segundo plano, forzar al frente
-                if (fromBackground) {
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                // ✅ SOLO configurar flags si screenWakeEnabled está activo
+                if (screenWakeEnabled) {
+                    Log.d("MainActivity", "Configurando flags de pantalla - screenWakeEnabled: true")
+                    Log.d("MainActivity", "Android API Level: ${Build.VERSION.SDK_INT}")
                     
-                    // ✅ Traer la tarea al frente
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                        try {
-                            // 🛠️ Corrección: Llamar al método desde la instancia de activityManager y usar la propiedad taskId de la activity
-                            activityManager.moveTaskToFront(taskId, 0) // Usamos 0 para opciones por defecto
-                            Log.d("MainActivity", "Tarea movida al frente exitosamente.")
-                        } catch (e: Exception) {
-                            Log.w("MainActivity", "No se pudo mover la tarea al frente: $e")
+                    when {
+                        // Android 8.1+ (API 27+) - Usar métodos nuevos
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1 -> {
+                            Log.d("MainActivity", "Usando métodos para Android 8.1+ (API 27+)")
+                            setShowWhenLocked(true)
+                            setTurnScreenOn(true)
+                            
+                            // Para Android 10+ agregar flag adicional
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            }
+                        }
+                        // Android 8.0 (API 26) - Manejo específico
+                        Build.VERSION.SDK_INT == Build.VERSION_CODES.O -> {
+                            Log.d("MainActivity", "Usando métodos específicos para Android 8.0 (API 26)")
+                            // En Android 8.0, usar tanto métodos nuevos como flags por compatibilidad
+                            try {
+                                setShowWhenLocked(true)
+                                setTurnScreenOn(true)
+                            } catch (e: Exception) {
+                                Log.w("MainActivity", "Error con métodos nuevos en Android 8.0, usando flags: $e")
+                            }
+                            
+                            // También usar flags como respaldo
+                            window.addFlags(
+                                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                            )
+                        }
+                        // Android 7.1 y anteriores - Usar flags tradicionales
+                        else -> {
+                            Log.d("MainActivity", "Usando flags tradicionales para Android < 8.0")
+                            window.addFlags(
+                                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                            )
                         }
                     }
+                    
+                    // ✅ MEJORAR: Manejo específico para segundo plano
+                    if (fromBackground) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        
+                        // ✅ CORREGIR: Mover tarea al frente de forma segura
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            try {
+                                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                                activityManager.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
+                                Log.d("MainActivity", "Tarea movida al frente exitosamente")
+                            } catch (e: Exception) {
+                                Log.w("MainActivity", "No se pudo mover tarea al frente: $e")
+                            }
+                        }
+                    }
+                } else {
+                    Log.d("MainActivity", "screenWakeEnabled: false - No se configuran flags de pantalla")
                 }
                 
-                Log.d("MainActivity", "Flags de ventana configurados - Desde segundo plano: $fromBackground")
+                Log.d("MainActivity", "Flags configurados - Desde segundo plano: $fromBackground, ScreenWake: $screenWakeEnabled")
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error configurando flags de ventana", e)
             }
@@ -426,6 +514,7 @@ class MainActivity: FlutterActivity() {
         val packageName = intent.getStringExtra("packageName")
         val appName = intent.getStringExtra("appName")
         val fromBackground = intent.getBooleanExtra("fromBackground", false)
+        val timestamp = intent.getLongExtra("timestamp", 0)
         
         if (notificationId != null) {
             val notificationData = mapOf(
@@ -436,16 +525,17 @@ class MainActivity: FlutterActivity() {
                 "appName" to (appName ?: ""),
                 "autoOpen" to true,
                 "isAutoOpened" to true,
-                "fromBackground" to fromBackground
+                "fromBackground" to fromBackground,
+                "timestamp" to timestamp
             )
             
-            // ✅ SOLUCIÓN: Delay más largo si viene del segundo plano
-            val delay = if (fromBackground) 1000L else 500L
+            // ✅ MEJORAR: Delay adaptativo según el origen
+            val delay = if (fromBackground) 1500L else 750L
             
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     receptorChannel.invokeMethod("onNotificationAutoOpened", notificationData)
-                    Log.d("MainActivity", "Notificación auto-abierta enviada a Flutter - Delay: ${delay}ms")
+                    Log.d("MainActivity", "Datos enviados a Flutter - Delay: ${delay}ms")
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Error enviando datos a Flutter", e)
                 }

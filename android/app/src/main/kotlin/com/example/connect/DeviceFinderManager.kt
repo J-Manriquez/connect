@@ -50,19 +50,27 @@ class DeviceFinderManager(private val context: Context) {
     
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // ✅ CORREGIR: Usar IMPORTANCE_HIGH para Device Finder (debe funcionar siempre)
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "Búsqueda de Dispositivo",
-                NotificationManager.IMPORTANCE_HIGH
+                importance
             ).apply {
                 description = "Notificaciones para la búsqueda de dispositivos"
+                
+                // Configuración estándar para Device Finder (debe activar pantalla siempre)
                 enableVibration(true)
-                setSound(null, null) // Deshabilitar sonido del canal
-                // setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), null)
+                enableLights(true)
+                setSound(null, null) // Sin sonido del canal (se maneja por separado)
+                
+                Log.d("DeviceFinderManager", "Canal configurado con IMPORTANCE_HIGH")
             }
             
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
+            Log.d("DeviceFinderManager", "Canal creado - Importancia: HIGH")
         }
     }
     
