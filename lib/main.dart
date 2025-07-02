@@ -27,6 +27,9 @@ import 'package:connect/services/device_search_service.dart';
 import 'package:connect/services/device_finder_service.dart';
 import 'package:connect/screens/buscar_dispositivo_screen.dart';
 
+// reiniciar la app
+import 'package:flutter_phoenix/flutter_phoenix.dart';
+
 // Add this global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -44,7 +47,7 @@ void main() async {
   // final notificationListenerService = NotificationListenerService();
   // notificationListenerService.startListening(); // Iniciar la escucha
 
-  runApp(const MainApp());
+  runApp(Phoenix(child: const MainApp()));
 }
 
 void initializeNotificationHandling() {
@@ -62,54 +65,53 @@ void initializeNotificationHandling() {
       );
     }
   };
-  
-  // ✅ MEJORAR: Callback para auto-apertura más robusto
-  LocalNotificationService.onNotificationAutoOpened = (Map<String, dynamic> data) {
-    print('=== NOTIFICACIÓN AUTO-ABIERTA ===');
-    print('Datos recibidos: $data');
-    
-    final timestamp = data['timestamp'] as int? ?? 0;
-    final fromBackground = data['fromBackground'] as bool? ?? false;
-    
-    print('Timestamp: $timestamp');
-    print('Desde segundo plano: $fromBackground');
-    print('===============================');
 
-    // ✅ MEJORAR: Navegación más robusta con validación
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final context = navigatorKey.currentContext;
-      if (context != null && context.mounted) {
-        // ✅ VERIFICAR: Si ya estamos en la pantalla de detalle
-        final currentRoute = ModalRoute.of(context)?.settings.name;
-        if (currentRoute == '/notification_detail') {
-          print('Ya estamos en pantalla de detalle, actualizando datos');
-          // Aquí podrías actualizar los datos si es necesario
-          return;
-        }
-        
-        try {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(
-              builder: (context) => NotificationDetailScreen(
-                notificationData: data,
-              ),
-              settings: const RouteSettings(name: '/notification_detail'),
-            ),
-            (route) => route.isFirst,
-          );
-          print('Navegación a detalle de notificación exitosa');
-        } catch (e) {
-          print('Error en navegación: $e');
-        }
-      } else {
-        print('Contexto no disponible para navegación');
-      }
-    });
-  };
+  // ✅ MEJORAR: Callback para auto-apertura más robusto
+  LocalNotificationService.onNotificationAutoOpened =
+      (Map<String, dynamic> data) {
+        print('=== NOTIFICACIÓN AUTO-ABIERTA ===');
+        print('Datos recibidos: $data');
+
+        final timestamp = data['timestamp'] as int? ?? 0;
+        final fromBackground = data['fromBackground'] as bool? ?? false;
+
+        print('Timestamp: $timestamp');
+        print('Desde segundo plano: $fromBackground');
+        print('===============================');
+
+        // ✅ MEJORAR: Navegación más robusta con validación
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final context = navigatorKey.currentContext;
+          if (context != null && context.mounted) {
+            // ✅ VERIFICAR: Si ya estamos en la pantalla de detalle
+            final currentRoute = ModalRoute.of(context)?.settings.name;
+            if (currentRoute == '/notification_detail') {
+              print('Ya estamos en pantalla de detalle, actualizando datos');
+              // Aquí podrías actualizar los datos si es necesario
+              return;
+            }
+
+            try {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(
+                  builder: (context) =>
+                      NotificationDetailScreen(notificationData: data),
+                  settings: const RouteSettings(name: '/notification_detail'),
+                ),
+                (route) => route.isFirst,
+              );
+              print('Navegación a detalle de notificación exitosa');
+            } catch (e) {
+              print('Error en navegación: $e');
+            }
+          } else {
+            print('Contexto no disponible para navegación');
+          }
+        });
+      };
 
   LocalNotificationService.initialize();
 }
-
 
 class MainApp extends StatefulWidget {
   const MainApp({super.key});
@@ -143,7 +145,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
 
     // Inicializar la estructura de datos en Firebase
     _initializeFirebaseData();
-    
+
     // ✅ INICIALIZAR EL SERVICIO DE BÚSQUEDA DE DISPOSITIVOS
     _initializeDeviceSearchService();
 
@@ -154,7 +156,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
       _checkInitialRoute();
     });
   }
-  
+
   // ✅ NUEVO MÉTODO PARA INICIALIZAR EL SERVICIO DE BÚSQUEDA
   Future<void> _initializeDeviceSearchService() async {
     try {
@@ -350,11 +352,11 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
     }
   }
 
-    // ✅ SOLUCIÓN: Manejar cambios en el ciclo de vida de la app
+  // ✅ SOLUCIÓN: Manejar cambios en el ciclo de vida de la app
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
+
     switch (state) {
       case AppLifecycleState.resumed:
         print('App resumed - Verificando servicios');
@@ -374,7 +376,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         break;
     }
   }
-  
+
   // ✅ SOLUCIÓN: Método para asegurar que los servicios estén activos
   Future<void> _ensureServicesActive() async {
     try {
@@ -398,27 +400,36 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
       print(
         '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',
       );
-      
+
       // ✅ VERIFICAR SI EL BLOQUEO AUTOMÁTICO ESTÁ DESACTIVADO
-      final disableAutoRedirect = await PreferencesService.getDisableAutoRedirect();
-      print('[DEBUG] _checkInitialRoute: disableAutoRedirect = $disableAutoRedirect');
-      
+      final disableAutoRedirect =
+          await PreferencesService.getDisableAutoRedirect();
+      print(
+        '[DEBUG] _checkInitialRoute: disableAutoRedirect = $disableAutoRedirect',
+      );
+
       // En el método _checkInitialRoute, después de verificar el linkStatus
       if (linkStatus && !disableAutoRedirect) {
-        print('[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor');
-        
+        print(
+          '[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor',
+        );
+
         // Inicializar el receptor sin mostrar notificaciones existentes
         final receptorService = ReceptorService();
         await receptorService.initializeReceptorWithoutNotifications();
-        
+
         // Navegar a la pantalla del receptor
         Navigator.pushReplacementNamed(context, '/receptor');
       } else if (linkStatus && disableAutoRedirect) {
-        print('[DEBUG] _checkInitialRoute: Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor');
+        print(
+          '[DEBUG] _checkInitialRoute: Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor',
+        );
       } else {
-        print('[DEBUG] _checkInitialRoute: Dispositivo no vinculado, mantener en emisor');
+        print(
+          '[DEBUG] _checkInitialRoute: Dispositivo no vinculado, mantener en emisor',
+        );
       }
-      
+
       final useAsReceptor = await PreferencesService.getUseAsReceptor();
       print(
         '[DEBUG] _checkInitialRoute: useAsReceptor = \$useAsReceptor, _isPermissionGranted = \$_isPermissionGranted',
@@ -438,7 +449,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     // Configurar la clave de navegación para DeviceFinderService
     DeviceFinderService.setNavigatorKey(navigatorKey);
-    
+
     return MaterialApp(
       navigatorKey: navigatorKey, // Add this line
       debugShowCheckedModeBanner: false,
@@ -492,9 +503,12 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
             const UnreadNotificationsScreen(), // Añadir esta nueva ruta
         '/notification_settings': (context) =>
             const NotificationSettingsScreen(), // Add the new route
-        '/notification_detail': (context) => const NotificationDetailScreen(notificationData: {},), // Add this line
+        '/notification_detail': (context) => const NotificationDetailScreen(
+          notificationData: {},
+        ), // Add this line
         '/buscar_dispositivo': (context) => const BuscarDispositivoScreen(),
-        '/buscar_emisor': (context) => const BuscarEmisorScreen(), // ✅ Nueva ruta
+        '/buscar_emisor': (context) =>
+            const BuscarEmisorScreen(), // ✅ Nueva ruta
       },
     );
   }

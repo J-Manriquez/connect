@@ -9,6 +9,9 @@ import 'package:connect/services/receptor_service.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:connect/screens/debug_logs_screen.dart';
 
+import 'package:flutter_phoenix/flutter_phoenix.dart';
+
+
 class ReceptorSettingsScreen extends StatefulWidget {
   const ReceptorSettingsScreen({Key? key}) : super(key: key);
 
@@ -171,7 +174,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       // ✅ SOLUCIÓN: Reinicio forzado SOLO cuando se DESACTIVA autoOpenEnabled
       if (!value) {
         print('🔄 AUTO-OPEN DESACTIVADO: Iniciando reinicio forzado de la aplicación');
-        _showRestartDialog();
+        _forceAppRestart();
       }
       
     } catch (e) {
@@ -183,49 +186,6 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     }
   }
   
-
-
-  // ✅ SOLUCIÓN: Mostrar diálogo de reinicio cuando se desactiva autoOpenEnabled
-  void _showRestartDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false, // No se puede cerrar tocando fuera
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text(
-            'Reinicio Requerido',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          content: const Text(
-            'Para aplicar correctamente la desactivación del auto-open, '
-            'es necesario reiniciar la aplicación.\n\n'
-            '¿Deseas reiniciar ahora?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                print('🚫 Usuario canceló el reinicio');
-              },
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _forceAppRestart();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Reiniciar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   // ✅ SOLUCIÓN: Método para forzar el reinicio de la aplicación
   Future<void> _forceAppRestart() async {
     try {
@@ -254,7 +214,8 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       
       // Usar SystemNavigator para cerrar la aplicación
       // En Android, esto cerrará la app y el usuario tendrá que abrirla manualmente
-      await SystemNavigator.pop();
+      // await SystemNavigator.pop();
+      Phoenix.rebirth(context);
       
       print('✅ APLICACIÓN CERRADA - El usuario debe abrirla manualmente');
       
@@ -452,13 +413,28 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                                 ),
                                 Padding(
                                   padding: EdgeInsets.only(left: 15),
-                                  child: Text(
-                                    'Abre la aplicación automáticamente \ncuando llega una notificación\n(funciona independientemente)',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        'Abre la aplicación automáticamente \ncuando llega una notificación',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                      if (_autoOpenEnabled) ...[
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Desactivar requiere reinicio de la app',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontStyle: FontStyle.italic,
+                                            color: Colors.red,
+                                          ),
+                                        ),
+                                      ]
+                                    ],
+                                  )
                                 ),
                               ],
                             ),
