@@ -98,6 +98,7 @@ class LocalNotificationService {
      print('KEY_SCREEN_WAKE_ENABLED ($KEY_SCREEN_WAKE_ENABLED): $screenWakeEnabled');
      print('KEY_AUTO_OPEN_ENABLED ($KEY_AUTO_OPEN_ENABLED): $autoOpenEnabled');
      print('Todas las claves: ${prefs.getKeys()}');
+     print('🔍 VERIFICACIÓN CRÍTICA: autoOpenEnabled = $autoOpenEnabled');
      print('====================================');
     
     // ✅ CAMBIO: Auto-open ahora funciona independientemente de screen wake
@@ -139,13 +140,16 @@ class LocalNotificationService {
     return true;
   }
   
-  // ✅ CAMBIO: setAutoOpenEnabled sin validación de screen wake
+  // ✅ CAMBIO: setAutoOpenEnabled sin validación de screen wake + ACTUALIZACIÓN EN TIEMPO REAL
   static Future<void> setAutoOpenEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     
     // Auto-open ahora funciona independientemente
     await prefs.setBool(KEY_AUTO_OPEN_ENABLED, enabled);
     print('Auto-open ${enabled ? 'habilitado' : 'deshabilitado'} (independiente de screen wake)');
+    
+    // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL EN EL LADO NATIVO
+    await _updateNativeSettings();
   }
   
   // Cancelar una notificación
@@ -184,10 +188,13 @@ class LocalNotificationService {
   }
   
   // Habilitar o deshabilitar apertura automática
-  // ✅ NUEVOS MÉTODOS PARA MANEJAR ACTIVACIÓN DE PANTALLA
+  // ✅ NUEVOS MÉTODOS PARA MANEJAR ACTIVACIÓN DE PANTALLA + ACTUALIZACIÓN EN TIEMPO REAL
   static Future<void> setScreenWakeEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(KEY_SCREEN_WAKE_ENABLED, enabled);
+    
+    // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL EN EL LADO NATIVO
+    await _updateNativeSettings();
   }
   
   static Future<bool> isScreenWakeEnabled() async {
@@ -213,5 +220,25 @@ class LocalNotificationService {
   static Future<bool> isVibrationEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(KEY_VIBRATION_ENABLED) ?? true;
+  }
+  
+  // ✅ MÉTODO PRIVADO PARA ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL EN EL LADO NATIVO
+  static Future<void> _updateNativeSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
+      final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
+      
+      await _channel.invokeMethod('updateNotificationSettings', {
+        'screenWakeEnabled': screenWakeEnabled,
+        'autoOpenEnabled': autoOpenEnabled,
+      });
+      
+      print('⚡ CONFIGURACIÓN NATIVA ACTUALIZADA EN TIEMPO REAL:');
+      print('   screenWakeEnabled: $screenWakeEnabled');
+      print('   autoOpenEnabled: $autoOpenEnabled');
+    } catch (e) {
+      print('❌ Error al actualizar configuración nativa: $e');
+    }
   }
 }

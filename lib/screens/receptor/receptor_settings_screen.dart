@@ -2,6 +2,7 @@ import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:connect/services/local_notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/receptor_service.dart';
@@ -30,11 +31,16 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   final ReceptorService _receptorService = ReceptorService();
 
   @override
-  void initState() {
+  Future<void> initState() async {
     super.initState();
     WidgetsBinding.instance.addObserver(this); // ✅ Añadir observer
     _loadSettings();
     _ensureNotificationServiceActive(); // ✅ Asegurar que el servicio esté activo
+    
+    // ✅ VERIFICACIÓN ADICIONAL: Confirmar sincronización al inicializar
+    // await _reloadAutoOpenState();
+    
+    print('🏁 INICIALIZACIÓN COMPLETA: autoOpenEnabled = $_autoOpenEnabled');
   }
 
   @override
@@ -72,55 +78,202 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       _isLoading = true;
     });
 
-    final notificationsEnabled =
-        await LocalNotificationService.areNotificationsEnabled();
-    // ✅ CARGAR CONFIGURACIONES SEPARADAS CON VALORES PREDETERMINADOS CORRECTOS
-    _screenWakeEnabled = await LocalNotificationService.isScreenWakeEnabled();
-    _autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
+    try {
+      final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
+      final screenWakeEnabled = await LocalNotificationService.isScreenWakeEnabled();
+      final autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
 
-    // ✅ CAMBIO: Auto-open ahora funciona independientemente de screen wake
-    // Ya no se requiere validación de dependencia
-    setState(() {
-      _notificationsEnabled = notificationsEnabled;
-      _screenWakeEnabled = _screenWakeEnabled;
-      _autoOpenEnabled = _autoOpenEnabled;
-      _isLoading = false;
-    });
+      setState(() {
+        _notificationsEnabled = notificationsEnabled;
+        _screenWakeEnabled = screenWakeEnabled;
+        _autoOpenEnabled = autoOpenEnabled;
+        _isLoading = false;
+      });
 
-    _ensureNotificationServiceActive();
+      print('✅ CONFIGURACIÓN CARGADA:');
+      print('- Notificaciones: $notificationsEnabled');
+      print('- Screen Wake: $screenWakeEnabled');
+      print('- Auto Open: $autoOpenEnabled (independiente)');
+      
+      // ✅ SINCRONIZAR CONFIGURACIÓN NATIVA AL CARGAR
+      await LocalNotificationService.setScreenWakeEnabled(screenWakeEnabled);
+      await LocalNotificationService.setAutoOpenEnabled(autoOpenEnabled);
+      print('🎯 CONFIGURACIÓN NATIVA SINCRONIZADA AL INICIALIZAR');
+      
+      _ensureNotificationServiceActive();
+    } catch (e) {
+      print('❌ Error al cargar configuración: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   // ✅ CAMBIO: Métodos independientes para los dos switches
   void _toggleScreenWake(bool? value) async {
-    if (value != null) {
-      print('=== TOGGLE SCREEN WAKE ===');
-      print('Valor anterior: $_screenWakeEnabled');
-      print('Nuevo valor: $value');
-      
-      setState(() {
-        _screenWakeEnabled = value;
-        // ✅ CAMBIO: Auto-open ya no depende de screen wake
-      });
-      
+    if (value == null) return;
+    
+    print('🔄 INICIANDO _toggleScreenWake: $value');
+    
+    // ✅ 1. Actualizar UI inmediatamente
+    setState(() {
+      _screenWakeEnabled = value;
+    });
+    print('✅ UI actualizada inmediatamente: $_screenWakeEnabled');
+    
+    try {
+      // ✅ 2. Guardar en SharedPreferences Y ACTUALIZAR CONFIGURACIÓN NATIVA EN TIEMPO REAL
       await LocalNotificationService.setScreenWakeEnabled(value);
-      print('setScreenWakeEnabled($value) ejecutado');
+      print('✅ setScreenWakeEnabled($value) ejecutado - Configuración nativa actualizada automáticamente');
       
-      // Verificar que se guardó correctamente
-      final savedValue = await LocalNotificationService.isScreenWakeEnabled();
-      print('Valor guardado verificado: $savedValue');
-      print('========================');
+      print('🎉 SCREEN WAKE CONFIGURADO EN TIEMPO REAL: $value');
       
-      print('Screen wake ${value ? 'habilitado' : 'deshabilitado'}');
+    } catch (e) {
+      print('❌ ERROR en _toggleScreenWake: $e');
+      // Revertir UI en caso de error
+      setState(() {
+        _screenWakeEnabled = !value;
+      });
     }
   }
 
   void _toggleAutoOpen(bool? value) async {
-    if (value != null) { // ✅ CAMBIO: Ya no requiere validación de screen wake
-      setState(() {
-        _autoOpenEnabled = value;
-      });
+    if (value == null) return;
+    
+    print('🔄 INICIANDO _toggleAutoOpen: $value');
+    
+    // ✅ 1. Actualizar UI inmediatamente
+    setState(() {
+      _autoOpenEnabled = value;
+    });
+    print('✅ UI actualizada inmediatamente: $_autoOpenEnabled');
+    
+    try {
+      // ✅ 2. Guardar en SharedPreferences Y ACTUALIZAR CONFIGURACIÓN NATIVA EN TIEMPO REAL
       await LocalNotificationService.setAutoOpenEnabled(value);
-      print('Auto-open ${value ? 'habilitado' : 'deshabilitado'} (independiente)');
+      print('✅ setAutoOpenEnabled($value) ejecutado - Configuración nativa actualizada automáticamente');
+      
+      // ✅ 3. Verificar que se guardó correctamente
+      final savedValue = await LocalNotificationService.isAutoOpenEnabled();
+      print('✅ VERIFICACIÓN: Valor guardado en SharedPreferences: $savedValue');
+      
+      if (savedValue != value) {
+        print('❌ ERROR: El valor no se guardó correctamente');
+        // Revertir UI en caso de error
+        setState(() {
+          _autoOpenEnabled = !value;
+        });
+        return;
+      }
+      
+      print('🎉 AUTO-OPEN CONFIGURADO EN TIEMPO REAL: $value');
+      
+      // ✅ SOLUCIÓN: Reinicio forzado SOLO cuando se DESACTIVA autoOpenEnabled
+      if (!value) {
+        print('🔄 AUTO-OPEN DESACTIVADO: Iniciando reinicio forzado de la aplicación');
+        _showRestartDialog();
+      }
+      
+    } catch (e) {
+      print('❌ ERROR en _toggleAutoOpen: $e');
+      // Revertir UI en caso de error
+      setState(() {
+        _autoOpenEnabled = !value;
+      });
+    }
+  }
+  
+
+
+  // ✅ SOLUCIÓN: Mostrar diálogo de reinicio cuando se desactiva autoOpenEnabled
+  void _showRestartDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // No se puede cerrar tocando fuera
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text(
+            'Reinicio Requerido',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            'Para aplicar correctamente la desactivación del auto-open, '
+            'es necesario reiniciar la aplicación.\n\n'
+            '¿Deseas reiniciar ahora?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                print('🚫 Usuario canceló el reinicio');
+              },
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _forceAppRestart();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Reiniciar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ✅ SOLUCIÓN: Método para forzar el reinicio de la aplicación
+  Future<void> _forceAppRestart() async {
+    try {
+      print('🔄 INICIANDO REINICIO FORZADO DE LA APLICACIÓN');
+      
+      // Mostrar indicador de carga
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const AlertDialog(
+            content: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Reiniciando aplicación...'),
+              ],
+            ),
+          );
+        },
+      );
+      
+      // Esperar un momento para que se muestre el diálogo
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Usar SystemNavigator para cerrar la aplicación
+      // En Android, esto cerrará la app y el usuario tendrá que abrirla manualmente
+      await SystemNavigator.pop();
+      
+      print('✅ APLICACIÓN CERRADA - El usuario debe abrirla manualmente');
+      
+    } catch (e) {
+      print('❌ ERROR durante el reinicio forzado: $e');
+      
+      // Cerrar diálogo de carga si hay error
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+      
+      // Mostrar mensaje de error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al reiniciar: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 

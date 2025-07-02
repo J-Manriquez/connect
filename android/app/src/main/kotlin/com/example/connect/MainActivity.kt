@@ -226,6 +226,9 @@ class MainActivity: FlutterActivity() {
                         val screenWakeEnabled = call.argument<Boolean>("screenWakeEnabled") ?: false
                         val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
                         
+                        // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL
+                        localNotificationManager.updateSettings(screenWakeEnabled, autoOpenEnabled)
+                        
                         localNotificationManager.showNotification(
                             title, body, packageName, appName, notificationId,
                             soundEnabled, vibrationEnabled, screenWakeEnabled, autoOpenEnabled
@@ -235,6 +238,21 @@ class MainActivity: FlutterActivity() {
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al mostrar notificación RECEPTOR", e)
                         result.error("ERROR", "Error al mostrar notificación: ${e.message}", null)
+                    }
+                }
+                "updateNotificationSettings" -> {
+                    try {
+                        val screenWakeEnabled = call.argument<Boolean>("screenWakeEnabled") ?: false
+                        val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
+                        
+                        // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL SIN MOSTRAR NOTIFICACIÓN
+                        localNotificationManager.updateSettings(screenWakeEnabled, autoOpenEnabled)
+                        
+                        result.success(true)
+                        Log.d("MainActivity", "Configuración de notificaciones actualizada: screenWake=$screenWakeEnabled, autoOpen=$autoOpenEnabled")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al actualizar configuración", e)
+                        result.error("ERROR", "Error al actualizar configuración: ${e.message}", null)
                     }
                 }
                 "cancelNotification" -> {
@@ -435,7 +453,7 @@ class MainActivity: FlutterActivity() {
             val screenWakeEnabled = intent.getBooleanExtra("screenWakeEnabled", false)
             
             try {
-                // ✅ SOLO configurar flags si screenWakeEnabled está activo
+                // ✅ CONFIGURACIÓN ULTRA CONSERVADORA: Solo configurar flags si screenWakeEnabled está activo
                 if (screenWakeEnabled) {
                     Log.d("MainActivity", "Configurando flags de pantalla - screenWakeEnabled: true")
                     Log.d("MainActivity", "Android API Level: ${Build.VERSION.SDK_INT}")
@@ -483,7 +501,7 @@ class MainActivity: FlutterActivity() {
                         }
                     }
                     
-                    // ✅ MEJORAR: Manejo específico para segundo plano
+                    // ✅ MEJORAR: Manejo específico para segundo plano SOLO si screenWakeEnabled
                     if (fromBackground) {
                         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                         
@@ -499,12 +517,28 @@ class MainActivity: FlutterActivity() {
                         }
                     }
                 } else {
-                    Log.d("MainActivity", "screenWakeEnabled: false - No se configuran flags de pantalla")
+                    // ✅ AUTO-OPEN SIN ACTIVAR PANTALLA: Solo navegar sin flags de pantalla
+                    Log.d("MainActivity", "screenWakeEnabled: false - Auto-open sin activar pantalla")
+                    
+                    // Solo mover la tarea al frente SIN activar la pantalla
+                    if (fromBackground) {
+                        // ✅ NAVEGACIÓN SILENCIOSA: Mover al frente sin activar pantalla
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            try {
+                                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                                // Usar flag que NO active la pantalla
+                                activityManager.moveTaskToFront(taskId, 0) // Sin flags adicionales
+                                Log.d("MainActivity", "Tarea movida al frente SILENCIOSAMENTE (sin activar pantalla)")
+                            } catch (e: Exception) {
+                                Log.w("MainActivity", "No se pudo mover tarea al frente silenciosamente: $e")
+                            }
+                        }
+                    }
                 }
                 
-                Log.d("MainActivity", "Flags configurados - Desde segundo plano: $fromBackground, ScreenWake: $screenWakeEnabled")
+                Log.d("MainActivity", "Auto-open procesado - Desde segundo plano: $fromBackground, ScreenWake: $screenWakeEnabled")
             } catch (e: Exception) {
-                Log.e("MainActivity", "Error configurando flags de ventana", e)
+                Log.e("MainActivity", "Error configurando auto-open", e)
             }
         }
 

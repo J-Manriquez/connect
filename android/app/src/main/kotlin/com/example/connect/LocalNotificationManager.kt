@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -17,6 +18,9 @@ import android.os.Looper
 
 class LocalNotificationManager(private val context: Context) {
     
+    // ✅ CONFIGURACIÓN EN TIEMPO REAL
+    private val sharedPreferences: SharedPreferences = context.getSharedPreferences("flutter.notification_settings", Context.MODE_PRIVATE)
+    
     companion object {
         private const val CHANNEL_ID = "receptor_notifications_channel"
         private const val CHANNEL_NAME = "Notificaciones del Receptor"
@@ -24,6 +28,10 @@ class LocalNotificationManager(private val context: Context) {
         const val NOTIFICATION_ACTION_OPEN = "OPEN_NOTIFICATION"
         const val NOTIFICATION_ACTION_AUTO_OPEN = "AUTO_OPEN_NOTIFICATION"
         const val EXTRA_NOTIFICATION_DATA = "notification_data"
+        
+        // ✅ CLAVES PARA CONFIGURACIÓN EN TIEMPO REAL
+        private const val KEY_SCREEN_WAKE_ENABLED = "flutter.screenWakeEnabled"
+        private const val KEY_AUTO_OPEN_ENABLED = "flutter.autoOpenEnabled"
         
         // ✅ Hacer el conjunto público para acceso desde NotificationDeleteReceiver
         private val cancelledNotifications = mutableSetOf<String>()
@@ -86,6 +94,27 @@ class LocalNotificationManager(private val context: Context) {
         }
     }
     
+    // ✅ MÉTODO PARA ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL
+    fun updateSettings(screenWakeEnabled: Boolean, autoOpenEnabled: Boolean) {
+        val editor = sharedPreferences.edit()
+        editor.putBoolean(KEY_SCREEN_WAKE_ENABLED, screenWakeEnabled)
+        editor.putBoolean(KEY_AUTO_OPEN_ENABLED, autoOpenEnabled)
+        editor.apply()
+        
+        Log.d("LocalNotificationManager", "⚡ CONFIGURACIÓN ACTUALIZADA EN TIEMPO REAL:")
+        Log.d("LocalNotificationManager", "   screenWakeEnabled: $screenWakeEnabled")
+        Log.d("LocalNotificationManager", "   autoOpenEnabled: $autoOpenEnabled")
+    }
+    
+    // ✅ MÉTODOS PARA OBTENER CONFIGURACIÓN ACTUAL
+    private fun getCurrentScreenWakeEnabled(): Boolean {
+        return sharedPreferences.getBoolean(KEY_SCREEN_WAKE_ENABLED, false)
+    }
+    
+    private fun getCurrentAutoOpenEnabled(): Boolean {
+        return sharedPreferences.getBoolean(KEY_AUTO_OPEN_ENABLED, false)
+    }
+    
     fun showNotification(
         title: String,
         body: String,
@@ -104,34 +133,45 @@ class LocalNotificationManager(private val context: Context) {
             return
         }
         
+        // ✅ USAR CONFIGURACIÓN EN TIEMPO REAL
+        val currentScreenWakeEnabled = getCurrentScreenWakeEnabled()
+        val currentAutoOpenEnabled = getCurrentAutoOpenEnabled()
+        
         Log.d("LocalNotificationManager", "=== CONFIGURACIÓN DETALLADA RECIBIDA ===")
         Log.d("LocalNotificationManager", "Title: $title")
         Log.d("LocalNotificationManager", "Body: $body")
         Log.d("LocalNotificationManager", "NotificationId: $notificationId")
-        Log.d("LocalNotificationManager", "screenWakeEnabled: $screenWakeEnabled")
-        Log.d("LocalNotificationManager", "autoOpenEnabled: $autoOpenEnabled")
+        Log.d("LocalNotificationManager", "screenWakeEnabled (parámetro): $screenWakeEnabled")
+        Log.d("LocalNotificationManager", "screenWakeEnabled (tiempo real): $currentScreenWakeEnabled")
+        Log.d("LocalNotificationManager", "autoOpenEnabled (parámetro): $autoOpenEnabled")
+        Log.d("LocalNotificationManager", "autoOpenEnabled (tiempo real): $currentAutoOpenEnabled")
+        Log.d("LocalNotificationManager", "🔍 VERIFICACIÓN CRÍTICA NATIVA: usando configuración en tiempo real")
         Log.d("LocalNotificationManager", "soundEnabled: $soundEnabled")
         Log.d("LocalNotificationManager", "vibrationEnabled: $vibrationEnabled")
         Log.d("LocalNotificationManager", "Android API Level: ${Build.VERSION.SDK_INT}")
         Log.d("LocalNotificationManager", "=================================================")
             
-            // ✅ TÉRMINO MEDIO PARA ANDROID 8: Activación de pantalla más conservadora
-            if (screenWakeEnabled) {
-                Log.d("LocalNotificationManager", "screenWakeEnabled: true - Procediendo a activar pantalla")
+            // ✅ USAR CONFIGURACIÓN EN TIEMPO REAL PARA SCREEN WAKE
+            if (currentScreenWakeEnabled) {
+                Log.d("LocalNotificationManager", "screenWakeEnabled (tiempo real): true - Procediendo a activar pantalla")
                 wakeUpScreenConservative()
                 Log.d("LocalNotificationManager", "Pantalla activada de forma conservadora")
             } else {
-                Log.d("LocalNotificationManager", "screenWakeEnabled: false - Pantalla NO será activada")
+                Log.d("LocalNotificationManager", "screenWakeEnabled (tiempo real): false - Pantalla NO será activada")
             }
             
-            // ✅ AutoOpen independiente de screenWakeEnabled
-            if (autoOpenEnabled) {
+            // ✅ USAR CONFIGURACIÓN EN TIEMPO REAL PARA AUTO-OPEN
+            Log.d("LocalNotificationManager", "🔍 EVALUANDO AUTO-OPEN (tiempo real): autoOpenEnabled = $currentAutoOpenEnabled")
+            if (currentAutoOpenEnabled) {
+                Log.d("LocalNotificationManager", "✅ AUTO-OPEN ACTIVADO (tiempo real): Ejecutando apertura automática")
                 // Delay mínimo para auto-open, independiente del wake screen
                 val delay = 200L
                 Handler(Looper.getMainLooper()).postDelayed({
-                    openAppAutomatically(title, body, packageName, appName, notificationId, screenWakeEnabled)
+                    openAppAutomatically(title, body, packageName, appName, notificationId, currentScreenWakeEnabled)
                 }, delay)
-                Log.d("LocalNotificationManager", "AutoOpen habilitado independientemente")
+                Log.d("LocalNotificationManager", "AutoOpen habilitado independientemente (tiempo real)")
+            } else {
+                Log.d("LocalNotificationManager", "❌ AUTO-OPEN DESACTIVADO (tiempo real): No se ejecutará apertura automática")
             }
             
             // Intent para abrir la aplicación (cuando se toca la notificación)
@@ -237,10 +277,10 @@ class LocalNotificationManager(private val context: Context) {
         }
     }
     
-    // ✅ TÉRMINO MEDIO: Método conservador que funciona bien en Android 8
+    // ✅ CORREGIDO: Método mejorado para activar pantalla que funciona correctamente
     private fun wakeUpScreenConservative() {
         try {
-            Log.d("LocalNotificationManager", "Iniciando activación conservadora de pantalla...")
+            Log.d("LocalNotificationManager", "🔥 INICIANDO ACTIVACIÓN DE PANTALLA")
             Log.d("LocalNotificationManager", "Android API Level: ${Build.VERSION.SDK_INT}")
             
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
@@ -253,74 +293,104 @@ class LocalNotificationManager(private val context: Context) {
                 powerManager.isScreenOn
             }
             
-            Log.d("LocalNotificationManager", "Estado actual de la pantalla: ${if (isScreenOn) "ENCENDIDA" else "APAGADA"}")
+            Log.d("LocalNotificationManager", "📱 Estado actual de la pantalla: ${if (isScreenOn) "ENCENDIDA" else "APAGADA"}")
             
             if (!isScreenOn) {
-                Log.d("LocalNotificationManager", "Procediendo a activar la pantalla de forma conservadora...")
+                Log.d("LocalNotificationManager", "⚡ PROCEDIENDO A ACTIVAR LA PANTALLA")
                 
                 when {
-                    // Android 8.0 (API 26) - Enfoque ultra conservador solo con Intent
+                    // Android 8.0 (API 26) - Enfoque híbrido mejorado
                     Build.VERSION.SDK_INT == Build.VERSION_CODES.O -> {
-                        Log.d("LocalNotificationManager", "Aplicando enfoque ultra conservador para Android 8.0 (solo Intent)")
+                        Log.d("LocalNotificationManager", "🎯 ANDROID 8.0: Usando enfoque híbrido mejorado")
                         
                         try {
-                            // Solo usar Intent para activar MainActivity sin wake locks
-                            val intent = Intent(context, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                                       Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                                       Intent.FLAG_ACTIVITY_SINGLE_TOP
-                                putExtra("wakeScreenOnly", true)
-                                putExtra("screenWakeEnabled", true)
-                                putExtra("timestamp", System.currentTimeMillis())
-                            }
+                            // 1. Primero intentar con WakeLock corto
+                            val wakeLock = powerManager.newWakeLock(
+                                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or 
+                                android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                                "ConnectApp:Android8WakeUp"
+                            )
                             
-                            context.startActivity(intent)
-                            Log.d("LocalNotificationManager", "Intent enviado para activar pantalla (Android 8.0)")
+                            wakeLock.acquire(2000) // 2 segundos
+                            Log.d("LocalNotificationManager", "✅ WakeLock adquirido para Android 8.0")
+                            
+                            // 2. Complementar con Intent para asegurar activación
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                try {
+                                    val intent = Intent(context, MainActivity::class.java).apply {
+                                        action = "WAKE_SCREEN_ACTION"  // ✅ CORREGIDO: Usar la acción correcta
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                                               Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                               Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                        putExtra("wakeScreenOnly", true)
+                                        putExtra("screenWakeEnabled", true)
+                                        putExtra("timestamp", System.currentTimeMillis())
+                                    }
+                                    
+                                    context.startActivity(intent)
+                                    Log.d("LocalNotificationManager", "✅ Intent complementario enviado con acción WAKE_SCREEN_ACTION (Android 8.0)")
+                                    
+                                } catch (e: Exception) {
+                                    Log.e("LocalNotificationManager", "Error con Intent complementario", e)
+                                }
+                            }, 300)
+                            
+                            // 3. Liberar WakeLock de forma segura
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                try {
+                                    if (wakeLock.isHeld) {
+                                        wakeLock.release()
+                                        Log.d("LocalNotificationManager", "✅ WakeLock liberado (Android 8.0)")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("LocalNotificationManager", "Error al liberar WakeLock", e)
+                                }
+                            }, 1500)
                             
                         } catch (e: Exception) {
-                            Log.e("LocalNotificationManager", "Error con enfoque conservador Android 8.0", e)
+                            Log.e("LocalNotificationManager", "Error con enfoque híbrido Android 8.0", e)
                         }
                     }
                     
-                    // Android 8.1+ - Enfoque estándar ultra conservador
+                    // Android 8.1+ - Enfoque estándar mejorado
                     else -> {
-                        Log.d("LocalNotificationManager", "Aplicando configuración estándar ultra conservadora")
+                        Log.d("LocalNotificationManager", "🎯 ANDROID 8.1+: Usando enfoque estándar mejorado")
                         
                         try {
                             val wakeLock = powerManager.newWakeLock(
                                 android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or 
                                 android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                                "ConnectApp:StandardConservativeWakeUp"
+                                "ConnectApp:StandardWakeUp"
                             )
                             
-                            wakeLock.acquire(1500) // Solo 1.5 segundos
-                            Log.d("LocalNotificationManager", "WakeLock estándar conservador adquirido por 1.5 segundos")
+                            wakeLock.acquire(3000) // 3 segundos para versiones más nuevas
+                            Log.d("LocalNotificationManager", "✅ WakeLock estándar adquirido por 3 segundos")
                             
                             // Liberar de forma segura
                             Handler(Looper.getMainLooper()).postDelayed({
                                 try {
                                     if (wakeLock.isHeld) {
                                         wakeLock.release()
-                                        Log.d("LocalNotificationManager", "WakeLock estándar liberado exitosamente")
+                                        Log.d("LocalNotificationManager", "✅ WakeLock estándar liberado exitosamente")
                                     }
                                 } catch (e: Exception) {
                                     Log.e("LocalNotificationManager", "Error al liberar WakeLock estándar", e)
                                 }
-                            }, 1000)
+                            }, 2500)
                             
                         } catch (e: Exception) {
-                            Log.e("LocalNotificationManager", "Error con configuración estándar conservadora", e)
+                            Log.e("LocalNotificationManager", "Error con configuración estándar", e)
                         }
                     }
                 }
                 
-                Log.d("LocalNotificationManager", "Proceso conservador de activación completado")
+                Log.d("LocalNotificationManager", "🎉 PROCESO DE ACTIVACIÓN DE PANTALLA COMPLETADO")
             } else {
-                Log.d("LocalNotificationManager", "La pantalla ya estaba encendida - no se requiere activación")
+                Log.d("LocalNotificationManager", "✅ La pantalla ya estaba encendida - no se requiere activación")
             }
             
         } catch (e: Exception) {
-            Log.e("LocalNotificationManager", "Error al activar la pantalla de forma conservadora", e)
+            Log.e("LocalNotificationManager", "❌ ERROR CRÍTICO al activar la pantalla", e)
         }
     }
     
@@ -334,7 +404,7 @@ class LocalNotificationManager(private val context: Context) {
         screenWakeEnabled: Boolean = false
     ) {
         try {
-            Log.d("LocalNotificationManager", "Iniciando apertura automática de app")
+            Log.d("LocalNotificationManager", "Iniciando apertura automática de app - screenWakeEnabled: $screenWakeEnabled")
             
             // ✅ VERIFICAR: Estado de la aplicación
             val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -345,17 +415,27 @@ class LocalNotificationManager(private val context: Context) {
             val intent = Intent(context, MainActivity::class.java).apply {
                 action = NOTIFICATION_ACTION_AUTO_OPEN
                 
-                // ✅ CORREGIR: Flags optimizados según el estado
-                flags = if (isAppInForeground) {
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP
-                } else {
+                // ✅ CONFIGURACIÓN ULTRA CONSERVADORA: Flags según screenWakeEnabled | ESTO ENCIENDE LA PANTALLA EN AUTO OPEN
+                // flags = if (isAppInForeground) {
+                //     // App en primer plano - flags mínimos
+                //     Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                //     Intent.FLAG_ACTIVITY_CLEAR_TOP
+                // } else {
+                    // App en segundo plano - flags según configuración de pantalla
+                if (screenWakeEnabled) {
+                    // Permitir activación normal cuando screenWake está habilitado
                     Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
                     Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT or
                     Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                } else {
+                    // ✅ AUTO-OPEN SILENCIOSO: Flags ultra conservadores
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION // Sin animaciones para ser más silencioso
                 }
+                // }
                 
                 putExtra(EXTRA_NOTIFICATION_DATA, notificationId)
                 putExtra("title", title)
@@ -366,6 +446,14 @@ class LocalNotificationManager(private val context: Context) {
                 putExtra("fromBackground", !isAppInForeground)
                 putExtra("timestamp", System.currentTimeMillis()) // ✅ AGREGAR timestamp
                 putExtra("screenWakeEnabled", screenWakeEnabled) // ✅ AGREGAR configuración
+                
+                // ✅ LOGGING DETALLADO DE FLAGS
+                Log.d("LocalNotificationManager", "=== AUTO-OPEN INTENT CONFIGURADO ===")
+                Log.d("LocalNotificationManager", "App en primer plano: $isAppInForeground")
+                Log.d("LocalNotificationManager", "Screen Wake habilitado: $screenWakeEnabled")
+                Log.d("LocalNotificationManager", "Intent flags: ${Integer.toHexString(flags)}")
+                Log.d("LocalNotificationManager", "Modo: ${if (screenWakeEnabled) "NORMAL" else "SILENCIOSO"}")
+                Log.d("LocalNotificationManager", "=========================================")
             }
             
             // ✅ MEJORAR: Manejo de errores más robusto
