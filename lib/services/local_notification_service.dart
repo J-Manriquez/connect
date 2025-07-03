@@ -10,7 +10,7 @@ class LocalNotificationService {
   // Claves para SharedPreferences
   static const String KEY_NOTIFICATIONS_ENABLED = 'local_notifications_enabled';
   static const String KEY_SOUND_ENABLED = 'local_notifications_sound';
-  static const String KEY_VIBRATION_ENABLED = 'local_notifications_vibration';
+  static const String KEY_VIBRATION_ENABLED = 'vibration_enabled'; // ✅ SINCRONIZADO con VibrationPatternService
   // ✅ NUEVAS CLAVES SEPARADAS
   static const String KEY_SCREEN_WAKE_ENABLED = 'local_notifications_screen_wake';
   static const String KEY_AUTO_OPEN_ENABLED = 'local_notifications_auto_open';
@@ -96,25 +96,34 @@ class LocalNotificationService {
     final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
     
     // Manejar vibración usando el paquete vibration directamente
-    if (vibrationEnabled) {
+    // Verificar primero si la vibración está habilitada desde la configuración
+    final isVibrationEnabledInSettings = await VibrationPatternService.isVibrationEnabled();
+    print('🔍 Vibración habilitada en configuración: $isVibrationEnabledInSettings');
+    print('🔍 Vibración habilitada en notificación: $vibrationEnabled');
+    
+    if (vibrationEnabled && isVibrationEnabledInSettings) {
       try {
         final selectedPattern = await VibrationPatternService.getSelectedPattern();
         if (selectedPattern != null) {
-          print('Ejecutando patrón de vibración personalizado: ${selectedPattern.name}');
+          print('🔊 Ejecutando patrón de vibración personalizado: ${selectedPattern.name}');
           await VibrationPatternService.playPattern(selectedPattern);
         } else {
-          print('No hay patrón seleccionado, usando vibración simple');
+          print('🔊 No hay patrón seleccionado, usando vibración simple');
           await Vibration.vibrate(duration: 500);
         }
       } catch (e) {
-        print('Error al ejecutar vibración: $e');
+        print('❌ Error al ejecutar vibración: $e');
         // Fallback a vibración simple
         try {
           await Vibration.vibrate(duration: 500);
         } catch (fallbackError) {
-          print('Error en vibración de fallback: $fallbackError');
+          print('❌ Error en vibración de fallback: $fallbackError');
         }
       }
+    } else if (!isVibrationEnabledInSettings) {
+      print('⚠️ Vibración deshabilitada en configuración, saltando vibración');
+    } else {
+      print('⚠️ Vibración deshabilitada para esta notificación, saltando vibración');
     }
     
     // ✅ DEBUGGING: Verificar valores en SharedPreferences
@@ -205,11 +214,8 @@ class LocalNotificationService {
     await prefs.setBool(KEY_SOUND_ENABLED, enabled);
   }
   
-  // Habilitar o deshabilitar vibración
-  static Future<void> setVibrationEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(KEY_VIBRATION_ENABLED, enabled);
-  }
+  // ✅ ELIMINADO: setVibrationEnabled - usar VibrationPatternService.setVibrationEnabled en su lugar
+  // para mantener sincronización con la configuración global de vibración
   
   // Habilitar o deshabilitar apertura automática
   // ✅ NUEVOS MÉTODOS PARA MANEJAR ACTIVACIÓN DE PANTALLA + ACTUALIZACIÓN EN TIEMPO REAL
@@ -240,10 +246,9 @@ class LocalNotificationService {
     return prefs.getBool(KEY_SOUND_ENABLED) ?? true;
   }
   
-  // Obtener configuración de vibración
+  // ✅ MODIFICADO: isVibrationEnabled - usar VibrationPatternService para consistencia
   static Future<bool> isVibrationEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(KEY_VIBRATION_ENABLED) ?? true;
+    return await VibrationPatternService.isVibrationEnabled();
   }
   
   // ✅ MÉTODO PRIVADO PARA ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL EN EL LADO NATIVO
