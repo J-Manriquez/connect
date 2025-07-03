@@ -9,6 +9,7 @@ import 'package:connect/services/receptor_service.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:connect/screens/debug_logs_screen.dart';
 import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
+import 'package:connect/services/vibration_pattern_service.dart';
 import 'package:restart_app/restart_app.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
 
@@ -25,6 +26,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   // ✅ SEPARAR EN DOS VARIABLES
   bool _screenWakeEnabled = false;
   bool _autoOpenEnabled = false;
+  bool _vibrationEnabled = false;
   bool _isLoading = true;
 
   // ✅ SOLUCIÓN: Añadir referencia al servicio
@@ -93,11 +95,14 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
           await LocalNotificationService.isScreenWakeEnabled();
       final autoOpenEnabled =
           await LocalNotificationService.isAutoOpenEnabled();
+      final vibrationEnabled =
+          await VibrationPatternService.isVibrationEnabled();
 
       setState(() {
         _notificationsEnabled = notificationsEnabled;
         _screenWakeEnabled = screenWakeEnabled;
         _autoOpenEnabled = autoOpenEnabled;
+        _vibrationEnabled = vibrationEnabled;
         _isLoading = false;
       });
 
@@ -105,6 +110,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       print('- Notificaciones: $notificationsEnabled');
       print('- Screen Wake: $screenWakeEnabled');
       print('- Auto Open: $autoOpenEnabled (independiente)');
+      print('- Vibración: $vibrationEnabled');
 
       // ✅ SINCRONIZAR CONFIGURACIÓN NATIVA AL CARGAR
       await LocalNotificationService.setScreenWakeEnabled(screenWakeEnabled);
@@ -194,6 +200,32 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       // Revertir UI en caso de error
       setState(() {
         _autoOpenEnabled = !value;
+      });
+    }
+  }
+
+  void _toggleVibration(bool? value) async {
+    if (value == null) return;
+
+    print('🔄 INICIANDO _toggleVibration: $value');
+
+    // ✅ 1. Actualizar UI inmediatamente
+    setState(() {
+      _vibrationEnabled = value;
+    });
+    print('✅ UI actualizada inmediatamente: $_vibrationEnabled');
+
+    try {
+      // ✅ 2. Guardar en SharedPreferences
+      await VibrationPatternService.setVibrationEnabled(value);
+      print('✅ setVibrationEnabled($value) ejecutado');
+
+      print('🎉 VIBRACIÓN CONFIGURADA: $value');
+    } catch (e) {
+      print('❌ ERROR en _toggleVibration: $e');
+      // Revertir UI en caso de error
+      setState(() {
+        _vibrationEnabled = !value;
       });
     }
   }
@@ -457,11 +489,52 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             ),
                           ],
                         ),
+                        // ✅ TERCER SWITCH: VIBRACIÓN
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 15),
+                                  child: Text(
+                                    'Vibración',
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.only(left: 15),
+                                  child: Text(
+                                    'Activa la vibración cuando \nllega una notificación',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: _vibrationEnabled,
+                              onChanged: _toggleVibration,
+                              activeColor: Colors.green,
+                              inactiveTrackColor: customColor[200],
+                              inactiveThumbColor: Colors.grey[300],
+                            ),
+                          ],
+                        ),
                         Divider(
                           color: customColor[100],
                           thickness: 3.0, // Set the thickness to 3.0 pixels
-                        ), // Botón para patrones de vibración
-                        ListTile(
+                        ),
+                        // Botón para patrones de vibración (solo visible si vibración está activa)
+                        if (_vibrationEnabled) ListTile(
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
@@ -499,7 +572,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             );
                           },
                         ),
-                        const Divider(),
+                        if (_vibrationEnabled) const Divider(),
                       ],
                     ),
                   ),

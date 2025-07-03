@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dismissed_notifications_service.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
+import 'package:vibration/vibration.dart';
 
 class LocalNotificationService {
   static const MethodChannel _channel = MethodChannel('com.example.connect/local_notifications');
@@ -94,13 +95,25 @@ class LocalNotificationService {
     final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
     final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
     
-    // Obtener patrón de vibración personalizado
-    List<int>? customVibrationPattern;
+    // Manejar vibración usando el paquete vibration directamente
     if (vibrationEnabled) {
-      final selectedPattern = await VibrationPatternService.getSelectedPattern();
-      if (selectedPattern != null) {
-        customVibrationPattern = selectedPattern.pattern;
-        print('Usando patrón de vibración personalizado: ${selectedPattern.name}');
+      try {
+        final selectedPattern = await VibrationPatternService.getSelectedPattern();
+        if (selectedPattern != null) {
+          print('Ejecutando patrón de vibración personalizado: ${selectedPattern.name}');
+          await VibrationPatternService.playPattern(selectedPattern);
+        } else {
+          print('No hay patrón seleccionado, usando vibración simple');
+          await Vibration.vibrate(duration: 500);
+        }
+      } catch (e) {
+        print('Error al ejecutar vibración: $e');
+        // Fallback a vibración simple
+        try {
+          await Vibration.vibrate(duration: 500);
+        } catch (fallbackError) {
+          print('Error en vibración de fallback: $fallbackError');
+        }
       }
     }
     
@@ -133,8 +146,7 @@ class LocalNotificationService {
         'appName': appName,
         'notificationId': notificationId,
         'soundEnabled': soundEnabled,
-        'vibrationEnabled': vibrationEnabled,
-        'customVibrationPattern': customVibrationPattern,
+        'vibrationEnabled': false, // Deshabilitamos vibración nativa ya que la manejamos directamente
         'screenWakeEnabled': screenWakeEnabled,
         'autoOpenEnabled': effectiveAutoOpenEnabled, // ✅ Usar valor efectivo
       });
