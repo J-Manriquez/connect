@@ -30,6 +30,7 @@ class MainActivity: FlutterActivity() {
     private lateinit var deviceFinderChannel: MethodChannel // ✅ NUEVO CANAL
     private lateinit var appListService: AppListService
     private lateinit var localNotificationManager: LocalNotificationManager
+    private lateinit var vibrationManager: VibrationManager
     private lateinit var deviceFinderManager: DeviceFinderManager // ✅ NUEVO SERVICIO
 
     companion object {
@@ -44,7 +45,8 @@ class MainActivity: FlutterActivity() {
         // Inicializar servicios
         appListService = AppListService(this)
         localNotificationManager = LocalNotificationManager(this)
-        deviceFinderManager = DeviceFinderManager(this) // ✅ NUEVO SERVICIO
+        vibrationManager = VibrationManager(this)
+        deviceFinderManager = DeviceFinderManager(this) // ✅ INICIALIZAR SERVICIO
 
         // Canal para EMISOR (NotificationListener)
         emisorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EMISOR_CHANNEL)
@@ -222,6 +224,7 @@ class MainActivity: FlutterActivity() {
                         val notificationId = call.argument<String>("notificationId") ?: ""
                         val soundEnabled = call.argument<Boolean>("soundEnabled") ?: true
                         val vibrationEnabled = call.argument<Boolean>("vibrationEnabled") ?: true
+                        val customVibrationPattern = call.argument<List<Long>>("customVibrationPattern")
                         // ✅ OBTENER LOS NUEVOS PARÁMETROS SEPARADOS
                         val screenWakeEnabled = call.argument<Boolean>("screenWakeEnabled") ?: false
                         val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
@@ -231,7 +234,7 @@ class MainActivity: FlutterActivity() {
                         
                         localNotificationManager.showNotification(
                             title, body, packageName, appName, notificationId,
-                            soundEnabled, vibrationEnabled, screenWakeEnabled, autoOpenEnabled
+                            soundEnabled, vibrationEnabled, customVibrationPattern, screenWakeEnabled, autoOpenEnabled
                         )
                         result.success(true)
                         Log.d("MainActivity", "Notificación RECEPTOR mostrada: $title")
@@ -281,6 +284,48 @@ class MainActivity: FlutterActivity() {
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al sincronizar notificaciones canceladas", e)
                         result.error("ERROR", "Error al sincronizar: ${e.message}", null)
+                    }
+                }
+                "testVibration" -> {
+                    try {
+                        vibrationManager.testVibration()
+                        result.success(true)
+                        Log.d("MainActivity", "Test de vibración ejecutado")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error en test de vibración", e)
+                        result.error("ERROR", "Error en test de vibración: ${e.message}", null)
+                    }
+                }
+                "vibrateSimple" -> {
+                    try {
+                        val duration = call.argument<Long>("duration") ?: 500L
+                        vibrationManager.vibrateSimple(duration)
+                        result.success(true)
+                        Log.d("MainActivity", "Vibración simple ejecutada: ${duration}ms")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error en vibración simple", e)
+                        result.error("ERROR", "Error en vibración simple: ${e.message}", null)
+                    }
+                }
+                "vibratePattern" -> {
+                    try {
+                        val pattern = call.argument<List<Long>>("pattern") ?: emptyList()
+                        vibrationManager.vibratePattern(pattern)
+                        result.success(true)
+                        Log.d("MainActivity", "Vibración con patrón ejecutada: $pattern")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error en vibración con patrón", e)
+                        result.error("ERROR", "Error en vibración con patrón: ${e.message}", null)
+                    }
+                }
+                "hasVibrator" -> {
+                    try {
+                        val hasVibrator = vibrationManager.hasVibrator()
+                        result.success(hasVibrator)
+                        Log.d("MainActivity", "Consulta de vibrador: $hasVibrator")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al consultar vibrador", e)
+                        result.error("ERROR", "Error al consultar vibrador: ${e.message}", null)
                     }
                 }
                 else -> {

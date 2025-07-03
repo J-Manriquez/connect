@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dismissed_notifications_service.dart';
+import 'package:connect/services/vibration_pattern_service.dart';
 
 class LocalNotificationService {
   static const MethodChannel _channel = MethodChannel('com.example.connect/local_notifications');
@@ -93,6 +94,16 @@ class LocalNotificationService {
     final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
     final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
     
+    // Obtener patrón de vibración personalizado
+    List<int>? customVibrationPattern;
+    if (vibrationEnabled) {
+      final selectedPattern = await VibrationPatternService.getSelectedPattern();
+      if (selectedPattern != null) {
+        customVibrationPattern = selectedPattern.pattern;
+        print('Usando patrón de vibración personalizado: ${selectedPattern.name}');
+      }
+    }
+    
     // ✅ DEBUGGING: Verificar valores en SharedPreferences
      print('=== VALORES EN SHAREDPREFERENCES ===');
      print('KEY_SCREEN_WAKE_ENABLED ($KEY_SCREEN_WAKE_ENABLED): $screenWakeEnabled');
@@ -123,6 +134,7 @@ class LocalNotificationService {
         'notificationId': notificationId,
         'soundEnabled': soundEnabled,
         'vibrationEnabled': vibrationEnabled,
+        'customVibrationPattern': customVibrationPattern,
         'screenWakeEnabled': screenWakeEnabled,
         'autoOpenEnabled': effectiveAutoOpenEnabled, // ✅ Usar valor efectivo
       });

@@ -123,6 +123,7 @@ class LocalNotificationManager(private val context: Context) {
         notificationId: String,
         soundEnabled: Boolean,
         vibrationEnabled: Boolean,
+        customVibrationPattern: List<Long>?,
         screenWakeEnabled: Boolean,
         autoOpenEnabled: Boolean
     ) {
@@ -252,8 +253,16 @@ class LocalNotificationManager(private val context: Context) {
                 }
                 
                 if (vibrationEnabled) {
-                    notificationBuilder.setVibrate(longArrayOf(0, 500, 500, 500))
-                    Log.d("LocalNotificationManager", "Vibración habilitada para notificación")
+                    if (customVibrationPattern != null && customVibrationPattern.isNotEmpty()) {
+                        // Usar patrón personalizado
+                        val pattern = customVibrationPattern.toLongArray()
+                        notificationBuilder.setVibrate(pattern)
+                        Log.d("LocalNotificationManager", "Vibración personalizada aplicada: ${pattern.contentToString()}")
+                    } else {
+                        // Usar patrón predeterminado
+                        notificationBuilder.setVibrate(longArrayOf(0, 500, 500, 500))
+                        Log.d("LocalNotificationManager", "Vibración predeterminada habilitada para notificación")
+                    }
                 }
             }
             

@@ -8,9 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:connect/screens/debug_logs_screen.dart';
-
+import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
+import 'package:restart_app/restart_app.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
-
 
 class ReceptorSettingsScreen extends StatefulWidget {
   const ReceptorSettingsScreen({Key? key}) : super(key: key);
@@ -34,15 +34,20 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   final ReceptorService _receptorService = ReceptorService();
 
   @override
-  Future<void> initState() async {
+  void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this); // ✅ Añadir observer
-    _loadSettings();
-    _ensureNotificationServiceActive(); // ✅ Asegurar que el servicio esté activo
-    
+    _initializeSettings(); // ✅ Mover lógica asíncrona a método separado
+  }
+
+  // ✅ Método separado para manejar la inicialización asíncrona
+  Future<void> _initializeSettings() async {
+    await _loadSettings();
+    await _ensureNotificationServiceActive(); // ✅ Asegurar que el servicio esté activo
+
     // ✅ VERIFICACIÓN ADICIONAL: Confirmar sincronización al inicializar
     // await _reloadAutoOpenState();
-    
+
     print('🏁 INICIALIZACIÓN COMPLETA: autoOpenEnabled = $_autoOpenEnabled');
   }
 
@@ -82,9 +87,12 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     });
 
     try {
-      final notificationsEnabled = await LocalNotificationService.areNotificationsEnabled();
-      final screenWakeEnabled = await LocalNotificationService.isScreenWakeEnabled();
-      final autoOpenEnabled = await LocalNotificationService.isAutoOpenEnabled();
+      final notificationsEnabled =
+          await LocalNotificationService.areNotificationsEnabled();
+      final screenWakeEnabled =
+          await LocalNotificationService.isScreenWakeEnabled();
+      final autoOpenEnabled =
+          await LocalNotificationService.isAutoOpenEnabled();
 
       setState(() {
         _notificationsEnabled = notificationsEnabled;
@@ -97,12 +105,12 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       print('- Notificaciones: $notificationsEnabled');
       print('- Screen Wake: $screenWakeEnabled');
       print('- Auto Open: $autoOpenEnabled (independiente)');
-      
+
       // ✅ SINCRONIZAR CONFIGURACIÓN NATIVA AL CARGAR
       await LocalNotificationService.setScreenWakeEnabled(screenWakeEnabled);
       await LocalNotificationService.setAutoOpenEnabled(autoOpenEnabled);
       print('🎯 CONFIGURACIÓN NATIVA SINCRONIZADA AL INICIALIZAR');
-      
+
       _ensureNotificationServiceActive();
     } catch (e) {
       print('❌ Error al cargar configuración: $e');
@@ -115,22 +123,23 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   // ✅ CAMBIO: Métodos independientes para los dos switches
   void _toggleScreenWake(bool? value) async {
     if (value == null) return;
-    
+
     print('🔄 INICIANDO _toggleScreenWake: $value');
-    
+
     // ✅ 1. Actualizar UI inmediatamente
     setState(() {
       _screenWakeEnabled = value;
     });
     print('✅ UI actualizada inmediatamente: $_screenWakeEnabled');
-    
+
     try {
       // ✅ 2. Guardar en SharedPreferences Y ACTUALIZAR CONFIGURACIÓN NATIVA EN TIEMPO REAL
       await LocalNotificationService.setScreenWakeEnabled(value);
-      print('✅ setScreenWakeEnabled($value) ejecutado - Configuración nativa actualizada automáticamente');
-      
+      print(
+        '✅ setScreenWakeEnabled($value) ejecutado - Configuración nativa actualizada automáticamente',
+      );
+
       print('🎉 SCREEN WAKE CONFIGURADO EN TIEMPO REAL: $value');
-      
     } catch (e) {
       print('❌ ERROR en _toggleScreenWake: $e');
       // Revertir UI en caso de error
@@ -142,24 +151,26 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
 
   void _toggleAutoOpen(bool? value) async {
     if (value == null) return;
-    
+
     print('🔄 INICIANDO _toggleAutoOpen: $value');
-    
+
     // ✅ 1. Actualizar UI inmediatamente
     setState(() {
       _autoOpenEnabled = value;
     });
     print('✅ UI actualizada inmediatamente: $_autoOpenEnabled');
-    
+
     try {
       // ✅ 2. Guardar en SharedPreferences Y ACTUALIZAR CONFIGURACIÓN NATIVA EN TIEMPO REAL
       await LocalNotificationService.setAutoOpenEnabled(value);
-      print('✅ setAutoOpenEnabled($value) ejecutado - Configuración nativa actualizada automáticamente');
-      
+      print(
+        '✅ setAutoOpenEnabled($value) ejecutado - Configuración nativa actualizada automáticamente',
+      );
+
       // ✅ 3. Verificar que se guardó correctamente
       final savedValue = await LocalNotificationService.isAutoOpenEnabled();
       print('✅ VERIFICACIÓN: Valor guardado en SharedPreferences: $savedValue');
-      
+
       if (savedValue != value) {
         print('❌ ERROR: El valor no se guardó correctamente');
         // Revertir UI en caso de error
@@ -168,15 +179,16 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
         });
         return;
       }
-      
+
       print('🎉 AUTO-OPEN CONFIGURADO EN TIEMPO REAL: $value');
-      
+
       // ✅ SOLUCIÓN: Reinicio forzado SOLO cuando se DESACTIVA autoOpenEnabled
       if (!value) {
-        print('🔄 AUTO-OPEN DESACTIVADO: Iniciando reinicio forzado de la aplicación');
+        print(
+          '🔄 AUTO-OPEN DESACTIVADO: Iniciando reinicio forzado de la aplicación',
+        );
         _forceAppRestart();
       }
-      
     } catch (e) {
       print('❌ ERROR en _toggleAutoOpen: $e');
       // Revertir UI en caso de error
@@ -185,12 +197,12 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       });
     }
   }
-  
+
   // ✅ SOLUCIÓN: Método para forzar el reinicio de la aplicación
   Future<void> _forceAppRestart() async {
     try {
       print('🔄 INICIANDO REINICIO FORZADO DE LA APLICACIÓN');
-      
+
       // Mostrar indicador de carga
       showDialog(
         context: context,
@@ -208,25 +220,23 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
           );
         },
       );
-      
+
       // Esperar un momento para que se muestre el diálogo
       await Future.delayed(const Duration(milliseconds: 500));
-      
+
       // Usar SystemNavigator para cerrar la aplicación
       // En Android, esto cerrará la app y el usuario tendrá que abrirla manualmente
       // await SystemNavigator.pop();
-      Phoenix.rebirth(context);
-      
+      Restart.restartApp();
       print('✅ APLICACIÓN CERRADA - El usuario debe abrirla manualmente');
-      
     } catch (e) {
       print('❌ ERROR durante el reinicio forzado: $e');
-      
+
       // Cerrar diálogo de carga si hay error
       if (Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
-      
+
       // Mostrar mensaje de error
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -432,9 +442,9 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                                             color: Colors.red,
                                           ),
                                         ),
-                                      ]
+                                      ],
                                     ],
-                                  )
+                                  ),
                                 ),
                               ],
                             ),
@@ -447,18 +457,32 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             ),
                           ],
                         ),
-                        const Divider(),
-                        // Botón para configuraciones avanzadas
+                        Divider(
+                          color: customColor[100],
+                          thickness: 3.0, // Set the thickness to 3.0 pixels
+                        ), // Botón para patrones de vibración
                         ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: customColor[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.vibration,
+                              color: customColor[600],
+                              size: 24,
+                            ),
+                          ),
                           title: const Text(
-                            'Configuraciones Avanzadas',
+                            'Patrones de Vibración',
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                           subtitle: const Text(
-                            'Sonido, vibración y más opciones',
+                            'Crear y gestionar patrones personalizados',
                             style: TextStyle(
                               fontSize: 14,
                               fontStyle: FontStyle.italic,
@@ -466,12 +490,16 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                           ),
                           trailing: const Icon(Icons.arrow_forward_ios),
                           onTap: () {
-                            Navigator.pushNamed(
+                            Navigator.push(
                               context,
-                              '/notification_settings',
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const VibrationPatternsScreen(),
+                              ),
                             );
                           },
                         ),
+                        const Divider(),
                       ],
                     ),
                   ),

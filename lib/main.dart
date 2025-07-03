@@ -3,6 +3,8 @@ import 'package:connect/screens/receptor/notification_detail_screen.dart';
 import 'package:connect/screens/receptor/receptor_screen.dart';
 import 'package:connect/screens/receptor/notificaciones_screen.dart';
 import 'package:connect/screens/receptor/notification_detail_screen.dart'; // ✅ Asegurar importación
+import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
+import 'package:connect/screens/receptor/create_vibration_pattern_screen.dart';
 import 'package:connect/services/notification_filter_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/services/receptor_service.dart';
@@ -21,7 +23,6 @@ import 'screens/receptor/receptor_settings_screen.dart';
 // Añadir este import al inicio del archivo
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/screens/receptor/unread_notifications_screen.dart';
-import 'package:connect/screens/receptor/notification_settings_screen.dart'; // Import the new screen
 import 'package:connect/theme_colors.dart';
 import 'package:connect/services/device_search_service.dart';
 import 'package:connect/services/device_finder_service.dart';
@@ -501,11 +502,11 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         '/receptor_settings': (context) => const ReceptorSettingsScreen(),
         '/unread_notifications': (context) =>
             const UnreadNotificationsScreen(), // Añadir esta nueva ruta
-        '/notification_settings': (context) =>
-            const NotificationSettingsScreen(), // Add the new route
         '/notification_detail': (context) => const NotificationDetailScreen(
           notificationData: {},
         ), // Add this line
+        '/vibration_patterns': (context) => const VibrationPatternsScreen(),
+        '/create_vibration_pattern': (context) => const CreateVibrationPatternScreen(),
         '/buscar_dispositivo': (context) => const BuscarDispositivoScreen(),
         '/buscar_emisor': (context) =>
             const BuscarEmisorScreen(), // ✅ Nueva ruta
