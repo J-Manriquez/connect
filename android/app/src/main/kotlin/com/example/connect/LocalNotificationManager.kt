@@ -32,6 +32,7 @@ class LocalNotificationManager(private val context: Context) {
         // ✅ CLAVES PARA CONFIGURACIÓN EN TIEMPO REAL
         private const val KEY_SCREEN_WAKE_ENABLED = "flutter.screenWakeEnabled"
         private const val KEY_AUTO_OPEN_ENABLED = "flutter.autoOpenEnabled"
+        private const val KEY_SOUND_ENABLED = "flutter.soundEnabled"
         
         // ✅ Hacer el conjunto público para acceso desde NotificationDeleteReceiver
         private val cancelledNotifications = mutableSetOf<String>()
@@ -62,48 +63,68 @@ class LocalNotificationManager(private val context: Context) {
     
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // ✅ CONFIGURACIÓN ULTRA CONSERVADORA: Evitar activación automática de pantalla
-            val importance = NotificationManager.IMPORTANCE_MIN // Ultra conservador para todos
-            
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
-                importance
-            ).apply {
-                description = CHANNEL_DESCRIPTION
+            // ✅ CONFIGURACIÓN ESPECÍFICA PARA ANDROID 8: Usar configuración anterior que funcionaba
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
+                // ANDROID 8.0: Usar configuración del archivo previo_funcionando.txt
+                val importance = NotificationManager.IMPORTANCE_HIGH
                 
-                // Configuración ultra conservadora que NO activa pantalla NUNCA
-                enableVibration(false) // Sin vibración del canal
-                enableLights(false)    // Sin luces del canal
-                lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET // Ocultar en pantalla de bloqueo
-                setSound(null, null)   // Sin sonido del canal
-                setBypassDnd(false)    // No omitir modo no molestar
-                setShowBadge(false)    // Sin badge para evitar cualquier activación
-                
-                // Configuraciones adicionales para Android 8+
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    // Evitar cualquier comportamiento que pueda activar la pantalla
-                    group = null // Sin grupo
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    CHANNEL_NAME,
+                    importance
+                ).apply {
+                    description = CHANNEL_DESCRIPTION
+                    enableVibration(true)
+                    enableLights(true)
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                    setBypassDnd(true)
+                    
+                    Log.d("LocalNotificationManager", "Canal configurado para Android 8.0 - Importance: IMPORTANCE_HIGH")
                 }
                 
-                Log.d("LocalNotificationManager", "Canal configurado ULTRA conservador - Importance: IMPORTANCE_MIN")
+                notificationManager.createNotificationChannel(channel)
+                Log.d("LocalNotificationManager", "Canal creado para Android 8.0 - Configuración funcional")
+            } else {
+                // ANDROID 8.1+: Configuración ultra conservadora
+                val importance = NotificationManager.IMPORTANCE_MIN
+                
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    CHANNEL_NAME,
+                    importance
+                ).apply {
+                    description = CHANNEL_DESCRIPTION
+                    
+                    // Configuración ultra conservadora que NO activa pantalla NUNCA
+                    enableVibration(false) // Sin vibración del canal
+                    enableLights(false)    // Sin luces del canal
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_SECRET // Ocultar en pantalla de bloqueo
+                    setSound(null, null)   // Sin sonido del canal
+                    setBypassDnd(false)    // No omitir modo no molestar
+                    setShowBadge(false)    // Sin badge para evitar cualquier activación
+                    group = null // Sin grupo
+                    
+                    Log.d("LocalNotificationManager", "Canal configurado ULTRA conservador - Importance: IMPORTANCE_MIN")
+                }
+                
+                notificationManager.createNotificationChannel(channel)
+                Log.d("LocalNotificationManager", "Canal creado - Configuración ultra conservadora")
             }
-            
-            notificationManager.createNotificationChannel(channel)
-            Log.d("LocalNotificationManager", "Canal creado - Configuración ultra conservadora")
         }
     }
     
     // ✅ MÉTODO PARA ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL
-    fun updateSettings(screenWakeEnabled: Boolean, autoOpenEnabled: Boolean) {
+    fun updateSettings(screenWakeEnabled: Boolean, autoOpenEnabled: Boolean, soundEnabled: Boolean = true) {
         val editor = sharedPreferences.edit()
         editor.putBoolean(KEY_SCREEN_WAKE_ENABLED, screenWakeEnabled)
         editor.putBoolean(KEY_AUTO_OPEN_ENABLED, autoOpenEnabled)
+        editor.putBoolean(KEY_SOUND_ENABLED, soundEnabled)
         editor.apply()
         
         Log.d("LocalNotificationManager", "⚡ CONFIGURACIÓN ACTUALIZADA EN TIEMPO REAL:")
         Log.d("LocalNotificationManager", "   screenWakeEnabled: $screenWakeEnabled")
         Log.d("LocalNotificationManager", "   autoOpenEnabled: $autoOpenEnabled")
+        Log.d("LocalNotificationManager", "   soundEnabled: $soundEnabled")
     }
     
     // ✅ MÉTODOS PARA OBTENER CONFIGURACIÓN ACTUAL
@@ -113,6 +134,10 @@ class LocalNotificationManager(private val context: Context) {
     
     private fun getCurrentAutoOpenEnabled(): Boolean {
         return sharedPreferences.getBoolean(KEY_AUTO_OPEN_ENABLED, false)
+    }
+    
+    private fun getCurrentSoundEnabled(): Boolean {
+        return sharedPreferences.getBoolean(KEY_SOUND_ENABLED, true)
     }
     
     fun showNotification(
@@ -137,6 +162,7 @@ class LocalNotificationManager(private val context: Context) {
         // ✅ USAR CONFIGURACIÓN EN TIEMPO REAL
         val currentScreenWakeEnabled = getCurrentScreenWakeEnabled()
         val currentAutoOpenEnabled = getCurrentAutoOpenEnabled()
+        val currentSoundEnabled = getCurrentSoundEnabled()
         
         Log.d("LocalNotificationManager", "=== CONFIGURACIÓN DETALLADA RECIBIDA ===")
         Log.d("LocalNotificationManager", "Title: $title")
@@ -146,8 +172,9 @@ class LocalNotificationManager(private val context: Context) {
         Log.d("LocalNotificationManager", "screenWakeEnabled (tiempo real): $currentScreenWakeEnabled")
         Log.d("LocalNotificationManager", "autoOpenEnabled (parámetro): $autoOpenEnabled")
         Log.d("LocalNotificationManager", "autoOpenEnabled (tiempo real): $currentAutoOpenEnabled")
+        Log.d("LocalNotificationManager", "soundEnabled (parámetro): $soundEnabled")
+        Log.d("LocalNotificationManager", "soundEnabled (tiempo real): $currentSoundEnabled")
         Log.d("LocalNotificationManager", "🔍 VERIFICACIÓN CRÍTICA NATIVA: usando configuración en tiempo real")
-        Log.d("LocalNotificationManager", "soundEnabled: $soundEnabled")
         Log.d("LocalNotificationManager", "vibrationEnabled: $vibrationEnabled")
         Log.d("LocalNotificationManager", "Android API Level: ${Build.VERSION.SDK_INT}")
         Log.d("LocalNotificationManager", "=================================================")
@@ -208,60 +235,65 @@ class LocalNotificationManager(private val context: Context) {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setDeleteIntent(createDeleteIntent(notificationId))
             
-            // ✅ CONFIGURACIÓN ULTRA CONSERVADORA: Evitar activación automática de pantalla
-            if (screenWakeEnabled) {
-                // Usar PRIORITY_DEFAULT incluso cuando está habilitado para evitar activación automática
-                Log.d("LocalNotificationManager", "screenWakeEnabled: true - Usando PRIORITY_DEFAULT (ultra conservador)")
-                notificationBuilder.setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            } else {
-                // Configuración ultra restrictiva cuando screenWakeEnabled es false
-                Log.d("LocalNotificationManager", "screenWakeEnabled: false - Configuración ultra restrictiva")
-                notificationBuilder.setPriority(NotificationCompat.PRIORITY_MIN)
-                notificationBuilder.setDefaults(0) // Sin defaults
-                notificationBuilder.setLights(0, 0, 0) // Sin luces
-                notificationBuilder.setSound(null) // Sin sonido explícito
-                notificationBuilder.setVibrate(null) // Sin vibración explícita
+            // ✅ CONFIGURACIÓN ESPECÍFICA PARA ANDROID 8: Usar método anterior que funcionaba
+            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
+                // ANDROID 8.0: Usar configuración del archivo previo_funcionando.txt
+                Log.d("LocalNotificationManager", "Android 8.0: Usando configuración funcional anterior")
+                notificationBuilder.setPriority(NotificationCompat.PRIORITY_MAX)
+                notificationBuilder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                notificationBuilder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 
-                // Configuración adicional para Android 8+
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    notificationBuilder.setChannelId(CHANNEL_ID)
-                    Log.d("LocalNotificationManager", "Android 8+: Configuración ultra restrictiva aplicada")
-                }
-            }
-            
-            // ✅ CONFIGURACIONES ADICIONALES PARA EVITAR ACTIVACIÓN DE PANTALLA
-            notificationBuilder.setOnlyAlertOnce(true) // Solo alertar una vez
-            notificationBuilder.setLocalOnly(true) // Solo local, no sincronizar
-            notificationBuilder.setVisibility(NotificationCompat.VISIBILITY_SECRET) // Ocultar contenido
-            
-            // Evitar flags que puedan activar la pantalla
-            val currentFlags = notificationBuilder.build().flags
-            Log.d("LocalNotificationManager", "Flags actuales antes de limpieza: $currentFlags")
-            
-            // ✅ CORREGIR: Configurar sonido y vibración según configuración
-            if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O && !screenWakeEnabled) {
-                // ANDROID 8.0: Solo aplicar restricciones cuando screenWakeEnabled es false
-                Log.d("LocalNotificationManager", "Android 8.0: screenWakeEnabled=false - Sin sonido ni vibración")
-                notificationBuilder.setSound(null)
-                notificationBuilder.setVibrate(null)
-                notificationBuilder.setDefaults(0) // Sin ningún default
-            } else {
-                // Configuración normal para todos los demás casos
-                if (soundEnabled) {
-                    notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND)
-                    Log.d("LocalNotificationManager", "Sonido habilitado para notificación")
-                }
+                // Configurar sonido y vibración según las preferencias (método anterior)
+                 if (currentSoundEnabled) {
+                     notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND)
+                     Log.d("LocalNotificationManager", "Android 8.0: Sonido habilitado (tiempo real)")
+                 }
                 
                 if (vibrationEnabled) {
                     if (customVibrationPattern != null && customVibrationPattern.isNotEmpty()) {
-                        // Usar patrón personalizado
                         val pattern = customVibrationPattern.toLongArray()
                         notificationBuilder.setVibrate(pattern)
-                        Log.d("LocalNotificationManager", "Vibración personalizada aplicada: ${pattern.contentToString()}")
+                        Log.d("LocalNotificationManager", "Android 8.0: Vibración personalizada aplicada")
                     } else {
-                        // Usar patrón predeterminado
                         notificationBuilder.setVibrate(longArrayOf(0, 500, 500, 500))
-                        Log.d("LocalNotificationManager", "Vibración predeterminada habilitada para notificación")
+                        Log.d("LocalNotificationManager", "Android 8.0: Vibración predeterminada habilitada")
+                    }
+                }
+            } else {
+                // ANDROID 8.1+: Configuración ultra conservadora
+                if (screenWakeEnabled) {
+                    Log.d("LocalNotificationManager", "screenWakeEnabled: true - Usando PRIORITY_DEFAULT (ultra conservador)")
+                    notificationBuilder.setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                } else {
+                    Log.d("LocalNotificationManager", "screenWakeEnabled: false - Configuración ultra restrictiva")
+                    notificationBuilder.setPriority(NotificationCompat.PRIORITY_MIN)
+                    notificationBuilder.setDefaults(0)
+                    notificationBuilder.setLights(0, 0, 0)
+                    notificationBuilder.setSound(null)
+                    notificationBuilder.setVibrate(null)
+                }
+                
+                // Configuraciones adicionales para evitar activación de pantalla
+                notificationBuilder.setOnlyAlertOnce(true)
+                notificationBuilder.setLocalOnly(true)
+                notificationBuilder.setVisibility(NotificationCompat.VISIBILITY_SECRET)
+                
+                // Configurar sonido y vibración para Android 8.1+
+                 if (screenWakeEnabled) {
+                     if (currentSoundEnabled) {
+                         notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND)
+                         Log.d("LocalNotificationManager", "Sonido habilitado para notificación (tiempo real)")
+                     }
+                    
+                    if (vibrationEnabled) {
+                        if (customVibrationPattern != null && customVibrationPattern.isNotEmpty()) {
+                            val pattern = customVibrationPattern.toLongArray()
+                            notificationBuilder.setVibrate(pattern)
+                            Log.d("LocalNotificationManager", "Vibración personalizada aplicada")
+                        } else {
+                            notificationBuilder.setVibrate(longArrayOf(0, 500, 500, 500))
+                            Log.d("LocalNotificationManager", "Vibración predeterminada habilitada")
+                        }
                     }
                 }
             }

@@ -212,6 +212,9 @@ class LocalNotificationService {
   static Future<void> setSoundEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(KEY_SOUND_ENABLED, enabled);
+    
+    // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL EN EL LADO NATIVO
+    await _updateNativeSettings();
   }
   
   // ✅ ELIMINADO: setVibrationEnabled - usar VibrationPatternService.setVibrationEnabled en su lugar
@@ -257,15 +260,18 @@ class LocalNotificationService {
       final prefs = await SharedPreferences.getInstance();
       final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
       final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
+      final soundEnabled = prefs.getBool(KEY_SOUND_ENABLED) ?? true;
       
       await _channel.invokeMethod('updateNotificationSettings', {
         'screenWakeEnabled': screenWakeEnabled,
         'autoOpenEnabled': autoOpenEnabled,
+        'soundEnabled': soundEnabled,
       });
       
       print('⚡ CONFIGURACIÓN NATIVA ACTUALIZADA EN TIEMPO REAL:');
       print('   screenWakeEnabled: $screenWakeEnabled');
       print('   autoOpenEnabled: $autoOpenEnabled');
+      print('   soundEnabled: $soundEnabled');
     } catch (e) {
       print('❌ Error al actualizar configuración nativa: $e');
     }

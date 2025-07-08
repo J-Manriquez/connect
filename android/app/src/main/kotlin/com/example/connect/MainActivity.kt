@@ -230,7 +230,7 @@ class MainActivity: FlutterActivity() {
                         val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
                         
                         // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL
-                        localNotificationManager.updateSettings(screenWakeEnabled, autoOpenEnabled)
+                        localNotificationManager.updateSettings(screenWakeEnabled, autoOpenEnabled, soundEnabled)
                         
                         localNotificationManager.showNotification(
                             title, body, packageName, appName, notificationId,
@@ -247,12 +247,17 @@ class MainActivity: FlutterActivity() {
                     try {
                         val screenWakeEnabled = call.argument<Boolean>("screenWakeEnabled") ?: false
                         val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
+                        val soundEnabled = call.argument<Boolean>("soundEnabled") ?: true
                         
                         // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL SIN MOSTRAR NOTIFICACIÓN
-                        localNotificationManager.updateSettings(screenWakeEnabled, autoOpenEnabled)
+                        localNotificationManager.updateSettings(
+                            screenWakeEnabled = screenWakeEnabled,
+                            autoOpenEnabled = autoOpenEnabled,
+                            soundEnabled = soundEnabled
+                        )
                         
                         result.success(true)
-                        Log.d("MainActivity", "Configuración de notificaciones actualizada: screenWake=$screenWakeEnabled, autoOpen=$autoOpenEnabled")
+                        Log.d("MainActivity", "Configuración de notificaciones actualizada: screenWake=$screenWakeEnabled, autoOpen=$autoOpenEnabled, sound=$soundEnabled")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al actualizar configuración", e)
                         result.error("ERROR", "Error al actualizar configuración: ${e.message}", null)

@@ -339,27 +339,28 @@ class _VibrationPatternsScreenState extends State<VibrationPatternsScreen> {
         foregroundColor: Colors.white,
         actions: [
           // Switch para habilitar/deshabilitar vibración
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _vibrationEnabled
-                      ? Icons.vibration
-                      : Icons.vibration_outlined,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                Switch(
-                  value: _vibrationEnabled,
-                  onChanged: _toggleVibration,
-                  activeColor: Colors.white,
-                  activeTrackColor: Colors.white.withOpacity(0.3),
-                ),
-              ],
-            ),
-          ),
+          // Padding(
+          //   padding: const EdgeInsets.only(right: 8),
+          //   child: Row(
+          //     mainAxisSize: MainAxisSize.min,
+          //     children: [
+          //       Icon(
+          //         _vibrationEnabled
+          //             ? Icons.vibration
+          //             : Icons.vibration_outlined,
+          //         color: Colors.white,
+          //         size: 20,
+          //       ),
+          //       Switch(
+          //         value: _vibrationEnabled,
+          //         onChanged: _toggleVibration,
+          //         activeColor: Colors.white,
+          //         activeTrackColor: Colors.white.withOpacity(0.3),
+          //       ),
+          //     ],
+          //   ),
+          // ),
+        
         ],
       ),
       body: _isLoading
@@ -369,63 +370,63 @@ class _VibrationPatternsScreenState extends State<VibrationPatternsScreen> {
               child: Column(
                 children: [
                   // Botón de prueba de vibración simple
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.all(16),
-                    child: ElevatedButton.icon(
-                      onPressed: _testSimpleVibration,
-                      icon: const Icon(Icons.vibration),
-                      label: const Text('Probar Vibración Simple'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: customColor[600],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
+                  // Container(
+                  //   width: double.infinity,
+                  //   padding: const EdgeInsets.all(16),
+                  //   margin: const EdgeInsets.all(16),
+                  //   child: ElevatedButton.icon(
+                  //     onPressed: _testSimpleVibration,
+                  //     icon: const Icon(Icons.vibration),
+                  //     label: const Text('Probar Vibración Simple'),
+                  //     style: ElevatedButton.styleFrom(
+                  //       backgroundColor: customColor[600],
+                  //       foregroundColor: Colors.white,
+                  //       padding: const EdgeInsets.symmetric(vertical: 12),
+                  //     ),
+                  //   ),
+                  // ),
 
                   // Información sobre vibración
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _vibrationEnabled
-                          ? Colors.green[50]
-                          : Colors.orange[50],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _vibrationEnabled
-                            ? Colors.green[200]!
-                            : Colors.orange[200]!,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _vibrationEnabled ? Icons.info : Icons.warning,
-                          color: _vibrationEnabled
-                              ? Colors.green[600]
-                              : Colors.orange[600],
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            _vibrationEnabled
-                                ? 'La vibración está habilitada. Toca un patrón para seleccionarlo y reproducirlo.'
-                                : 'La vibración está deshabilitada. Actívala para usar patrones personalizados.',
-                            style: TextStyle(
-                              color: _vibrationEnabled
-                                  ? Colors.green[800]
-                                  : Colors.orange[800],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  // Container(
+                  //   width: double.infinity,
+                  //   padding: const EdgeInsets.all(16),
+                  //   margin: const EdgeInsets.all(16),
+                  //   decoration: BoxDecoration(
+                  //     color: _vibrationEnabled
+                  //         ? Colors.green[50]
+                  //         : Colors.orange[50],
+                  //     borderRadius: BorderRadius.circular(12),
+                  //     border: Border.all(
+                  //       color: _vibrationEnabled
+                  //           ? Colors.green[200]!
+                  //           : Colors.orange[200]!,
+                  //     ),
+                  //   ),
+                  //   child: Row(
+                  //     children: [
+                  //       Icon(
+                  //         _vibrationEnabled ? Icons.info : Icons.warning,
+                  //         color: _vibrationEnabled
+                  //             ? Colors.green[600]
+                  //             : Colors.orange[600],
+                  //       ),
+                  //       const SizedBox(width: 12),
+                  //       Expanded(
+                  //         child: Text(
+                  //           _vibrationEnabled
+                  //               ? 'La vibración está habilitada. Toca un patrón para seleccionarlo y reproducirlo.'
+                  //               : 'La vibración está deshabilitada. Actívala para usar patrones personalizados.',
+                  //           style: TextStyle(
+                  //             color: _vibrationEnabled
+                  //                 ? Colors.green[800]
+                  //                 : Colors.orange[800],
+                  //             fontWeight: FontWeight.w500,
+                  //           ),
+                  //         ),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ),
 
                   // Lista de patrones
                   Container(

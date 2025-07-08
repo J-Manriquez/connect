@@ -27,6 +27,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   bool _screenWakeEnabled = false;
   bool _autoOpenEnabled = false;
   bool _vibrationEnabled = false;
+  bool _soundEnabled = true; // ✅ NUEVA VARIABLE PARA SONIDO
   bool _isLoading = true;
 
   // ✅ SOLUCIÓN: Añadir referencia al servicio
@@ -97,12 +98,14 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
           await LocalNotificationService.isAutoOpenEnabled();
       final vibrationEnabled =
           await VibrationPatternService.isVibrationEnabled();
+      final soundEnabled = await LocalNotificationService.isSoundEnabled(); // ✅ CARGAR CONFIGURACIÓN DE SONIDO
 
       setState(() {
         _notificationsEnabled = notificationsEnabled;
         _screenWakeEnabled = screenWakeEnabled;
         _autoOpenEnabled = autoOpenEnabled;
         _vibrationEnabled = vibrationEnabled;
+        _soundEnabled = soundEnabled; // ✅ ASIGNAR VALOR DE SONIDO
         _isLoading = false;
       });
 
@@ -111,6 +114,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       print('- Screen Wake: $screenWakeEnabled');
       print('- Auto Open: $autoOpenEnabled (independiente)');
       print('- Vibración: $vibrationEnabled');
+      print('- Sonido: $soundEnabled'); // ✅ LOG PARA SONIDO
 
       // ✅ SINCRONIZAR CONFIGURACIÓN NATIVA AL CARGAR
       await LocalNotificationService.setScreenWakeEnabled(screenWakeEnabled);
@@ -226,6 +230,33 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       // Revertir UI en caso de error
       setState(() {
         _vibrationEnabled = !value;
+      });
+    }
+  }
+
+  // ✅ NUEVO MÉTODO PARA MANEJAR SONIDO
+  void _toggleSound(bool? value) async {
+    if (value == null) return;
+
+    print('🔄 INICIANDO _toggleSound: $value');
+
+    // ✅ 1. Actualizar UI inmediatamente
+    setState(() {
+      _soundEnabled = value;
+    });
+    print('✅ UI actualizada inmediatamente: $_soundEnabled');
+
+    try {
+      // ✅ 2. Guardar en SharedPreferences Y ACTUALIZAR CONFIGURACIÓN NATIVA EN TIEMPO REAL
+      await LocalNotificationService.setSoundEnabled(value);
+      print('✅ setSoundEnabled($value) ejecutado - Configuración nativa actualizada automáticamente');
+
+      print('🎉 SONIDO CONFIGURADO EN TIEMPO REAL: $value');
+    } catch (e) {
+      print('❌ ERROR en _toggleSound: $e');
+      // Revertir UI en caso de error
+      setState(() {
+        _soundEnabled = !value;
       });
     }
   }
@@ -523,6 +554,46 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             Switch(
                               value: _vibrationEnabled,
                               onChanged: _toggleVibration,
+                              activeColor: Colors.green,
+                              inactiveTrackColor: customColor[200],
+                              inactiveThumbColor: Colors.grey[300],
+                            ),
+                          ],
+                        ),
+                        // ✅ CUARTO SWITCH: SONIDO
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 15),
+                                  child: Text(
+                                    'Sonido',
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsets.only(left: 15),
+                                  child: Text(
+                                    'Activa el sonido cuando \nllega una notificación',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Switch(
+                              value: _soundEnabled,
+                              onChanged: _toggleSound,
                               activeColor: Colors.green,
                               inactiveTrackColor: customColor[200],
                               inactiveThumbColor: Colors.grey[300],
