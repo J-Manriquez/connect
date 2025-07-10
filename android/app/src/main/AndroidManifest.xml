@@ -84,6 +84,15 @@
             android:foregroundServiceType="dataSync"
             android:exported="false"/>
         <receiver android:name=".NotificationDeleteReceiver" />
+        
+        <!-- ✅ BROADCAST RECEIVER PARA SONIDOS PERSONALIZADOS -->
+        <receiver android:name=".CustomSoundReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.connect.PLAY_CUSTOM_SOUND" />
+            </intent-filter>
+        </receiver>
 
         <!-- ✅ REGISTRAR EL SERVICIO DE BÚSQUEDA DE DISPOSITIVOS -->
         <service

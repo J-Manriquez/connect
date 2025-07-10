@@ -161,16 +161,24 @@ class LocalNotificationManager(private val context: Context) {
         try {
             Log.d("LocalNotificationManager", "🔊 Iniciando reproducción de sonido")
             
-            // Primero intentar reproducir sonido personalizado desde Flutter
+            // Intentar reproducir sonido personalizado directamente desde MainActivity
             try {
-                Log.d("LocalNotificationManager", "🎵 Intentando reproducir sonido personalizado desde Flutter")
-                // Enviar comando a Flutter para que reproduzca el sonido personalizado
-                val intent = Intent("com.example.connect.PLAY_CUSTOM_SOUND")
-                context.sendBroadcast(intent)
-                Log.d("LocalNotificationManager", "✅ Comando de sonido personalizado enviado a Flutter")
+                Log.d("LocalNotificationManager", "🎵 Intentando reproducir sonido personalizado via MainActivity")
                 
-                // Dar tiempo para que Flutter procese el sonido personalizado
-                Thread.sleep(100)
+                val mainActivity = MainActivity.instance
+                if (mainActivity != null) {
+                    mainActivity.runOnUiThread {
+                        try {
+                            // Usar el soundChannel para invocar directamente el método en Flutter
+                            mainActivity.soundChannel.invokeMethod("playCustomSound", null)
+                            Log.d("LocalNotificationManager", "✅ Comando de sonido personalizado enviado directamente a Flutter")
+                        } catch (e: Exception) {
+                            Log.e("LocalNotificationManager", "❌ Error al invocar método en Flutter", e)
+                        }
+                    }
+                } else {
+                    Log.w("LocalNotificationManager", "⚠️ MainActivity instance no disponible")
+                }
                 
             } catch (e: Exception) {
                 Log.w("LocalNotificationManager", "⚠️ No se pudo enviar comando de sonido personalizado: ${e.message}")

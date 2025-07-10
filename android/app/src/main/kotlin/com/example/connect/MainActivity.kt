@@ -24,10 +24,12 @@ class MainActivity: FlutterActivity() {
     private val APP_LIST_CHANNEL = "com.example.connect/app_list"
     private val RECEPTOR_CHANNEL = "com.example.connect/local_notifications" // Para LocalNotificationManager (RECEPTOR)
     private val DEVICE_FINDER_CHANNEL = "com.example.connect/device_finder" // ✅ NUEVO CANAL
+    private val SOUND_CHANNEL = "com.example.connect/notification_sound" // ✅ CANAL PARA SONIDOS PERSONALIZADOS
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
     private lateinit var deviceFinderChannel: MethodChannel // ✅ NUEVO CANAL
+    internal lateinit var soundChannel: MethodChannel // ✅ CANAL PARA SONIDOS PERSONALIZADOS
     private lateinit var appListService: AppListService
     private lateinit var localNotificationManager: LocalNotificationManager
     private lateinit var vibrationManager: VibrationManager
@@ -61,6 +63,9 @@ class MainActivity: FlutterActivity() {
         
         // ✅ CANAL PARA BÚSQUEDA DE DISPOSITIVOS
         deviceFinderChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_FINDER_CHANNEL)
+        
+        // ✅ CANAL PARA SONIDOS PERSONALIZADOS
+        soundChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SOUND_CHANNEL)
         
         // Iniciar automáticamente el servicio si el permiso está concedido
         if (isNotificationServiceEnabled()) {
@@ -378,6 +383,28 @@ class MainActivity: FlutterActivity() {
                 }
             }
         }
+        
+        // ✅ CONFIGURAR MANEJADOR PARA CANAL DE SONIDOS PERSONALIZADOS
+        soundChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "playCustomSound" -> {
+                    try {
+                        Log.d("MainActivity", "🔊 Método playCustomSound recibido desde CustomSoundReceiver")
+                        // Este método será llamado desde CustomSoundReceiver
+                        // No necesita hacer nada más, solo confirmar que se recibió
+                        result.success(true)
+                        Log.d("MainActivity", "✅ Método playCustomSound procesado exitosamente")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "❌ Error al procesar playCustomSound", e)
+                        result.error("ERROR", "Error al reproducir sonido: ${e.message}", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        
         // Verificar si se debe navegar a una pantalla específica
         handleNavigationIntent(intent)
     }
