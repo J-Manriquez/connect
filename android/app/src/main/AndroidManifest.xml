@@ -19,6 +19,14 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     
+    <!-- ✅ PERMISOS PARA SONIDO DE NOTIFICACIONES EN ANDROID 8.0 -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    
+    <!-- ✅ PERMISOS PARA SELECCIÓN DE ARCHIVOS DE AUDIO -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    
     <!-- ✅ NUEVOS PERMISOS PARA AUTO-APERTURA DESDE SEGUNDO PLANO -->
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <uses-permission android:name="android.permission.GET_TASKS" />

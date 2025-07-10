@@ -9,6 +9,7 @@ import 'package:connect/services/receptor_service.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:connect/screens/debug_logs_screen.dart';
 import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
+import 'package:connect/screens/receptor/custom_sound_selection_screen.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
 import 'package:restart_app/restart_app.dart';
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -644,6 +645,46 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                           },
                         ),
                         if (_vibrationEnabled) const Divider(),
+                        // Botón para selección de sonidos personalizados (solo visible si sonido está activo)
+                        if (_soundEnabled) ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: customColor[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.music_note,
+                              color: customColor[600],
+                              size: 24,
+                            ),
+                          ),
+                          title: const Text(
+                            'Sonidos Personalizados',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Seleccionar sonidos desde el dispositivo',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const CustomSoundSelectionScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        if (_soundEnabled) const Divider(),
                       ],
                     ),
                   ),

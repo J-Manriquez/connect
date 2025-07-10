@@ -95,36 +95,12 @@ class LocalNotificationService {
     final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
     final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
     
-    // Manejar vibración usando el paquete vibration directamente
-    // Verificar primero si la vibración está habilitada desde la configuración
+    // ✅ PREPARAR CONFIGURACIÓN DE VIBRACIÓN PARA EJECUTAR DESPUÉS
     final isVibrationEnabledInSettings = await VibrationPatternService.isVibrationEnabled();
+    final shouldVibrate = vibrationEnabled && isVibrationEnabledInSettings;
     print('🔍 Vibración habilitada en configuración: $isVibrationEnabledInSettings');
     print('🔍 Vibración habilitada en notificación: $vibrationEnabled');
-    
-    if (vibrationEnabled && isVibrationEnabledInSettings) {
-      try {
-        final selectedPattern = await VibrationPatternService.getSelectedPattern();
-        if (selectedPattern != null) {
-          print('🔊 Ejecutando patrón de vibración personalizado: ${selectedPattern.name}');
-          await VibrationPatternService.playPattern(selectedPattern);
-        } else {
-          print('🔊 No hay patrón seleccionado, usando vibración simple');
-          await Vibration.vibrate(duration: 500);
-        }
-      } catch (e) {
-        print('❌ Error al ejecutar vibración: $e');
-        // Fallback a vibración simple
-        try {
-          await Vibration.vibrate(duration: 500);
-        } catch (fallbackError) {
-          print('❌ Error en vibración de fallback: $fallbackError');
-        }
-      }
-    } else if (!isVibrationEnabledInSettings) {
-      print('⚠️ Vibración deshabilitada en configuración, saltando vibración');
-    } else {
-      print('⚠️ Vibración deshabilitada para esta notificación, saltando vibración');
-    }
+    print('🔍 Se ejecutará vibración después del auto-open: $shouldVibrate');
     
     // ✅ DEBUGGING: Verificar valores en SharedPreferences
      print('=== VALORES EN SHAREDPREFERENCES ===');
@@ -148,6 +124,7 @@ class LocalNotificationService {
     print('=====================================');
     
     try {
+      // ✅ PRIMERO: Enviar notificación al lado nativo (esto activará auto-open inmediatamente)
       await _channel.invokeMethod('showNotification', {
         'title': title,
         'body': body,
@@ -161,6 +138,33 @@ class LocalNotificationService {
       });
       
       print('Notificación enviada exitosamente a Android');
+      
+      // ✅ SEGUNDO: Ejecutar vibración DESPUÉS del auto-open
+      if (shouldVibrate) {
+        try {
+          final selectedPattern = await VibrationPatternService.getSelectedPattern();
+          if (selectedPattern != null) {
+            print('🔊 Ejecutando patrón de vibración personalizado después del auto-open: ${selectedPattern.name}');
+            await VibrationPatternService.playPattern(selectedPattern);
+          } else {
+            print('🔊 No hay patrón seleccionado, usando vibración simple después del auto-open');
+            await Vibration.vibrate(duration: 500);
+          }
+        } catch (e) {
+          print('❌ Error al ejecutar vibración después del auto-open: $e');
+          // Fallback a vibración simple
+          try {
+            await Vibration.vibrate(duration: 500);
+          } catch (fallbackError) {
+            print('❌ Error en vibración de fallback después del auto-open: $fallbackError');
+          }
+        }
+      } else if (!isVibrationEnabledInSettings) {
+        print('⚠️ Vibración deshabilitada en configuración, saltando vibración');
+      } else {
+        print('⚠️ Vibración deshabilitada para esta notificación, saltando vibración');
+      }
+      
     } catch (e) {
       print('Error al mostrar notificación: $e');
     }

@@ -333,6 +333,17 @@ class MainActivity: FlutterActivity() {
                         result.error("ERROR", "Error al consultar vibrador: ${e.message}", null)
                     }
                 }
+                "playNotificationSound" -> {
+                    try {
+                        val soundService = SoundNotificationService(this@MainActivity)
+                        soundService.playNotificationSound(forceSound = true)
+                        result.success(true)
+                        Log.d("MainActivity", "Sonido de notificación reproducido desde Flutter")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al reproducir sonido de notificación", e)
+                        result.error("ERROR", "Error al reproducir sonido: ${e.message}", null)
+                    }
+                }
                 else -> {
                     result.notImplemented()
                 }

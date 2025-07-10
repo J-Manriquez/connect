@@ -5,6 +5,7 @@ import 'package:connect/screens/receptor/notificaciones_screen.dart';
 import 'package:connect/screens/receptor/notification_detail_screen.dart'; // ✅ Asegurar importación
 import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
 import 'package:connect/screens/receptor/create_vibration_pattern_screen.dart';
+import 'package:connect/screens/receptor/custom_sound_selection_screen.dart';
 import 'package:connect/services/notification_filter_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/services/receptor_service.dart';
@@ -27,6 +28,7 @@ import 'package:connect/theme_colors.dart';
 import 'package:connect/services/device_search_service.dart';
 import 'package:connect/services/device_finder_service.dart';
 import 'package:connect/screens/buscar_dispositivo_screen.dart';
+import 'package:connect/services/notification_sound_handler.dart';
 
 // reiniciar la app
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -52,6 +54,9 @@ void main() async {
 }
 
 void initializeNotificationHandling() {
+  // Inicializar el manejador de sonidos personalizados
+  NotificationSoundHandler.initialize();
+  
   // Configurar el callback para manejar cuando se toca una notificación
   LocalNotificationService.onNotificationTapped = (Map<String, dynamic> data) {
     print('Notificación tocada: $data');
@@ -507,6 +512,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         ), // Add this line
         '/vibration_patterns': (context) => const VibrationPatternsScreen(),
         '/create_vibration_pattern': (context) => const CreateVibrationPatternScreen(),
+        '/custom_sound_selection': (context) => const CustomSoundSelectionScreen(),
         '/buscar_dispositivo': (context) => const BuscarDispositivoScreen(),
         '/buscar_emisor': (context) =>
             const BuscarEmisorScreen(), // ✅ Nueva ruta
