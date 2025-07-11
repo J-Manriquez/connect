@@ -6,6 +6,10 @@ import 'package:connect/screens/receptor/notification_detail_screen.dart'; // âœ
 import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
 import 'package:connect/screens/receptor/create_vibration_pattern_screen.dart';
 import 'package:connect/screens/receptor/custom_sound_selection_screen.dart';
+import 'package:connect/screens/receptor/notification_settings_list_screen.dart';
+import 'package:connect/screens/receptor/configure_notification_screen.dart';
+import 'package:connect/screens/receptor/notification_vibration_selection_screen.dart';
+import 'package:connect/screens/receptor/notification_sound_selection_screen.dart';
 import 'package:connect/services/notification_filter_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/services/receptor_service.dart';
@@ -516,6 +520,11 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         '/buscar_dispositivo': (context) => const BuscarDispositivoScreen(),
         '/buscar_emisor': (context) =>
             const BuscarEmisorScreen(), // âœ… Nueva ruta
+        '/notification_settings_list': (context) => const NotificationSettingsListScreen(),
+        '/configure_notification': (context) {
+          final notificationData = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+          return ConfigureNotificationScreen(notificationData: notificationData);
+        },
       },
     );
   }

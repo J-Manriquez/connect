@@ -247,6 +247,69 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   ),
                 ),
               ),
+
+            const SizedBox(height: 10),
+
+            // Card para configurar notificación
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.tune, color: customColor[700], size: 24),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Configuración Personalizada',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Crear configuraciones personalizadas de sonido, vibración o bloqueo para notificaciones similares.',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 15),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/configure_notification',
+                            arguments: widget.notificationData,
+                          );
+                        },
+                        icon: const Icon(Icons.settings),
+                        label: const Text(
+                          'Configurar Notificación',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: customColor[600],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 25),
           ],
         ),
       ),

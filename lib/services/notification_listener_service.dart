@@ -235,6 +235,7 @@ class NotificationListenerService {
         packageName: notification['packageName'] ?? '',
         appName: notification['appName'] ?? 'Desconocida',
         notificationId: notificationId,
+        extras: notification,
       );
       
       _lastNotificationShownTime = DateTime.now();

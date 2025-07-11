@@ -12,6 +12,7 @@ class CustomSound {
   final DateTime createdAt;
   final bool isDefault;
   final int duration; // Duración en milisegundos
+  final String fileName;
 
   CustomSound({
     required this.id,
@@ -20,7 +21,8 @@ class CustomSound {
     required this.createdAt,
     this.isDefault = false,
     this.duration = 0,
-  });
+    String? fileName,
+  }) : fileName = fileName ?? name;
 
   Map<String, dynamic> toJson() {
     return {
@@ -30,6 +32,7 @@ class CustomSound {
       'createdAt': createdAt.toIso8601String(),
       'isDefault': isDefault,
       'duration': duration,
+      'fileName': fileName,
     };
   }
 
@@ -41,6 +44,7 @@ class CustomSound {
       createdAt: DateTime.parse(json['createdAt']),
       isDefault: json['isDefault'] ?? false,
       duration: json['duration'] ?? 0,
+      fileName: json['fileName'],
     );
   }
 }
@@ -61,6 +65,7 @@ class CustomSoundService {
     createdAt: DateTime.now(),
     isDefault: true,
     duration: 1000,
+    fileName: 'Sonido del Sistema',
   );
 
   // Obtener todos los sonidos guardados
@@ -378,6 +383,55 @@ class CustomSoundService {
       return validExtensions.contains(extension);
     } catch (e) {
       return false;
+    }
+  }
+
+  // Agregar un nuevo sonido desde un archivo
+  static Future<bool> addSound(String filePath, String displayName) async {
+    try {
+      // Validar el archivo
+      if (!isValidAudioFile(filePath)) {
+        print('❌ Archivo de audio inválido: $filePath');
+        return false;
+      }
+
+      // Obtener información del archivo
+      final fileInfo = await getAudioFileInfo(filePath);
+      if (fileInfo == null) {
+        print('❌ No se pudo obtener información del archivo');
+        return false;
+      }
+
+      // Crear el objeto CustomSound
+      final sound = CustomSound(
+        id: generateSoundId(),
+        name: displayName,
+        filePath: filePath,
+        createdAt: DateTime.now(),
+        isDefault: false,
+        duration: 0, // Se podría calcular la duración real si es necesario
+        fileName: fileInfo['name'],
+      );
+
+      // Guardar el sonido
+      return await saveSound(sound);
+    } catch (e) {
+      print('❌ Error al agregar sonido: $e');
+      return false;
+    }
+  }
+
+  // Obtener un sonido por su ID
+  static Future<CustomSound?> getSoundById(String soundId) async {
+    try {
+      final sounds = await getAllSounds();
+      return sounds.firstWhere(
+        (sound) => sound.id == soundId,
+        orElse: () => defaultSound,
+      );
+    } catch (e) {
+      print('Error al obtener sonido por ID: $e');
+      return null;
     }
   }
 }

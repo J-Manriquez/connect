@@ -1,0 +1,136 @@
+# ESTRUCTURA DE ALMACENAMIENTO DE DATOS EN FIREBASE
+# Aplicación Connect - Sincronización de Notificaciones
+
+## ESTRUCTURA PRINCIPAL DE FIRESTORE
+
+### Proyecto Firebase: conectados-55fe3
+
+```
+Firestore Database
+│
+└── dispositivos (Collection)
+    │
+    ├── {deviceId} (Document - formato: ID numérico de 6 dígitos, ej: 123456)
+    │   ├── id: String (ID del dispositivo)
+    │   ├── status-servicio: Boolean (estado del servicio de notificaciones)
+    │   ├── status-vinculacion: Boolean (si está vinculado con otro dispositivo)
+    │   ├── status-guardado: Boolean (si está guardando notificaciones en Firebase)
+    │   ├── buscar-emisor: Boolean (si está buscando un dispositivo emisor)
+    │   ├── buscar-receptor: Boolean (si está buscando un dispositivo receptor)
+    │   ├── id-vinculado: String (ID del dispositivo vinculado)
+    │   ├── ultima-actualizacion: Array[
+    │   │   ├── fecha: Timestamp
+    │   │   └── tipo-actualizacion: String (valores: 'inicialización', 'cambio-estado-servicio', 
+    │   │                                          'cambio-estado-vinculacion', 'cambio-estado-guardado',
+    │   │                                          'actualizacion-lista-apps')
+    │   │   ]
+    │   ├── notifSettings: subcolección
+    │   │       ├── id (documento)
+    │   │       │   ├── notificationData: Map de informacion de la notificacion a la que aplicar laconfiguracion
+    │   │       │   ├── additionalData: Map de informacion de la configuracion
+    │   │       │   ├── vibrationEnabled: Boolean (si está habilitada la vibración)
+    │   │       │   ├── bloqueado: Boolean (si está bloqueada la notificación)
+    │   │       │   └── soundEnabled: Boolean (si está habilitado el sonido)
+    │   │       └──...
+    │   │       
+    │   ├── lista-apps: Array[
+    │   │   ├── nombre: String (nombre de la aplicación)
+    │   │   ├── package: String (nombre del paquete de la app)
+    │   │   └── activa: Boolean (si está activa para capturar notificaciones)
+    │   │   ]
+    │   │
+    │   └── notificaciones (SubCollection)
+    │       │
+    │       └── {dateId} (Document - formato: YYYY-MM-DD, ej: 2024-01-15)
+    │           ├── fecha: Timestamp (fecha del día)
+    │           └── notificaciones: Map{
+    │               └── {notificationId}: Map{ (ID único basado en millisecondsSinceEpoch)
+    │                   ├── id: String (ID único de la notificación)
+    │                   ├── title: String (título de la notificación)
+    │                   ├── text: String (texto de la notificación)
+    │                   ├── packageName: String (paquete de la app que envió la notificación)
+    │                   ├── appName: String (nombre de la app)
+    │                   ├── timestamp: Timestamp (fecha y hora de la notificación)
+    │                   ├── status-visualizacion: Boolean (si fue visualizada por el receptor)
+    │                   └── extras: Map{ (datos adicionales de la notificación)
+    │                       └── [campos dinámicos según la notificación]
+    │                   }
+    │               }
+    │
+    └── {deviceId2} (Document - otro dispositivo)
+        └── [misma estructura que arriba]
+```
+
+## FLUJO DE DATOS
+
+### 1. INICIALIZACIÓN DE DISPOSITIVO
+- Se genera un ID numérico de 6 dígitos aleatorio
+- Se crea el documento principal en la colección 'dispositivos'
+- Se inicializa con estructura básica y lista de apps vacía
+
+### 2. GUARDADO DE NOTIFICACIONES (MODO EMISOR)
+- Las notificaciones se agrupan por día en documentos separados
+- Cada notificación se almacena como un campo en el mapa 'notificaciones'
+- Se aplican filtros para evitar notificaciones duplicadas o no deseadas
+- Se genera un hash único para detectar duplicados
+
+### 3. VINCULACIÓN ENTRE DISPOSITIVOS
+- El dispositivo receptor busca el ID del emisor
+- Se actualiza el campo 'status-vinculacion' en ambos dispositivos
+- Se guarda el 'id-vinculado' para establecer la relación
+
+### 4. SINCRONIZACIÓN (MODO RECEPTOR)
+- El receptor escucha cambios en la subcolección 'notificaciones' del emisor
+- Se procesan solo las notificaciones no visualizadas
+- Se actualiza el 'status-visualizacion' cuando se muestra la notificación
+
+## CAMPOS DE ESTADO PRINCIPALES
+
+### Estados del Dispositivo:
+- **status-servicio**: Indica si el servicio de captura está activo
+- **status-vinculacion**: Indica si está vinculado con otro dispositivo
+- **status-guardado**: Indica si está guardando notificaciones en Firebase
+- **buscar-emisor**: Indica si está en modo búsqueda de emisor
+- **buscar-receptor**: Indica si está en modo búsqueda de receptor
+
+### Estados de Notificación:
+- **status-visualizacion**: Indica si la notificación fue vista por el receptor
+
+## FILTROS APLICADOS
+
+Las notificaciones se filtran automáticamente si contienen:
+- Contenido de historias/stories de redes sociales
+- Notificaciones de llamadas y videollamadas
+- Mensajes con contadores (ej: "5 mensajes nuevos")
+- Contenido genérico o no disponible
+- Notificaciones duplicadas (basado en hash de contenido)
+
+## OPERACIONES PRINCIPALES
+
+### Escritura:
+- `initializeFirebaseData()`: Crea estructura inicial
+- `saveNotification()`: Guarda nueva notificación
+- `updateServiceStatus()`: Actualiza estado del servicio
+- `updateLinkStatus()`: Actualiza estado de vinculación
+- `updateSaveStatus()`: Actualiza estado de guardado
+- `updateAppList()`: Actualiza lista de aplicaciones
+
+### Lectura:
+- `getStoredNotifications()`: Obtiene todas las notificaciones
+- `listenForNotifications()`: Escucha cambios en tiempo real
+- `getLinkStatus()`: Obtiene estado de vinculación
+- `getSaveStatus()`: Obtiene estado de guardado
+
+### Actualización:
+- `updateNotificationVisualizationStatus()`: Marca notificación como vista
+- `deleteNotification()`: Elimina notificación específica
+
+## NOTAS TÉCNICAS
+
+- Los IDs de dispositivo son numéricos de 6 dígitos (100000-999999)
+- Los IDs de notificación se basan en millisecondsSinceEpoch
+- Las fechas se almacenan como Timestamp de Firebase
+- La estructura permite múltiples dispositivos independientes
+- Cada dispositivo puede funcionar como emisor, receptor o ambos
+- Las notificaciones se agrupan por día para optimizar consultas
+- Se implementa detección de duplicados mediante hash de contenido

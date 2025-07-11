@@ -407,6 +407,65 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
 
                 const SizedBox(height: 8),
 
+                // Card para Configuraciones de Notificaciones Personalizadas
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          child: const Text(
+                            'Configuraciones Personalizadas',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: customColor[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.tune,
+                              color: customColor[600],
+                              size: 24,
+                            ),
+                          ),
+                          title: const Text(
+                            'Configuraciones de Notificaciones',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Gestionar configuraciones personalizadas\nde sonido, vibración y bloqueos',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios),
+                          onTap: () {
+                            Navigator.pushNamed(context, '/notification_settings_list');
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
                 // Configuración de Notificaciones
                 Card(
                   child: Padding(

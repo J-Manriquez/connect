@@ -592,6 +592,7 @@ class ReceptorService {
             notificationData['aplicacion'] ??
             'Aplicación desconocida',
         notificationId: notificationId,
+        extras: notificationData,
       );
       
       // Marcar como procesada y visualizada

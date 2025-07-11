@@ -251,6 +251,74 @@ class VibrationPatternService {
       await playPattern(pattern);
     }
   }
+
+  // Reproducir un patrón desde una lista de enteros
+  static Future<void> playPatternFromList(List<int> patternList) async {
+    try {
+      print('🔍 Iniciando reproducción de patrón desde lista: $patternList');
+      
+      // Verificar si el dispositivo soporta vibración usando el paquete vibration
+      final hasVibrator = await Vibration.hasVibrator() ?? false;
+      print('🔍 Dispositivo tiene vibrador: $hasVibrator');
+      if (!hasVibrator) {
+        print('❌ El dispositivo no soporta vibración');
+        return;
+      }
+      
+      // Verificar si la vibración está habilitada
+      final isEnabled = await isVibrationEnabled();
+      print('🔍 Vibración habilitada: $isEnabled');
+      if (!isEnabled) {
+        print('❌ La vibración está deshabilitada');
+        return;
+      }
+      
+      // Validar el patrón
+      if (!isValidPattern(patternList)) {
+        print('❌ Patrón inválido: $patternList');
+        return;
+      }
+      
+      print('🔊 Reproduciendo patrón desde lista');
+      print('📱 Patrón: $patternList');
+      
+      // Verificar si el dispositivo soporta patrones personalizados
+      final hasCustomVibrationsSupport = await Vibration.hasCustomVibrationsSupport() ?? false;
+      print('🔍 Soporte para patrones personalizados: $hasCustomVibrationsSupport');
+      
+      if (hasCustomVibrationsSupport) {
+        // Usar el paquete vibration para reproducir el patrón
+        await Vibration.vibrate(pattern: patternList);
+        print('✅ Patrón reproducido con paquete vibration');
+      } else {
+        // Fallback: usar vibración simple repetida
+        print('🔄 Dispositivo no soporta patrones, usando vibración simple repetida');
+        for (int i = 0; i < patternList.length; i++) {
+          if (i % 2 == 1) { // Solo vibrar en índices impares (las pausas están en pares)
+            await Vibration.vibrate(duration: patternList[i]);
+            if (i < patternList.length - 1) {
+              await Future.delayed(Duration(milliseconds: patternList[i + 1]));
+            }
+          }
+        }
+        print('✅ Patrón simulado con vibraciones simples');
+      }
+      
+      print('✅ Patrón de vibración reproducido exitosamente desde lista');
+    } catch (e) {
+      print('❌ Error al reproducir patrón desde lista: $e');
+      print('❌ Stack trace: ${StackTrace.current}');
+      
+      // Intentar vibración simple como fallback
+      try {
+        print('🔄 Intentando vibración simple como fallback...');
+        await Vibration.vibrate(duration: 500);
+        print('✅ Vibración simple de fallback exitosa');
+      } catch (fallbackError) {
+        print('❌ Error en vibración de fallback: $fallbackError');
+      }
+    }
+  }
   
   // Reproducir vibración simple
   static Future<void> playSimpleVibration({int duration = 500}) async {

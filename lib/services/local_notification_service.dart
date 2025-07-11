@@ -2,6 +2,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dismissed_notifications_service.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
+import 'package:connect/services/notification_settings_service.dart';
+import 'package:connect/services/custom_sound_service.dart';
 import 'package:vibration/vibration.dart';
 
 class LocalNotificationService {
@@ -75,6 +77,7 @@ class LocalNotificationService {
     required String packageName,
     required String appName,
     required String notificationId,
+    Map<String, dynamic>? extras,
   }) async {
     // Verificar si las notificaciones están habilitadas
     if (!await areNotificationsEnabled()) {
@@ -87,6 +90,23 @@ class LocalNotificationService {
       print('Notificación previamente eliminada, no se muestra: $notificationId');
       return;
     }
+
+    // Crear datos de la notificación para verificar configuraciones personalizadas
+    final notificationData = {
+      'title': title,
+      'text': body,
+      'packageName': packageName,
+      'appName': appName,
+      'extras': extras ?? {},
+    };
+
+    // Verificar si la notificación debe ser bloqueada
+    final notificationSettingsService = NotificationSettingsService();
+    final isBlocked = await notificationSettingsService.shouldBlockNotification(notificationData);
+    if (isBlocked) {
+      print('Notificación bloqueada por configuración personalizada: $notificationId');
+      return;
+    }
     
     // Obtener configuración
     final prefs = await SharedPreferences.getInstance();
@@ -95,11 +115,23 @@ class LocalNotificationService {
     final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
     final autoOpenEnabled = prefs.getBool(KEY_AUTO_OPEN_ENABLED) ?? false;
     
+    // ✅ VERIFICAR CONFIGURACIONES PERSONALIZADAS DE VIBRACIÓN Y SONIDO
+    final customVibrationConfig = await notificationSettingsService.getCustomVibrationConfig(notificationData);
+    final customSoundConfig = await notificationSettingsService.getCustomSoundConfig(notificationData);
+    
     // ✅ PREPARAR CONFIGURACIÓN DE VIBRACIÓN PARA EJECUTAR DESPUÉS
     final isVibrationEnabledInSettings = await VibrationPatternService.isVibrationEnabled();
-    final shouldVibrate = vibrationEnabled && isVibrationEnabledInSettings;
+    final hasCustomVibration = customVibrationConfig != null;
+    final shouldVibrate = (vibrationEnabled && isVibrationEnabledInSettings) || hasCustomVibration;
+    
+    // ✅ PREPARAR CONFIGURACIÓN DE SONIDO
+    final hasCustomSound = customSoundConfig != null;
+    final effectiveSoundEnabled = hasCustomSound ? false : soundEnabled; // Deshabilitar sonido nativo si hay sonido personalizado
+    
     print('🔍 Vibración habilitada en configuración: $isVibrationEnabledInSettings');
     print('🔍 Vibración habilitada en notificación: $vibrationEnabled');
+    print('🔍 Configuración personalizada de vibración: $hasCustomVibration');
+    print('🔍 Configuración personalizada de sonido: $hasCustomSound');
     print('🔍 Se ejecutará vibración después del auto-open: $shouldVibrate');
     
     // ✅ DEBUGGING: Verificar valores en SharedPreferences
@@ -131,7 +163,7 @@ class LocalNotificationService {
         'packageName': packageName,
         'appName': appName,
         'notificationId': notificationId,
-        'soundEnabled': soundEnabled,
+        'soundEnabled': effectiveSoundEnabled,
         'vibrationEnabled': false, // Deshabilitamos vibración nativa ya que la manejamos directamente
         'screenWakeEnabled': screenWakeEnabled,
         'autoOpenEnabled': effectiveAutoOpenEnabled, // ✅ Usar valor efectivo
@@ -139,16 +171,43 @@ class LocalNotificationService {
       
       print('Notificación enviada exitosamente a Android');
       
-      // ✅ SEGUNDO: Ejecutar vibración DESPUÉS del auto-open
+      // ✅ SEGUNDO: Ejecutar sonido personalizado si está configurado
+      if (hasCustomSound) {
+        try {
+          final soundId = customSoundConfig!['soundId'] as String?;
+          if (soundId != null) {
+            final customSound = await CustomSoundService.getSoundById(soundId);
+            if (customSound != null) {
+              print('🔊 Reproduciendo sonido personalizado: ${customSound.name}');
+              await CustomSoundService.playSound(customSound);
+            }
+          }
+        } catch (e) {
+          print('❌ Error al reproducir sonido personalizado: $e');
+        }
+      }
+      
+      // ✅ TERCERO: Ejecutar vibración DESPUÉS del auto-open
       if (shouldVibrate) {
         try {
-          final selectedPattern = await VibrationPatternService.getSelectedPattern();
-          if (selectedPattern != null) {
-            print('🔊 Ejecutando patrón de vibración personalizado después del auto-open: ${selectedPattern.name}');
-            await VibrationPatternService.playPattern(selectedPattern);
+          if (hasCustomVibration) {
+            // Usar patrón personalizado de la configuración
+            final pattern = customVibrationConfig!['pattern'] as List<dynamic>?;
+            if (pattern != null) {
+              final vibrationPattern = pattern.cast<int>();
+              print('🔊 Ejecutando patrón de vibración personalizado de configuración');
+              await VibrationPatternService.playPatternFromList(vibrationPattern);
+            }
           } else {
-            print('🔊 No hay patrón seleccionado, usando vibración simple después del auto-open');
-            await Vibration.vibrate(duration: 500);
+            // Usar patrón seleccionado globalmente
+            final selectedPattern = await VibrationPatternService.getSelectedPattern();
+            if (selectedPattern != null) {
+              print('🔊 Ejecutando patrón de vibración global después del auto-open: ${selectedPattern.name}');
+              await VibrationPatternService.playPattern(selectedPattern);
+            } else {
+              print('🔊 No hay patrón seleccionado, usando vibración simple después del auto-open');
+              await Vibration.vibrate(duration: 500);
+            }
           }
         } catch (e) {
           print('❌ Error al ejecutar vibración después del auto-open: $e');
@@ -159,7 +218,7 @@ class LocalNotificationService {
             print('❌ Error en vibración de fallback después del auto-open: $fallbackError');
           }
         }
-      } else if (!isVibrationEnabledInSettings) {
+      } else if (!isVibrationEnabledInSettings && !hasCustomVibration) {
         print('⚠️ Vibración deshabilitada en configuración, saltando vibración');
       } else {
         print('⚠️ Vibración deshabilitada para esta notificación, saltando vibración');
