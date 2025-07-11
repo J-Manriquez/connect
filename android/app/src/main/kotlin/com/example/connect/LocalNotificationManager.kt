@@ -96,7 +96,12 @@ class LocalNotificationManager(private val context: Context) {
                 Log.d("LocalNotificationManager", "✅ Canal simplificado creado para Android 8.0")
             } else {
                 // ANDROID 8.1+: Configuración ultra conservadora
-                val importance = NotificationManager.IMPORTANCE_MIN
+                Log.d("LocalNotificationManager", "🔧 Configurando canal para Android 8.1+")
+                
+                // Recrear canal con configuración sin sonido
+                notificationManager.deleteNotificationChannel(CHANNEL_ID)
+                
+                val importance = NotificationManager.IMPORTANCE_LOW
                 
                 val channel = NotificationChannel(
                     CHANNEL_ID,
@@ -114,7 +119,7 @@ class LocalNotificationManager(private val context: Context) {
                     setShowBadge(false)    // Sin badge para evitar cualquier activación
                     group = null // Sin grupo
                     
-                    Log.d("LocalNotificationManager", "Canal configurado ULTRA conservador - Importance: IMPORTANCE_MIN")
+                    Log.d("LocalNotificationManager", "Canal configurado ULTRA conservador - Importance: IMPORTANCE_LOW")
                 }
                 
                 notificationManager.createNotificationChannel(channel)
@@ -184,17 +189,8 @@ class LocalNotificationManager(private val context: Context) {
                 Log.w("LocalNotificationManager", "⚠️ No se pudo enviar comando de sonido personalizado: ${e.message}")
             }
             
-            // Fallback: usar el servicio de sonido nativo como respaldo
-            Log.d("LocalNotificationManager", "🔊 Ejecutando fallback con SoundNotificationService")
-            
-            // Mostrar diagnóstico de audio
-            val audioState = soundService.getAudioDiagnostics()
-            Log.d("LocalNotificationManager", audioState)
-            
-            // Reproducir sonido usando el servicio dedicado
-            soundService.playNotificationSound(forceSound = true)
-            
-            Log.d("LocalNotificationManager", "✅ Comando de sonido enviado al servicio especializado")
+            // Solo usar sonido personalizado, sin fallback del sistema
+            Log.d("LocalNotificationManager", "✅ Solo sonido personalizado configurado, sin fallback del sistema")
             
         } catch (e: Exception) {
             Log.e("LocalNotificationManager", "❌ Error al reproducir sonido", e)
@@ -334,22 +330,17 @@ class LocalNotificationManager(private val context: Context) {
                 
                 // ✅ CONFIGURACIÓN SIMPLIFICADA PARA ANDROID 8.0
                 // Sin configuración de sonido en la notificación - se maneja por separado
-                Log.d("LocalNotificationManager", "Android 8.0: Configuración simplificada aplicada")
+                notificationBuilder.setSound(null)
+                Log.d("LocalNotificationManager", "Android 8.0: Configuración simplificada aplicada, sonido del sistema deshabilitado")
                 
                 // ✅ REPRODUCIR SONIDO POR SEPARADO SI ESTÁ HABILITADO
                 if (currentSoundEnabled) {
                     Log.d("LocalNotificationManager", "🔊 Android 8.0: Iniciando reproducción de sonido directa")
                     
-                    // Ejecutar inmediatamente y también con delay como respaldo
+                    // Ejecutar solo una vez para evitar sonidos duplicados
                     playNotificationSoundDirectly()
                     
-                    // Respaldo con delay para asegurar que se ejecute
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        Log.d("LocalNotificationManager", "🔊 Android 8.0: Ejecutando sonido de respaldo con delay")
-                        playNotificationSoundDirectly()
-                    }, 500)
-                    
-                    Log.d("LocalNotificationManager", "✅ Android 8.0: Comandos de sonido enviados (inmediato + respaldo)")
+                    Log.d("LocalNotificationManager", "✅ Android 8.0: Comando de sonido enviado")
                 } else {
                     Log.d("LocalNotificationManager", "❌ Android 8.0: Sonido deshabilitado por configuración")
                 }
@@ -396,16 +387,15 @@ class LocalNotificationManager(private val context: Context) {
                 if (currentSoundEnabled) {
                     Log.d("LocalNotificationManager", "🔊 Android 8.1+: Reproduciendo sonido directamente (independiente de screenWake)")
                     
-                    // Reproducir sonido por separado como en Android 8.0
+                    // Reproducir SOLO sonido personalizado, sin sonido del sistema
                     playNotificationSoundDirectly()
                     
-                    // También configurar sonido en la notificación si screenWake está habilitado
-                    if (screenWakeEnabled) {
-                        notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND)
-                        Log.d("LocalNotificationManager", "Sonido también configurado en notificación (screenWake habilitado)")
-                    }
+                    // NO configurar sonido del sistema en la notificación para evitar doble sonido
+                    notificationBuilder.setSound(null)
+                    Log.d("LocalNotificationManager", "✅ Sonido del sistema deshabilitado, solo sonido personalizado")
                 } else {
                     Log.d("LocalNotificationManager", "❌ Android 8.1+: Sonido deshabilitado por configuración")
+                    notificationBuilder.setSound(null)
                 }
                 
                 // Configurar vibración solo si screenWakeEnabled está activo
