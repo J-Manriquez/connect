@@ -119,6 +119,116 @@ class _NotificationSettingsListScreenState
     return info.join(' • ');
   }
 
+  void _showConfigurationModal(NotificationSettings setting) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                setting.bloqueado ? Icons.block : Icons.tune,
+                color: setting.bloqueado ? Colors.red : customColor[600],
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Detalles de Configuración',
+                  style: TextStyle(fontSize: 18),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildInfoRow('Estado', setting.bloqueado ? 'Bloqueado' : 'Configurado'),
+                _buildInfoRow('Aplicación', setting.notificationData['appName'] ?? setting.notificationData['packageName'] ?? 'Desconocida'),
+                if (setting.notificationData['title'] != null && setting.notificationData['title'].isNotEmpty)
+                  _buildInfoRow('Título', setting.notificationData['title']),
+                if (setting.notificationData['text'] != null && setting.notificationData['text'].isNotEmpty)
+                  _buildInfoRow('Contenido', setting.notificationData['text']),
+                _buildInfoRow('Vibración', setting.vibrationEnabled ? 'Habilitada' : 'Deshabilitada'),
+                _buildInfoRow('Sonido', setting.soundEnabled ? 'Habilitado' : 'Deshabilitado'),
+                _buildInfoRow('Creado', _formatDate(setting.createdAt)),
+                _buildInfoRow('Actualizado', _formatDate(setting.updatedAt)),
+                if (setting.bloqueado)
+                  Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.red[700], size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Las notificaciones que coincidan con esta configuración serán bloqueadas.',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cerrar'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _deleteSettings(setting);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Eliminar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              '$label:',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -176,6 +286,7 @@ class _NotificationSettingsListScreenState
                           horizontal: 0,
                         ),
                         child: ListTile(
+                          onTap: () => _showConfigurationModal(setting),
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(

@@ -130,8 +130,11 @@ class DeviceFinderManager(private val context: Context) {
     private fun showFullScreenNotification() {
         try {
             val intent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
+                       Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                       Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("navigate_to", "/buscar_dispositivo")
+                action = "DEVICE_FINDER_ACTION"
             }
             
             val pendingIntent = PendingIntent.getActivity(
@@ -143,17 +146,19 @@ class DeviceFinderManager(private val context: Context) {
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("¡Dispositivo encontrado!")
                 .setContentText("Toca para abrir la aplicación")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setFullScreenIntent(pendingIntent, true)
                 .setAutoCancel(true)
-                .setOngoing(true)
+                .setOngoing(false)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .build()
             
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(NOTIFICATION_ID, notification)
             
-            Log.d("DeviceFinderManager", "Notificación de pantalla completa mostrada")
+            Log.d("DeviceFinderManager", "Notificación de pantalla completa mostrada con navegación automática")
         } catch (e: Exception) {
             Log.e("DeviceFinderManager", "Error al mostrar notificación", e)
         }
@@ -189,20 +194,25 @@ class DeviceFinderManager(private val context: Context) {
     
     private fun turnOnScreen() {
         try {
-            if (context is Activity) {
-                context.runOnUiThread {
+            // Usar MainActivity.instance para acceder a la actividad
+            MainActivity.instance?.let { activity ->
+                activity.runOnUiThread {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                        context.setShowWhenLocked(true)
-                        context.setTurnScreenOn(true)
+                        activity.setShowWhenLocked(true)
+                        activity.setTurnScreenOn(true)
+                        Log.d("DeviceFinderManager", "Usando métodos nuevos para encender pantalla (API 27+)")
                     } else {
-                        context.window.addFlags(
+                        activity.window.addFlags(
                             WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+                            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                         )
+                        Log.d("DeviceFinderManager", "Usando flags tradicionales para encender pantalla")
                     }
                 }
-            }
+            } ?: Log.w("DeviceFinderManager", "MainActivity.instance es null, no se puede encender pantalla")
+            
             Log.d("DeviceFinderManager", "Pantalla encendida")
         } catch (e: Exception) {
             Log.e("DeviceFinderManager", "Error al encender pantalla", e)
@@ -248,20 +258,33 @@ class DeviceFinderManager(private val context: Context) {
     
     private fun startVibration() {
         try {
+            Log.d("DeviceFinderManager", "Intentando iniciar vibración...")
+            
             vibrator?.let { vib ->
+                // Verificar si el dispositivo tiene vibrador
+                if (!vib.hasVibrator()) {
+                    Log.w("DeviceFinderManager", "El dispositivo no tiene vibrador")
+                    return
+                }
+                
+                Log.d("DeviceFinderManager", "Dispositivo tiene vibrador, iniciando patrón...")
+                
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     // Patrón más fuerte: vibrar 1s, pausa 0.3s, repetir
                     val pattern = longArrayOf(0, 1000, 300)
                     val amplitudes = intArrayOf(0, 255, 0) // Amplitud máxima
                     val effect = VibrationEffect.createWaveform(pattern, amplitudes, 0)
                     vib.vibrate(effect)
+                    Log.d("DeviceFinderManager", "Vibración iniciada con VibrationEffect (API 26+)")
                 } else {
                     @Suppress("DEPRECATION")
                     val pattern = longArrayOf(0, 1000, 300)
                     vib.vibrate(pattern, 0)
+                    Log.d("DeviceFinderManager", "Vibración iniciada con método legacy")
                 }
-            }
-            Log.d("DeviceFinderManager", "Vibración iniciada")
+            } ?: Log.w("DeviceFinderManager", "Vibrator es null")
+            
+            Log.d("DeviceFinderManager", "Vibración iniciada exitosamente")
         } catch (e: Exception) {
             Log.e("DeviceFinderManager", "Error al iniciar vibración", e)
         }
@@ -269,7 +292,13 @@ class DeviceFinderManager(private val context: Context) {
     
     private fun stopVibration() {
         try {
-            vibrator?.cancel()
+            Log.d("DeviceFinderManager", "Intentando detener vibración...")
+            
+            vibrator?.let { vib ->
+                vib.cancel()
+                Log.d("DeviceFinderManager", "Vibración cancelada exitosamente")
+            } ?: Log.w("DeviceFinderManager", "Vibrator es null al intentar detener")
+            
             Log.d("DeviceFinderManager", "Vibración detenida")
         } catch (e: Exception) {
             Log.e("DeviceFinderManager", "Error al detener vibración", e)
@@ -301,4 +330,35 @@ class DeviceFinderManager(private val context: Context) {
     }
     
     fun isSearching(): Boolean = isSearching
+    
+    // ✅ FUNCIÓN DE PRUEBA PARA VERIFICAR VIBRACIÓN
+    fun testVibration() {
+        try {
+            Log.d("DeviceFinderManager", "=== INICIANDO TEST DE VIBRACIÓN ===")
+            
+            vibrator?.let { vib ->
+                Log.d("DeviceFinderManager", "Vibrator disponible: ${vib.hasVibrator()}")
+                
+                if (vib.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        // Test con VibrationEffect
+                        val effect = VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE)
+                        vib.vibrate(effect)
+                        Log.d("DeviceFinderManager", "Test de vibración ejecutado con VibrationEffect")
+                    } else {
+                        // Test con método legacy
+                        @Suppress("DEPRECATION")
+                        vib.vibrate(1000)
+                        Log.d("DeviceFinderManager", "Test de vibración ejecutado con método legacy")
+                    }
+                } else {
+                    Log.w("DeviceFinderManager", "El dispositivo no tiene vibrador")
+                }
+            } ?: Log.w("DeviceFinderManager", "Vibrator es null")
+            
+            Log.d("DeviceFinderManager", "=== TEST DE VIBRACIÓN COMPLETADO ===")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error en test de vibración", e)
+        }
+    }
 }

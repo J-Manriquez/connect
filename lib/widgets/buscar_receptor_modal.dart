@@ -142,12 +142,16 @@ class _BuscarReceptorModalState extends State<BuscarReceptorModal> {
           ),
         );
         
-        // Cerrar el modal después de un breve delay
-        // Future.delayed(const Duration(milliseconds: 500), () {
-        //   if (mounted) {
-        //     Navigator.of(context).pop();
-        //   }
-        // });
+        // ✅ Si se desactivó la búsqueda, resetear el campo y cerrar el modal
+        // El listener de DeviceSearchService se encargará de detener el sonido/vibración automáticamente
+        if (!nuevoEstado) {
+          await DeviceSearchService.instance.resetBuscarReceptor();
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          });
+        }
       }
     } catch (e) {
       if (mounted) {

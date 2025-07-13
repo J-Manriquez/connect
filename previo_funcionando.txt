@@ -1,196 +1,300 @@
 package com.example.connect
 
+import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
-import androidx.core.app.NotificationCompat
+import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.view.WindowManager
+import android.app.Activity
 import android.util.Log
+import androidx.core.app.NotificationCompat
+import java.util.Timer
+import java.util.TimerTask
 
-class LocalNotificationManager(private val context: Context) {
+class DeviceFinderManager(private val context: Context) {
+    private var mediaPlayer: MediaPlayer? = null
+    private var vibrator: Vibrator? = null
+    private var isSearching = false
+    private var searchTimer: Timer? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     
     companion object {
-        private const val CHANNEL_ID = "receptor_notifications_channel"
-        private const val CHANNEL_NAME = "Notificaciones del Receptor"
-        private const val CHANNEL_DESCRIPTION = "Canal para mostrar notificaciones recibidas en el receptor"
-        const val NOTIFICATION_ACTION_OPEN = "OPEN_NOTIFICATION"
-        const val NOTIFICATION_ACTION_AUTO_OPEN = "AUTO_OPEN_NOTIFICATION" // ✅ Nueva acción
-        const val EXTRA_NOTIFICATION_DATA = "notification_data"
-        
-        // Usar un conjunto para rastrear notificaciones canceladas por el usuario
-        private val cancelledNotifications = mutableSetOf<String>()
+        private const val NOTIFICATION_CHANNEL_ID = "device_finder_channel"
+        private const val NOTIFICATION_ID = 9999
     }
     
-    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    
     init {
+        // Inicializar vibrador
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        
+        // Crear canal de notificación
         createNotificationChannel()
     }
     
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
+                NOTIFICATION_CHANNEL_ID,
+                "Búsqueda de Dispositivo",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = CHANNEL_DESCRIPTION
+                description = "Notificaciones para la búsqueda de dispositivos"
                 enableVibration(true)
-                enableLights(true)
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-                setBypassDnd(true)
+                setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM), null)
             }
+            
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
-            Log.d("LocalNotificationManager", "Canal de notificaciones creado")
         }
     }
     
-    fun showNotification(
-        title: String,
-        body: String,
-        packageName: String,
-        appName: String,
-        notificationId: String,
-        soundEnabled: Boolean,
-        vibrationEnabled: Boolean,
-        autoOpenEnabled: Boolean
-    ) {
+    fun startDeviceSearch() {
+        if (isSearching) return
+        
         try {
-            // Verificar si esta notificación fue cancelada por el usuario
-            if (cancelledNotifications.contains(notificationId)) {
-                Log.d("LocalNotificationManager", "Notificación previamente cancelada, no se muestra: $notificationId")
-                return
-            }
+            isSearching = true
             
-            // ✅ Si auto-apertura está habilitada, abrir la app inmediatamente
-            if (autoOpenEnabled) {
-                openAppAutomatically(title, body, packageName, appName, notificationId)
-            }
+            // Adquirir wake lock
+            acquireWakeLock()
             
-            // Intent para abrir la aplicación (cuando se toca la notificación)
-            val launchIntent = Intent(context, MainActivity::class.java).apply {
-                action = NOTIFICATION_ACTION_OPEN
-                putExtra(EXTRA_NOTIFICATION_DATA, notificationId)
-                putExtra("title", title)
-                putExtra("body", body)
-                putExtra("packageName", packageName)
-                putExtra("appName", appName)
-                putExtra("autoOpen", autoOpenEnabled)
+            // Mostrar notificación de pantalla completa
+            showFullScreenNotification()
+            
+            // Encender pantalla
+            turnOnScreen()
+            
+            // Iniciar sonido
+            startSound()
+            
+            // Iniciar vibración
+            startVibration()
+            
+            Log.d("DeviceFinderManager", "Búsqueda de dispositivo iniciada")
+            
+            // Auto-detener después de 30 segundos
+            searchTimer = Timer()
+            searchTimer?.schedule(object : TimerTask() {
+                override fun run() {
+                    stopDeviceSearch()
+                }
+            }, 30000) // 30 segundos
+            
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al iniciar búsqueda", e)
+            isSearching = false
+        }
+    }
+    
+    private fun acquireWakeLock() {
+        try {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = powerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or 
+                PowerManager.ACQUIRE_CAUSES_WAKEUP or 
+                PowerManager.ON_AFTER_RELEASE,
+                "DeviceFinder:WakeLock"
+            )
+            wakeLock?.acquire(35000) // 35 segundos
+            Log.d("DeviceFinderManager", "Wake lock adquirido")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al adquirir wake lock", e)
+        }
+    }
+    
+    private fun showFullScreenNotification() {
+        try {
+            val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("navigate_to", "/buscar_dispositivo")
             }
             
-            // Usar el hash del notificationId para generar un ID único
-            val uniqueNotificationId = notificationId.hashCode()
-            
-            val pendingLaunchIntent = PendingIntent.getActivity(
-                context,
-                uniqueNotificationId,
-                launchIntent,
+            val pendingIntent = PendingIntent.getActivity(
+                context, 0, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             
-            // Construir la notificación
-            val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
+            val notification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(title)
-                .setContentText(body)
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-                .setContentIntent(pendingLaunchIntent)
+                .setContentTitle("¡Dispositivo encontrado!")
+                .setContentText("Toca para abrir la aplicación")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setFullScreenIntent(pendingIntent, true)
                 .setAutoCancel(true)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setDeleteIntent(createDeleteIntent(notificationId))
+                .setOngoing(true)
+                .build()
             
-            // Configurar sonido y vibración según las preferencias
-            if (soundEnabled) {
-                notificationBuilder.setDefaults(NotificationCompat.DEFAULT_SOUND)
-            }
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(NOTIFICATION_ID, notification)
             
-            if (vibrationEnabled) {
-                notificationBuilder.setVibrate(longArrayOf(0, 500, 500, 500))
-            }
-            
-            // Mostrar la notificación usando el ID único
-            notificationManager.notify(uniqueNotificationId, notificationBuilder.build())
-            Log.d("LocalNotificationManager", "Notificación mostrada: $title (ID: $uniqueNotificationId)")
-            
+            Log.d("DeviceFinderManager", "Notificación de pantalla completa mostrada")
         } catch (e: Exception) {
-            Log.e("LocalNotificationManager", "Error al mostrar notificación", e)
+            Log.e("DeviceFinderManager", "Error al mostrar notificación", e)
         }
     }
     
-    // ✅ Nuevo método para abrir la app automáticamente
-    private fun openAppAutomatically(
-        title: String,
-        body: String,
-        packageName: String,
-        appName: String,
-        notificationId: String
-    ) {
+    fun stopDeviceSearch() {
+        if (!isSearching) return
+        
         try {
-            Log.d("LocalNotificationManager", "Abriendo app automáticamente para notificación: $notificationId")
+            // Detener sonido
+            stopSound()
             
-            // Intent para abrir la aplicación con auto-apertura
-            val autoOpenIntent = Intent(context, MainActivity::class.java).apply {
-                action = NOTIFICATION_ACTION_AUTO_OPEN
-                putExtra(EXTRA_NOTIFICATION_DATA, notificationId)
-                putExtra("title", title)
-                putExtra("body", body)
-                putExtra("packageName", packageName)
-                putExtra("appName", appName)
-                putExtra("autoOpen", true)
-                // ✅ Flags importantes para abrir desde cualquier estado
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                       Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                       Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                       Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT
-            }
+            // Detener vibración
+            stopVibration()
             
-            // Iniciar la actividad inmediatamente
-            context.startActivity(autoOpenIntent)
+            // Liberar wake lock
+            releaseWakeLock()
             
-            Log.d("LocalNotificationManager", "App abierta automáticamente")
-
+            // Cancelar notificación
+            cancelNotification()
+            
+            // Cancelar timer
+            searchTimer?.cancel()
+            searchTimer = null
+            
+            isSearching = false
+            Log.d("DeviceFinderManager", "Búsqueda de dispositivo detenida")
             
         } catch (e: Exception) {
-            Log.e("LocalNotificationManager", "Error al abrir app automáticamente", e)
+            Log.e("DeviceFinderManager", "Error al detener búsqueda", e)
         }
     }
     
-    private fun createDeleteIntent(notificationId: String): PendingIntent {
-        val deleteIntent = Intent(context, NotificationDeleteReceiver::class.java).apply {
-            putExtra("notification_id", notificationId)
+    private fun turnOnScreen() {
+        try {
+            if (context is Activity) {
+                context.runOnUiThread {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                        context.setShowWhenLocked(true)
+                        context.setTurnScreenOn(true)
+                    } else {
+                        context.window.addFlags(
+                            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+                        )
+                    }
+                }
+            }
+            Log.d("DeviceFinderManager", "Pantalla encendida")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al encender pantalla", e)
         }
-        return PendingIntent.getBroadcast(
-            context,
-            notificationId.hashCode(),
-            deleteIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
     }
     
-    fun cancelNotification(notificationId: String) {
-        val uniqueNotificationId = notificationId.hashCode()
-        notificationManager.cancel(uniqueNotificationId)
-        // Marcar como cancelada por el usuario
-        cancelledNotifications.add(notificationId)
-        Log.d("LocalNotificationManager", "Notificación cancelada: $notificationId")
+    private fun startSound() {
+        try {
+            // Usar el tono de alarma predeterminado o el de llamada
+            val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(context, alarmUri)
+                setAudioStreamType(AudioManager.STREAM_ALARM)
+                isLooping = true
+                setVolume(1.0f, 1.0f) // Volumen máximo
+                prepare()
+                start()
+            }
+            
+            Log.d("DeviceFinderManager", "Sonido iniciado")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al iniciar sonido", e)
+        }
     }
     
-    fun cancelAllNotifications() {
-        notificationManager.cancelAll()
-        Log.d("LocalNotificationManager", "Todas las notificaciones canceladas")
+    private fun stopSound() {
+        try {
+            mediaPlayer?.apply {
+                if (isPlaying) {
+                    stop()
+                }
+                release()
+            }
+            mediaPlayer = null
+            Log.d("DeviceFinderManager", "Sonido detenido")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al detener sonido", e)
+        }
     }
     
-    // Método para limpiar notificaciones canceladas (llamar periódicamente)
-    fun clearCancelledNotifications() {
-        cancelledNotifications.clear()
+    private fun startVibration() {
+        try {
+            vibrator?.let { vib ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    // Patrón más fuerte: vibrar 1s, pausa 0.3s, repetir
+                    val pattern = longArrayOf(0, 1000, 300)
+                    val amplitudes = intArrayOf(0, 255, 0) // Amplitud máxima
+                    val effect = VibrationEffect.createWaveform(pattern, amplitudes, 0)
+                    vib.vibrate(effect)
+                } else {
+                    @Suppress("DEPRECATION")
+                    val pattern = longArrayOf(0, 1000, 300)
+                    vib.vibrate(pattern, 0)
+                }
+            }
+            Log.d("DeviceFinderManager", "Vibración iniciada")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al iniciar vibración", e)
+        }
     }
+    
+    private fun stopVibration() {
+        try {
+            vibrator?.cancel()
+            Log.d("DeviceFinderManager", "Vibración detenida")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al detener vibración", e)
+        }
+    }
+    
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                }
+            }
+            wakeLock = null
+            Log.d("DeviceFinderManager", "Wake lock liberado")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al liberar wake lock", e)
+        }
+    }
+    
+    private fun cancelNotification() {
+        try {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(NOTIFICATION_ID)
+            Log.d("DeviceFinderManager", "Notificación cancelada")
+        } catch (e: Exception) {
+            Log.e("DeviceFinderManager", "Error al cancelar notificación", e)
+        }
+    }
+    
+    fun isSearching(): Boolean = isSearching
 }
 
-
+----------------------------------------
 
 package com.example.connect
 
@@ -204,6 +308,9 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.view.WindowManager // ✅ Agregar import
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 
 
 class MainActivity: FlutterActivity() {
@@ -211,12 +318,15 @@ class MainActivity: FlutterActivity() {
     private val EMISOR_CHANNEL = "com.example.connect/notifications" // Para NotificationListener (EMISOR)
     private val APP_LIST_CHANNEL = "com.example.connect/app_list"
     private val RECEPTOR_CHANNEL = "com.example.connect/local_notifications" // Para LocalNotificationManager (RECEPTOR)
+    private val DEVICE_FINDER_CHANNEL = "com.example.connect/device_finder" // ✅ NUEVO CANAL
     
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
+    private lateinit var deviceFinderChannel: MethodChannel // ✅ NUEVO CANAL
     private lateinit var appListService: AppListService
     private lateinit var localNotificationManager: LocalNotificationManager
+    private lateinit var deviceFinderManager: DeviceFinderManager // ✅ NUEVO SERVICIO
 
     companion object {
         var instance: MainActivity? = null
@@ -230,6 +340,7 @@ class MainActivity: FlutterActivity() {
         // Inicializar servicios
         appListService = AppListService(this)
         localNotificationManager = LocalNotificationManager(this)
+        deviceFinderManager = DeviceFinderManager(this) // ✅ NUEVO SERVICIO
 
         // Canal para EMISOR (NotificationListener)
         emisorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EMISOR_CHANNEL)
@@ -241,7 +352,10 @@ class MainActivity: FlutterActivity() {
         
         // CANAL PARA RECEPTOR (LocalNotificationManager)
         receptorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, RECEPTOR_CHANNEL)
-
+        
+        // ✅ CANAL PARA BÚSQUEDA DE DISPOSITIVOS
+        deviceFinderChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_FINDER_CHANNEL)
+        
         // Iniciar automáticamente el servicio si el permiso está concedido
         if (isNotificationServiceEnabled()) {
             val serviceIntent = Intent(this, NotificationListener::class.java)
@@ -295,7 +409,7 @@ class MainActivity: FlutterActivity() {
             }
         }
         
-        // Configurar el manejador para el canal de lista de aplicaciones
+        // En la sección donde se configura el manejador para el canal de lista de aplicaciones
         appListChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getInstalledApps" -> {
@@ -316,6 +430,27 @@ class MainActivity: FlutterActivity() {
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al obtener aplicaciones desde el sistema", e)
                         result.error("ERROR", "Error al obtener aplicaciones: ${e.message}", null)
+                    }
+                }
+                "searchAppByPackage" -> {
+                    try {
+                        val packageName = call.argument<String>("packageName")
+                        
+                        if (packageName != null) {
+                            val app = appListService.searchAppByPackage(packageName)
+                            if (app != null) {
+                                result.success(app)
+                                Log.d("MainActivity", "Aplicación encontrada: $packageName")
+                            } else {
+                                result.success(null) // Devolver null si no se encuentra
+                                Log.d("MainActivity", "Aplicación no encontrada: $packageName")
+                            }
+                        } else {
+                            result.error("INVALID_ARGS", "Nombre de paquete no proporcionado", null)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al buscar aplicación", e)
+                        result.error("ERROR", "Error al buscar aplicación: ${e.message}", null)
                     }
                 }
                 "getLastUpdateDate" -> {
@@ -353,6 +488,15 @@ class MainActivity: FlutterActivity() {
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al obtener paquetes habilitados", e)
                         result.error("ERROR", "Error al obtener paquetes habilitados: ${e.message}", null)
+                    }
+                }
+                "getAllowedSystemPackages" -> {
+                    try {
+                        result.success(AppListService.ALLOWED_SYSTEM_PACKAGES)
+                        Log.d("MainActivity", "Enviados ${AppListService.ALLOWED_SYSTEM_PACKAGES.size} paquetes del sistema permitidos")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al obtener paquetes del sistema permitidos", e)
+                        result.error("ERROR", "Error al obtener paquetes permitidos: ${e.message}", null)
                     }
                 }
                 else -> {
@@ -397,10 +541,84 @@ class MainActivity: FlutterActivity() {
                         result.error("ERROR", "Error al cancelar notificación: ${e.message}", null)
                     }
                 }
+                "syncCancelledNotifications" -> {
+                    try {
+                        val cancelledIds = call.argument<List<String>>("cancelledIds") ?: emptyList()
+                        
+                        // Limpiar la lista actual y agregar las IDs desde Flutter
+                        LocalNotificationManager.clearCancelledNotifications()
+                        cancelledIds.forEach { id ->
+                            LocalNotificationManager.addToCancelledNotifications(id)
+                        }
+                        
+                        result.success(true)
+                        Log.d("MainActivity", "Sincronizadas ${cancelledIds.size} notificaciones canceladas desde Flutter")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al sincronizar notificaciones canceladas", e)
+                        result.error("ERROR", "Error al sincronizar: ${e.message}", null)
+                    }
+                }
                 else -> {
                     result.notImplemented()
                 }
             }
+        }
+        
+        // ✅ CONFIGURAR MANEJADOR PARA CANAL DE BÚSQUEDA DE DISPOSITIVOS
+        deviceFinderChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startDeviceSearch" -> {
+                    try {
+                        deviceFinderManager.startDeviceSearch()
+                        result.success(true)
+                        Log.d("MainActivity", "Búsqueda de dispositivo iniciada")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al iniciar búsqueda de dispositivo", e)
+                        result.error("ERROR", "Error al iniciar búsqueda: ${e.message}", null)
+                    }
+                }
+                "stopDeviceSearch" -> {
+                    try {
+                        deviceFinderManager.stopDeviceSearch()
+                        result.success(true)
+                        Log.d("MainActivity", "Búsqueda de dispositivo detenida")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al detener búsqueda de dispositivo", e)
+                        result.error("ERROR", "Error al detener búsqueda: ${e.message}", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        // Verificar si se debe navegar a una pantalla específica
+        handleNavigationIntent(intent)
+    }
+
+
+    // ✅ Método público para notificar a Flutter sobre notificaciones eliminadas
+    fun notifyNotificationDismissed(notificationId: String) {
+        try {
+            receptorChannel.invokeMethod("onNotificationDismissed", mapOf(
+                "notificationId" to notificationId
+            ))
+            Log.d("MainActivity", "Notificación eliminada comunicada a Flutter: $notificationId")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error al comunicar eliminación de notificación a Flutter", e)
+        }
+    }
+    
+    private fun handleNavigationIntent(intent: Intent?) {
+        intent?.getStringExtra("navigate_to")?.let { route ->
+            // Enviar el comando de navegación a Flutter
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    deviceFinderChannel.invokeMethod("navigateToRoute", route)
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error al navegar a $route", e)
+                }
+            }, 1000) // Esperar 1 segundo para que Flutter esté listo
         }
     }
     
@@ -515,4 +733,2100 @@ class MainActivity: FlutterActivity() {
     fun notifyAppListUpdated() {
         appListChannel.invokeMethod("onAppListUpdated", null)
     }
+    
+}
+
+--------------------------------------
+
+import 'package:connect/screens/buscar_emisor_screen.dart';
+import 'package:connect/screens/receptor/notification_detail_screen.dart';
+import 'package:connect/screens/receptor/receptor_screen.dart';
+import 'package:connect/screens/receptor/notificaciones_screen.dart';
+import 'package:connect/screens/receptor/notification_detail_screen.dart'; // ✅ Asegurar importación
+import 'package:connect/services/notification_filter_service.dart';
+import 'package:connect/services/notification_listener_service.dart';
+import 'package:connect/services/receptor_service.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Import for MethodChannel
+import 'package:connect/services/notification_filter_service.dart'; // Añadir esta importación
+import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
+import 'package:firebase_core/firebase_core.dart';
+import 'package:connect/firebase_options.dart';
+import 'package:connect/services/firebase_service.dart';
+import 'screens/emisor/emisor_screen.dart';
+import 'screens/emisor/settings_screen.dart';
+import 'screens/emisor/app_list_screen.dart';
+import 'screens/receptor/receptor_settings_screen.dart';
+
+// Añadir este import al inicio del archivo
+import 'package:connect/services/local_notification_service.dart';
+import 'package:connect/screens/receptor/unread_notifications_screen.dart';
+import 'package:connect/screens/receptor/notification_settings_screen.dart'; // Import the new screen
+import 'package:connect/theme_colors.dart';
+import 'package:connect/services/device_search_service.dart';
+import 'package:connect/services/device_finder_service.dart';
+import 'package:connect/screens/buscar_dispositivo_screen.dart';
+
+// Add this global navigator key
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// En el método main, añadir la inicialización del servicio de notificaciones locales
+void main() async {
+  // Asegurar que Flutter esté inicializado
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Inicializar el servicio de notificaciones locales
+  // await LocalNotificationService.initialize();
+  initializeNotificationHandling();
+  // final notificationListenerService = NotificationListenerService();
+  // notificationListenerService.startListening(); // Iniciar la escucha
+
+  runApp(const MainApp());
+}
+
+void initializeNotificationHandling() {
+  // Configurar el callback para manejar cuando se toca una notificación
+  LocalNotificationService.onNotificationTapped = (Map<String, dynamic> data) {
+    print('Notificación tocada: $data');
+
+    // Navegar a la pantalla de detalle cuando se toca una notificación
+    if (navigatorKey.currentContext != null) {
+      Navigator.of(navigatorKey.currentContext!).push(
+        MaterialPageRoute(
+          builder: (context) =>
+              NotificationDetailScreen(notificationData: data),
+        ),
+      );
+    }
+  };
+  
+  // ✅ Configurar callback para auto-apertura
+  LocalNotificationService.onNotificationAutoOpened = (Map<String, dynamic> data) {
+    print('Notificación auto-abierta: $data');
+
+    // Navegar directamente a la pantalla de detalle para auto-apertura
+    if (navigatorKey.currentContext != null) {
+      // ✅ Usar pushAndRemoveUntil para asegurar que se muestre la pantalla
+      Navigator.of(navigatorKey.currentContext!).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => NotificationDetailScreen(
+            notificationData: data,
+          ),
+        ),
+        (route) => route.isFirst, // Mantener solo la pantalla principal
+      );
+    }
+  };
+
+  // Inicializar el servicio
+  LocalNotificationService.initialize();
+}
+
+
+class MainApp extends StatefulWidget {
+  const MainApp({super.key});
+
+  @override
+  State<MainApp> createState() => _MainAppState();
+}
+
+class _MainAppState extends State<MainApp> {
+  // Define the MethodChannel
+  static const platform = MethodChannel('com.example.connect/notifications');
+
+  // Servicio de Firebase
+  final FirebaseService _firebaseService = FirebaseService();
+
+  // List to hold received notifications
+  List<Map<String, dynamic>> _notifications = [];
+  bool _isServiceRunning = false;
+  bool _isPermissionGranted = false;
+  bool _isSavingToFirebase = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Set up the method call handler to receive notifications from native
+    platform.setMethodCallHandler(_handleMethodCall);
+    // Verificar el estado inicial del servicio y el permiso
+    _checkServiceStatus();
+    _checkPermissionStatus();
+
+    // Inicializar la estructura de datos en Firebase
+    _initializeFirebaseData();
+    
+    // ✅ INICIALIZAR EL SERVICIO DE BÚSQUEDA DE DISPOSITIVOS
+    _initializeDeviceSearchService();
+
+    // Intentar iniciar el servicio automáticamente si no está corriendo
+    // y el permiso está concedido
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoStartServiceIfNeeded();
+      _checkInitialRoute();
+    });
+  }
+  
+  // ✅ NUEVO MÉTODO PARA INICIALIZAR EL SERVICIO DE BÚSQUEDA
+  Future<void> _initializeDeviceSearchService() async {
+    try {
+      await DeviceSearchService.instance.startListeningForSearchChanges();
+      print('DeviceSearchService inicializado correctamente');
+    } catch (e) {
+      print('Error al inicializar DeviceSearchService: $e');
+    }
+  }
+
+  // Método para inicializar la estructura de datos en Firebase
+  Future<void> _initializeFirebaseData() async {
+    try {
+      await _firebaseService.initializeFirebaseData(_isServiceRunning);
+
+      // Obtener el estado de guardado desde Firebase
+      _isSavingToFirebase = await _firebaseService.getSaveStatus();
+
+      print('Estructura de datos inicializada en Firebase');
+    } catch (e) {
+      print('Error al inicializar datos en Firebase: $e');
+    }
+  }
+
+  // Método para iniciar automáticamente el servicio si es necesario
+  Future<void> _autoStartServiceIfNeeded() async {
+    if (!_isServiceRunning && _isPermissionGranted) {
+      await _startService();
+    }
+  }
+
+  Future<void> _handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onNotificationReceived':
+        // Received a new notification
+        final notificationData = Map<String, dynamic>.from(call.arguments);
+        setState(() {
+          _notifications.add(notificationData);
+        });
+        print('Received notification: $notificationData');
+
+        // Si está habilitado el guardado en Firebase, verificar si la notificación debe guardarse
+        if (_isSavingToFirebase) {
+          try {
+            // Obtener el packageName de la notificación
+            final String packageName =
+                notificationData['packageName'] as String? ?? '';
+
+            // Verificar si la notificación debe mostrarse según las apps habilitadas
+            final bool shouldShow =
+                await NotificationFilterService.shouldShowNotification(
+                  packageName,
+                );
+
+            // Solo guardar la notificación si debe mostrarse
+            if (shouldShow) {
+              await _firebaseService.saveNotification(notificationData);
+              print('Notificación guardada en Firebase: $packageName');
+            } else {
+              print(
+                'Notificación filtrada, no se guarda en Firebase: $packageName',
+              );
+            }
+          } catch (e) {
+            print('Error al guardar notificación en Firebase: $e');
+            // En caso de error, NO guardar la notificación
+          }
+        }
+        break;
+      case 'serviceConnected':
+        setState(() {
+          _isServiceRunning = true;
+        });
+        print('Notification service connected.');
+
+        // Actualizar el estado del servicio en Firebase
+        try {
+          await _firebaseService.updateServiceStatus(true);
+        } catch (e) {
+          print('Error al actualizar estado del servicio en Firebase: $e');
+        }
+        break;
+      case 'serviceDisconnected':
+        setState(() {
+          _isServiceRunning = false;
+        });
+        print('Notification service disconnected.');
+
+        // Actualizar el estado del servicio en Firebase
+        try {
+          await _firebaseService.updateServiceStatus(false);
+        } catch (e) {
+          print('Error al actualizar estado del servicio en Firebase: $e');
+        }
+        break;
+      default:
+        print('Unknown method ${call.method}');
+    }
+  }
+
+  // Método para verificar si el permiso está concedido
+  Future<void> _checkPermissionStatus() async {
+    try {
+      final bool isEnabled = await platform.invokeMethod(
+        'isNotificationServiceEnabled',
+      );
+      setState(() {
+        _isPermissionGranted = isEnabled;
+      });
+      print('Permission granted: $_isPermissionGranted');
+    } on PlatformException catch (e) {
+      print("Failed to check permission status: '${e.message}'.");
+    }
+  }
+
+  // Método para verificar si el servicio está corriendo
+  Future<void> _checkServiceStatus() async {
+    try {
+      final bool isRunning = await platform.invokeMethod('isServiceRunning');
+      setState(() {
+        _isServiceRunning = isRunning;
+      });
+      print('Service running: $_isServiceRunning');
+    } on PlatformException catch (e) {
+      print("Failed to check service status: '${e.message}'.");
+    }
+  }
+
+  // Método para iniciar el servicio
+  Future<void> _startService() async {
+    try {
+      // La llamada nativa verificará el permiso y abrirá la configuración si es necesario
+      final bool started = await platform.invokeMethod(
+        'startNotificationService',
+      );
+      if (started) {
+        print('Service start intent sent.');
+        // El estado _isServiceRunning se actualizará cuando el servicio llame a serviceConnected
+      } else {
+        print('Permission not granted, opened settings.');
+        // El estado _isPermissionGranted se actualizará después de que el usuario regrese de settings
+      }
+    } on PlatformException catch (e) {
+      print("Failed to start service: '${e.message}'.");
+    }
+  }
+
+  // Método para detener el servicio
+  Future<void> _stopService() async {
+    try {
+      await platform.invokeMethod('stopNotificationService');
+      print('Service stop intent sent.');
+      // El estado _isServiceRunning se actualizará cuando el servicio llame a serviceDisconnected o onDestroy
+    } on PlatformException catch (e) {
+      print("Failed to stop service: '${e.message}'.");
+    }
+  }
+
+  // Método para abrir la configuración de escucha de notificaciones
+  Future<void> _openNotificationSettings() async {
+    try {
+      await platform.invokeMethod('openNotificationSettings');
+      print('Opened notification settings.');
+      // Puedes añadir un listener para cuando la app vuelve a primer plano para verificar el permiso después
+    } on PlatformException catch (e) {
+      print("Failed to open settings: '${e.message}'.");
+    }
+  }
+
+  // Método para cambiar el estado de guardado en Firebase
+  Future<void> _toggleSaveToFirebase(bool isSaving) async {
+    try {
+      // Actualizar el estado local
+      setState(() {
+        _isSavingToFirebase = isSaving;
+      });
+
+      // Actualizar el estado en Firebase
+      await _firebaseService.updateSaveStatus(isSaving);
+
+      // Si se activa el guardado, sincronizar la lista de apps
+      if (isSaving) {
+        await NotificationFilterService.syncEnabledAppsWithFirebase();
+      }
+
+      print('Estado de guardado en Firebase actualizado: $isSaving');
+    } catch (e) {
+      print('Error al actualizar estado de guardado en Firebase: $e');
+      // Revertir el cambio local si hay error
+      setState(() {
+        _isSavingToFirebase = !isSaving;
+      });
+    }
+  }
+
+  // Método para verificar la ruta inicial según las preferencias del usuario
+  // ✅ MODIFICAR EL MÉTODO _checkInitialRoute (líneas 311-350)
+  Future<void> _checkInitialRoute() async {
+    try {
+      print('[DEBUG] _checkInitialRoute: Start');
+      final receptorService = ReceptorService();
+      final deviceId = await receptorService.getLinkedDeviceId();
+      print(
+        '[DEBUG] _checkInitialRoute: deviceId from SharedPreferences = \$deviceId',
+      );
+      final linkStatus = await _firebaseService.getLinkStatus();
+      print(
+        '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',
+      );
+      
+      // ✅ VERIFICAR SI EL BLOQUEO AUTOMÁTICO ESTÁ DESACTIVADO
+      final disableAutoRedirect = await PreferencesService.getDisableAutoRedirect();
+      print('[DEBUG] _checkInitialRoute: disableAutoRedirect = $disableAutoRedirect');
+      
+      // En el método _checkInitialRoute, después de verificar el linkStatus
+      if (linkStatus && !disableAutoRedirect) {
+        print('[DEBUG] _checkInitialRoute: Dispositivo vinculado como receptor');
+        
+        // Inicializar el receptor sin mostrar notificaciones existentes
+        final receptorService = ReceptorService();
+        await receptorService.initializeReceptorWithoutNotifications();
+        
+        // Navegar a la pantalla del receptor
+        Navigator.pushReplacementNamed(context, '/receptor');
+      } else if (linkStatus && disableAutoRedirect) {
+        print('[DEBUG] _checkInitialRoute: Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor');
+      } else {
+        print('[DEBUG] _checkInitialRoute: Dispositivo no vinculado, mantener en emisor');
+      }
+      
+      final useAsReceptor = await PreferencesService.getUseAsReceptor();
+      print(
+        '[DEBUG] _checkInitialRoute: useAsReceptor = \$useAsReceptor, _isPermissionGranted = \$_isPermissionGranted',
+      );
+      if (useAsReceptor && _isPermissionGranted && !disableAutoRedirect) {
+        print('[DEBUG] _checkInitialRoute: Navigating to /receptor');
+        Navigator.pushReplacementNamed(context, '/receptor');
+      }
+      print('[DEBUG] _checkInitialRoute: Staying on EmisorScreen');
+    } catch (e, stack) {
+      print('Error al verificar ruta inicial: $e');
+      print('Stacktrace: $stack');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Configurar la clave de navegación para DeviceFinderService
+    DeviceFinderService.setNavigatorKey(navigatorKey);
+    
+    return MaterialApp(
+      navigatorKey: navigatorKey, // Add this line
+      debugShowCheckedModeBanner: false,
+      title: 'Connect',
+      theme: ThemeData(
+        primarySwatch: customColor, // Usando el MaterialColor personalizado
+        colorScheme: ColorScheme.fromSwatch(
+          primarySwatch: customColor,
+          accentColor: customColor[900],
+        ),
+        useMaterial3: true,
+        // Añadir o modificar appBarTheme aquí
+        appBarTheme: AppBarTheme(
+          backgroundColor: customColor[700], // Color de fondo del AppBar
+          foregroundColor:
+              Colors.white, // Color de los iconos y texto del AppBar
+          titleTextStyle: TextStyle(
+            color: Colors.white, // Color del título del AppBar
+            fontSize: 20, // Ajusta el tamaño de fuente si es necesario
+            fontWeight:
+                FontWeight.bold, // Ajusta el peso de fuente si es necesario
+          ),
+          centerTitle: true, // Centrar el título del AppBar
+        ),
+      ),
+      initialRoute: '/',
+      routes: {
+        '/': (context) => EmisorScreen(
+          notifications: _notifications,
+          isServiceRunning: _isServiceRunning,
+          isSavingToFirebase: _isSavingToFirebase,
+          toggleSaveToFirebase: _toggleSaveToFirebase,
+          checkPermissionStatus: _checkPermissionStatus,
+          openNotificationSettings: _openNotificationSettings,
+        ),
+        '/settings': (context) => SettingsScreen(
+          isServiceRunning: _isServiceRunning,
+          isPermissionGranted: _isPermissionGranted,
+          isSavingToFirebase: _isSavingToFirebase,
+          checkPermissionStatus: _checkPermissionStatus,
+          openNotificationSettings: _openNotificationSettings,
+          startService: _startService,
+          stopService: _stopService,
+          toggleSaveToFirebase: _toggleSaveToFirebase,
+        ),
+        '/app_list': (context) => const AppListScreen(),
+        '/receptor': (context) => const ReceptorScreen(),
+        '/notificaciones': (context) => const NotificacionesScreen(),
+        '/receptor_settings': (context) => const ReceptorSettingsScreen(),
+        '/unread_notifications': (context) =>
+            const UnreadNotificationsScreen(), // Añadir esta nueva ruta
+        '/notification_settings': (context) =>
+            const NotificationSettingsScreen(), // Add the new route
+        '/notification_detail': (context) => const NotificationDetailScreen(notificationData: {},), // Add this line
+        '/buscar_dispositivo': (context) => const BuscarDispositivoScreen(),
+        '/buscar_emisor': (context) => const BuscarEmisorScreen(), // ✅ Nueva ruta
+      },
+    );
+  }
+}
+
+-------------------------------
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class DeviceData {
+  final String id;
+  final bool statusServicio;
+  final bool statusVinculacion;
+  final bool statusGuardado;
+  final bool buscarEmisor; // ✅ NUEVO CAMPO
+  final bool buscarReceptor; // ✅ NUEVO CAMPO
+  final List<ActualizacionData> ultimaActualizacion;
+  final List<AppData> listaApps;
+
+  DeviceData({
+    required this.id,
+    required this.statusServicio,
+    this.statusVinculacion = false,
+    this.statusGuardado = false,
+    this.buscarEmisor = false, // ✅ VALOR POR DEFECTO
+    this.buscarReceptor = false, // ✅ VALOR POR DEFECTO
+    required this.ultimaActualizacion,
+    required this.listaApps,
+  });
+
+  factory DeviceData.fromMap(Map<String, dynamic> map) {
+    return DeviceData(
+      id: map['id'] ?? '',
+      statusServicio: map['status-servicio'] ?? false,
+      statusVinculacion: map['status-vinculacion'] ?? false,
+      statusGuardado: map['status-guardado'] ?? false,
+      buscarEmisor: map['buscar-emisor'] ?? false, // ✅ NUEVO CAMPO
+      buscarReceptor: map['buscar-receptor'] ?? false, // ✅ NUEVO CAMPO
+      ultimaActualizacion: List<ActualizacionData>.from(
+        (map['ultima-actualizacion'] as List? ?? []).map(
+          (x) => ActualizacionData.fromMap(x),
+        ),
+      ),
+      listaApps: List<AppData>.from(
+        (map['lista-apps'] as List? ?? []).map(
+          (x) => AppData.fromMap(x),
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'status-servicio': statusServicio,
+      'status-vinculacion': statusVinculacion,
+      'status-guardado': statusGuardado,
+      'buscar-emisor': buscarEmisor, // ✅ NUEVO CAMPO
+      'buscar-receptor': buscarReceptor, // ✅ NUEVO CAMPO
+      'ultima-actualizacion': ultimaActualizacion.map((x) => x.toMap()).toList(),
+      'lista-apps': listaApps.map((x) => x.toMap()).toList(),
+    };
+  }
+}
+
+class ActualizacionData {
+  final DateTime fecha;
+  final String tipoActualizacion;
+
+  ActualizacionData({
+    required this.fecha,
+    required this.tipoActualizacion,
+  });
+
+  factory ActualizacionData.fromMap(Map<String, dynamic> map) {
+    return ActualizacionData(
+      fecha: (map['fecha'] as Timestamp).toDate(),
+      tipoActualizacion: map['tipo-actualizacion'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'fecha': Timestamp.fromDate(fecha),
+      'tipo-actualizacion': tipoActualizacion,
+    };
+  }
+}
+
+class AppData {
+  final String nombre;
+  final String packageName;
+  final bool activa;
+
+  AppData({
+    required this.nombre,
+    required this.packageName,
+    required this.activa,
+  });
+
+  factory AppData.fromMap(Map<String, dynamic> map) {
+    return AppData(
+      nombre: map['nombre'] ?? '',
+      packageName: map['package'] ?? '',
+      activa: map['activa'] ?? false,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'nombre': nombre,
+      'package': packageName,
+      'activa': activa,
+    };
+  }
+}
+
+-------------------------
+
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/models/notification_data.dart';
+import 'package:connect/services/firebase_service.dart';
+import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
+import 'package:connect/services/receptor_service.dart';
+import 'package:connect/widgets/buscar_receptor_modal.dart';
+import 'package:flutter/material.dart';
+import 'package:connect/services/notification_filter_service.dart'; // Add this import
+import 'package:connect/theme_colors.dart';
+
+class EmisorScreen extends StatefulWidget {
+  final List<Map<String, dynamic>> notifications;
+  final bool isServiceRunning;
+  final bool isSavingToFirebase;
+  final Function(bool) toggleSaveToFirebase;
+  final Function() checkPermissionStatus; // Añadir este parámetro
+  final Function() openNotificationSettings; // Añadir este parámetro
+
+  const EmisorScreen({
+    super.key,
+    required this.notifications,
+    required this.isServiceRunning,
+    required this.isSavingToFirebase,
+    required this.toggleSaveToFirebase,
+    required this.checkPermissionStatus, // Requerido
+    required this.openNotificationSettings, // Requerido
+  });
+
+  @override
+  State<EmisorScreen> createState() => _EmisorScreenState();
+}
+
+class _EmisorScreenState extends State<EmisorScreen>
+    with WidgetsBindingObserver {
+  List<Map<String, dynamic>> _filteredNotifications = [];
+  Map<String, List<NotificationData>> _groupedNotifications =
+      {}; // Notificaciones agrupadas por día
+  Map<String, bool> _expandedDays = {}; // Control de expansión para cada día
+  List<NotificationData> _storedNotifications =
+      []; // Nueva lista para notificaciones almacenadas
+  bool _isLoading = true;
+  bool _isLinked = false; // Estado de vinculación
+  String _deviceId = ''; // ID del dispositivo
+
+  // Añadir un timer para actualizar periódicamente
+  late final Stream _updateStream;
+  late final StreamSubscription _updateSubscription;
+  final FirebaseService _firebaseService = FirebaseService();
+
+  @override
+  void initState() {
+    super.initState();
+    _filterNotifications();
+    _loadDeviceId();
+    _checkLinkStatus();
+    _loadStoredNotifications(); // Cargar notificaciones almacenadas
+
+    // Crear un stream que se ejecute cada 2 segundos para actualizar las notificaciones
+    _updateStream = Stream.periodic(const Duration(seconds: 2));
+    _updateSubscription = _updateStream.listen((_) {
+      if (mounted) {
+        _filterNotifications();
+        _checkLinkStatus();
+        _loadStoredNotifications(); // Actualizar notificaciones almacenadas
+      }
+    });
+
+    // Registrar el observer para detectar cuando la app vuelve al primer plano
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkInitialRoute(context);
+    });
+  }
+
+  // Cargar el ID del dispositivo desde SharedPreferences
+  Future<void> _loadDeviceId() async {
+    final deviceId = await _firebaseService.getDeviceId();
+    setState(() {
+      _deviceId = deviceId;
+    });
+  }
+
+  // Verificar el estado de vinculación desde Firebase
+  Future<void> _checkLinkStatus() async {
+    try {
+      final deviceId = await _firebaseService.getDeviceId();
+      final docRef = FirebaseFirestore.instance
+          .collection('dispositivos')
+          .doc(deviceId);
+      final docSnapshot = await docRef.get();
+
+      if (docSnapshot.exists) {
+        final data = docSnapshot.data();
+        setState(() {
+          _isLinked = data?['status-vinculacion'] ?? false;
+        });
+      }
+    } catch (e) {
+      print('Error al verificar estado de vinculación: $e');
+    }
+  }
+
+  @override
+  void didUpdateWidget(EmisorScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Si las notificaciones cambiaron, actualizar el filtro
+    if (widget.notifications != oldWidget.notifications) {
+      _filterNotifications();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Cuando la app vuelve al primer plano, actualizar las notificaciones
+    if (state == AppLifecycleState.resumed) {
+      _filterNotifications();
+      _checkLinkStatus();
+      _loadStoredNotifications(); // Actualizar notificaciones almacenadas
+    }
+  }
+
+  Future<void> _filterNotifications() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    final filteredList = await NotificationFilterService.filterNotifications(
+      widget.notifications,
+    );
+
+    setState(() {
+      _filteredNotifications = filteredList;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    // Cancelar la suscripción al stream y eliminar el observer
+    _updateSubscription.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Método para cargar las notificaciones almacenadas en Firebase
+  Future<void> _loadStoredNotifications() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Obtener las notificaciones almacenadas desde Firebase
+      final notifications = await _firebaseService.getStoredNotifications();
+
+      // Agrupar notificaciones por día
+      final Map<String, List<NotificationData>> grouped = {};
+
+      for (var notification in notifications) {
+        // Obtener la fecha en formato YYYY-MM-DD
+        final DateTime date = notification.timestamp;
+        final String dateKey =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+        if (!grouped.containsKey(dateKey)) {
+          grouped[dateKey] = [];
+          // Inicializar el estado de expansión si no existe
+          if (!_expandedDays.containsKey(dateKey)) {
+            _expandedDays[dateKey] = true; // Por defecto expandido
+          }
+        }
+
+        grouped[dateKey]!.add(notification);
+      }
+
+      setState(() {
+        _groupedNotifications = grouped;
+        _isLoading = false;
+      });
+
+      // print('Notificaciones cargadas desde Firebase: ${notifications.length}');
+    } catch (e) {
+      print('Error al cargar notificaciones desde Firebase: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Método para marcar una notificación como leída
+  Future<void> _markNotificationAsRead(NotificationData notification) async {
+    try {
+      // Solo proceder si la notificación no está ya marcada como leída
+      if (!notification.statusVisualizacion) {
+        // Obtener dateId del campo correcto
+        final uniqueId = notification.id;
+        // 2. Convertir el String de milisegundos a un entero
+        final int millisecondsSinceEpoch = int.parse(uniqueId);
+        print('Milisegundos (int): $millisecondsSinceEpoch');
+
+        // 3. Crear un objeto DateTime a partir de los milisegundos
+        final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
+          millisecondsSinceEpoch,
+        );
+        print(
+          'Objeto DateTime: $dateTimeObject',
+        ); // Esto mostrará la fecha y la hora completas
+
+        // 4. Formatear el objeto DateTime a "aaaa-mm-dd"
+        // Para esto, nos aseguramos de que el mes y el día tengan dos dígitos (ej. 05 en lugar de 5)
+
+        final String year = dateTimeObject.year.toString();
+        final String month = dateTimeObject.month.toString().padLeft(
+          2,
+          '0',
+        ); // Añade un 0 a la izquierda si es necesario
+        final String day = dateTimeObject.day.toString().padLeft(
+          2,
+          '0',
+        ); // Añade un 0 a la izquierda si es necesario
+
+        final String dateId = '$year-$month-$day';
+
+        await _firebaseService.updateNotificationVisualizationStatus(
+          notification.id,
+          dateId,
+          true,
+        );
+        // Recargar notificaciones después de actualizar
+        await _loadStoredNotifications();
+      }
+    } catch (e) {
+      print('Error al marcar notificación como leída: $e');
+    }
+  }
+
+  // Método para eliminar una notificación
+  Future<void> _deleteNotification(NotificationData notification) async {
+    try {
+      final uniqueId = notification.id;
+      // 2. Convertir el String de milisegundos a un entero
+      final int millisecondsSinceEpoch = int.parse(uniqueId);
+      print('Milisegundos (int): $millisecondsSinceEpoch');
+
+      // 3. Crear un objeto DateTime a partir de los milisegundos
+      final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
+        millisecondsSinceEpoch,
+      );
+      print(
+        'Objeto DateTime: $dateTimeObject',
+      ); // Esto mostrará la fecha y la hora completas
+
+      // 4. Formatear el objeto DateTime a "aaaa-mm-dd"
+      // Para esto, nos aseguramos de que el mes y el día tengan dos dígitos (ej. 05 en lugar de 5)
+
+      final String year = dateTimeObject.year.toString();
+      final String month = dateTimeObject.month.toString().padLeft(
+        2,
+        '0',
+      ); // Añade un 0 a la izquierda si es necesario
+      final String day = dateTimeObject.day.toString().padLeft(
+        2,
+        '0',
+      ); // Añade un 0 a la izquierda si es necesario
+
+      final String dateId = '$year-$month-$day';
+
+      await _firebaseService.deleteNotification(notification.id, dateId);
+      // Recargar notificaciones después de eliminar
+      await _loadStoredNotifications();
+    } catch (e) {
+      print('Error al eliminar notificación: $e');
+    }
+  }
+
+  // Método para formatear la fecha en formato legible
+  String _formatDate(String dateKey) {
+    try {
+      final parts = dateKey.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final day = int.parse(parts[2]);
+
+      final date = DateTime(year, month, day);
+      final now = DateTime.now();
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+
+      if (date.year == now.year &&
+          date.month == now.month &&
+          date.day == now.day) {
+        return 'Hoy';
+      } else if (date.year == yesterday.year &&
+          date.month == yesterday.month &&
+          date.day == yesterday.day) {
+        return 'Ayer';
+      } else {
+        // Formato: 25 Mayo 2023
+        final months = [
+          'Enero',
+          'Febrero',
+          'Marzo',
+          'Abril',
+          'Mayo',
+          'Junio',
+          'Julio',
+          'Agosto',
+          'Septiembre',
+          'Octubre',
+          'Noviembre',
+          'Diciembre',
+        ];
+        return '$day ${months[month - 1]} $year';
+      }
+    } catch (e) {
+      return dateKey; // En caso de error, devolver la clave original
+    }
+  }
+
+  // Método para formatear la hora
+  String _formatTime(DateTime timestamp) {
+    final hour = timestamp.hour.toString().padLeft(2, '0');
+    final minute = timestamp.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  // Método para navegar a la pantalla de receptor y verificar permisos
+  Future<void> _navigateToReceptor(BuildContext context) async {
+    // Verificar si el permiso está concedido
+    widget.checkPermissionStatus();
+
+    // Si el permiso no está concedido, mostrar diálogo
+    if (!widget.isServiceRunning) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            backgroundColor: Colors.grey[100],
+            title: Text(
+              'Permiso requerido',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: customColor[600],
+              ),
+            ),
+            content: const Text(
+              'Para usar la app como receptor, necesitas conceder permiso para acceder a las notificaciones.',
+              style: TextStyle(fontSize: 16),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text(
+                  'Cancelar',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  widget.openNotificationSettings();
+                },
+                style: TextButton.styleFrom(
+                  backgroundColor: customColor[400],
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                ),
+                child: const Text('Abrir configuración'),
+              ),
+            ],
+          );
+        },
+      );
+
+      return;
+    }
+
+    // Guardar preferencia de usar como receptor
+    await PreferencesService.saveUseAsReceptor(true);
+
+    // Navegar a la pantalla de receptor (usar pushReplacementNamed en lugar de pushNamed)
+    Navigator.pushReplacementNamed(context, '/receptor');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Emisor de Notificaciones'),
+        actions: [
+          // Icono para activar/desactivar guardado en Firebase
+          IconButton(
+            icon: Icon(
+              widget.isSavingToFirebase ? Icons.cloud_done : Icons.cloud_off,
+              size: 40,
+              color: widget.isSavingToFirebase ? Colors.green : Colors.grey,
+            ),
+            tooltip: widget.isSavingToFirebase
+                ? 'Desactivar guardado en Firebase'
+                : 'Activar guardado en Firebase',
+            onPressed: () =>
+                widget.toggleSaveToFirebase(!widget.isSavingToFirebase),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // Botón para navegar a la pantalla Receptor
+            Padding(
+              padding: const EdgeInsets.only(
+                top: 20.0,
+                left: 16.0,
+                right: 16.0,
+                bottom: 10.0,
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () => _navigateToReceptor(context),
+                icon: const Icon(Icons.watch, color: Colors.white),
+                label: const Text(
+                  'Usar App como Receptor',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  backgroundColor:
+                      customColor[400], // Dos tonos más claro que el original
+                ),
+              ),
+            ),
+            // Contenedor para el estado del servicio
+            Container(
+              margin: const EdgeInsets.only(
+                left: 16.0,
+                right: 16.0,
+                bottom: 10.0,
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8.0,
+                vertical: 16.0,
+              ),
+              decoration: BoxDecoration(
+                color: widget.isServiceRunning
+                    ? Colors.green[100]
+                    : Colors.red[100],
+                borderRadius: BorderRadius.circular(8.0),
+                border: Border.all(
+                  color: widget.isServiceRunning ? Colors.green : Colors.red,
+                  width: 1.0,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    widget.isServiceRunning ? Icons.check_circle : Icons.error,
+                    color: widget.isServiceRunning ? Colors.green : Colors.red,
+                  ),
+                  const SizedBox(width: 8.0),
+                  Text(
+                    'Estado del Servicio: ${widget.isServiceRunning ? 'Activo' : 'Inactivo'}',
+                    style: TextStyle(
+                      color: widget.isServiceRunning
+                          ? Colors.green[800]
+                          : Colors.red[800],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: _isLinked
+                  ? () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => const BuscarReceptorModal(),
+                      );
+                    }
+                  : null,
+              child: Container(
+                margin: const EdgeInsets.only(
+                  left: 16.0,
+                  right: 16.0,
+                  bottom: 10.0,
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 16.0,
+                ),
+                decoration: BoxDecoration(
+                  color: _isLinked ? Colors.green[100] : Colors.red[100],
+                  borderRadius: BorderRadius.circular(8.0),
+                  border: Border.all(
+                    color: _isLinked ? Colors.green : Colors.red,
+                    width: 1.0,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Icon(
+                      _isLinked ? Icons.link : Icons.link_off,
+                      color: _isLinked ? Colors.green : Colors.red,
+                    ),
+                    const SizedBox(width: 8.0),
+                    Text(
+                      'Estado de Vinculación: ${_isLinked ? 'Vinculado' : 'No Vinculado'}',
+                      style: TextStyle(
+                        color: _isLinked ? Colors.green[800] : Colors.red[800],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Contenedor para el estado de vinculación
+
+            // Tarjeta para mostrar el ID del dispositivo
+            Card(
+              margin: const EdgeInsets.only(
+                left: 16.0,
+                right: 16.0,
+                bottom: 10.0,
+              ), // <-- Espacio alrededor de la card
+              elevation: 1, // <-- Sombra
+              shape: RoundedRectangleBorder(
+                // <-- Borde redondeado
+                borderRadius: BorderRadius.circular(10), // <-- Radio del borde
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 20.0,
+                ), // <-- Espacio interno
+                // <-- Eliminar Center y ajustar Column
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.stretch, // <-- Estirar hijos
+                  // mainAxisSize: MainAxisSize.min, // Ajustar tamaño de la columna al contenido
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment
+                          .spaceEvenly, // Distribuir uniformemente
+                      children: _deviceId
+                          .toUpperCase()
+                          .split('')
+                          .map(
+                            (char) => Container(
+                              // <-- Contenedor para el fondo blanco y borde
+                              width:
+                                  50, // Ancho del contenedor (ajusta según necesites)
+                              height:
+                                  60, // Altura del contenedor (ajusta según necesites)
+                              // color: Colors.white, // <-- Eliminar color directo
+                              decoration: BoxDecoration(
+                                // <-- Añadir decoración
+                                color: Colors.white, // Color de fondo blanco
+                                border: Border.all(
+                                  color: Colors.transparent,
+                                  width: 1.0,
+                                ), // <-- Añadir borde
+                                borderRadius: BorderRadius.circular(
+                                  5,
+                                ), // Opcional: bordes redondeados para el rectángulo
+                                boxShadow: [
+                                  // Aquí se define la sombra
+                                  BoxShadow(
+                                    color: Colors.grey.withOpacity(
+                                      0.3,
+                                    ), // Color de la sombra con opacidad
+                                    spreadRadius:
+                                        1, // Cuánto se extiende la sombra en todas las direcciones
+                                    blurRadius:
+                                        5, // Qué tan difuminada es la sombra
+                                    offset: const Offset(
+                                      0,
+                                      3,
+                                    ), // Desplazamiento de la sombra (eje X, eje Y)
+                                  ),
+                                ],
+                              ),
+                              alignment: Alignment
+                                  .center, // Centrar el contenido (el texto) vertical y horizontalmente
+                              child: Padding(
+                                // <-- Envuelve el Text con Padding
+                                padding: const EdgeInsets.only(
+                                  bottom: 5.0,
+                                ), // Ajusta este valor (5.0) según sea necesario
+                                child: Text(
+                                  // <-- El texto del carácter
+                                  char,
+                                  style: const TextStyle(
+                                    fontSize: 50,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors
+                                        .black, // Color del texto para que contraste con el fondo blanco
+                                    height:
+                                        1.2, // <--- EXPERIMENT WITH THIS VALUE (e.g., 0.9, 1.0, 1.1, 1.2)
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    // -------------------------------------------------------------
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Ingresa este codigo para vincular dispositivos',
+                      style: TextStyle(fontSize: 16),
+                      textAlign: TextAlign.center, // <-- Centrar el texto
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Lista de notificaciones enviadas y guardadas en firebase, leidas y no leidas
+            Card(
+              margin: const EdgeInsets.only(
+                left: 16.0,
+                right: 16.0,
+                bottom: 10.0,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8.0,
+                  vertical: 16.0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // const Padding(
+                    //   padding: EdgeInsets.only(left: 16.0, bottom: 8.0),
+                    //   child: Text(
+                    //     'Notificaciones Almacenadas',
+                    //     style: TextStyle(
+                    //       fontSize: 16,
+                    //       fontWeight: FontWeight.bold,
+                    //     ),
+                    //   ),
+                    // ),
+                    Container(
+                      height: 300, // Aumentar altura para mostrar más contenido
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator())
+                          : _groupedNotifications.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No hay notificaciones almacenadas',
+                                style: TextStyle(fontSize: 16),
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _groupedNotifications.keys.length,
+                              itemBuilder: (context, index) {
+                                // Obtener la clave de fecha ordenada (más reciente primero)
+                                final dateKeys =
+                                    _groupedNotifications.keys.toList()
+                                      ..sort((a, b) => b.compareTo(a));
+                                final dateKey = dateKeys[index];
+                                final notifications =
+                                    _groupedNotifications[dateKey]!;
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Encabezado del día con botón para expandir/colapsar
+                                    ListTile(
+                                      title: Text(
+                                        _formatDate(dateKey),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      trailing: IconButton(
+                                        icon: Icon(
+                                          _expandedDays[dateKey]!
+                                              ? Icons.visibility
+                                              : Icons.visibility_off,
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            _expandedDays[dateKey] =
+                                                !_expandedDays[dateKey]!;
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                    // Lista de notificaciones del día (expandible)
+                                    if (_expandedDays[dateKey]!)
+                                      ...notifications.map((notification) {
+                                        final dismissibleKey =
+                                            UniqueKey(); // Usar UniqueKey para cada Dismissible
+                                        return Dismissible(
+                                          key:
+                                              dismissibleKey, // Usar clave única en lugar de Key(notification.id)
+                                          // Deslizar a la derecha (solo para no leídas)
+                                          confirmDismiss: (direction) async {
+                                            if (direction ==
+                                                DismissDirection.endToStart) {
+                                              // Eliminar (deslizar a la izquierda)
+                                              await _deleteNotification(
+                                                notification,
+                                              );
+                                              return true;
+                                            } else if (direction ==
+                                                DismissDirection.startToEnd) {
+                                              // Marcar como leída (deslizar a la derecha)
+                                              if (!notification
+                                                  .statusVisualizacion) {
+                                                await _markNotificationAsRead(
+                                                  notification,
+                                                );
+                                                return true;
+                                              }
+                                              return false; // No permitir deslizar si ya está leída
+                                            }
+                                            return false;
+                                          },
+                                          // Fondo al deslizar a la izquierda (eliminar)
+                                          background: Container(
+                                            color: Colors.green,
+                                            alignment: Alignment.centerLeft,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 20,
+                                            ),
+                                            child: const Icon(
+                                              Icons.check_circle,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          // Fondo al deslizar a la derecha (marcar como leída)
+                                          secondaryBackground: Container(
+                                            color: Colors.red,
+                                            alignment: Alignment.centerRight,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 20,
+                                            ),
+                                            child: const Icon(
+                                              Icons.delete,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          child: ListTile(
+                                            leading: Icon(
+                                              notification.statusVisualizacion
+                                                  ? Icons.mark_email_read
+                                                  : Icons.mark_email_unread,
+                                              color:
+                                                  notification
+                                                      .statusVisualizacion
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                            ),
+                                            title: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    notification
+                                                            .title
+                                                            .isNotEmpty
+                                                        ? notification.title
+                                                        : 'Sin título',
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  _formatTime(
+                                                    notification.timestamp,
+                                                  ),
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            subtitle: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  notification.text.isNotEmpty
+                                                      ? notification.text
+                                                      : 'Sin contenido',
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  'App: ${notification.appName.isNotEmpty ? notification.appName : notification.packageName}',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontStyle: FontStyle.italic,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'Estado: ${notification.statusVisualizacion ? "Leído" : "No leído"}',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        notification
+                                                            .statusVisualizacion
+                                                        ? Colors.green[700]
+                                                        : Colors.red[700],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    const Divider(),
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      // Añade el Divider justo antes del BottomNavigationBar
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 3,
+            color: customColor[700], // Barra divisora con customColor
+          ),
+          BottomNavigationBar(
+            currentIndex: 1,
+            onTap: (index) {
+              // Navegar a la pantalla correspondiente según el índice
+              switch (index) {
+                case 0:
+                  // Navegar a la pantalla de configuración
+                  Navigator.pushNamed(context, '/settings');
+                  break;
+                case 1:
+                  // Ya estamos en la pantalla Emisor
+                  break;
+                case 2:
+                  // Navegar a la pantalla de lista de apps
+                  Navigator.pushNamed(context, '/app_list').then((_) {
+                    // Actualizar el filtro cuando regrese de la pantalla de apps
+                    _filterNotifications();
+                  });
+                  break;
+              }
+            },
+            selectedFontSize: 14.0,
+            unselectedFontSize: 12.0,
+            selectedIconTheme: const IconThemeData(size: 37.5),
+            unselectedIconTheme: const IconThemeData(size: 22.5),
+            selectedItemColor:
+                customColor[700], // Color para el ítem seleccionado
+            unselectedItemColor:
+                Colors.black, // Color para los ítems no seleccionados
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings),
+                label: 'Configuración',
+              ),
+              BottomNavigationBarItem(icon: Icon(Icons.send), label: 'Emisor'),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.apps),
+                label: 'Aplicaciones',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<void> _checkInitialRoute(BuildContext context) async {
+  try {
+    final receptorService = ReceptorService();
+    final deviceId = await receptorService.getLinkedDeviceId();
+    final linkStatus = await FirebaseService().getLinkStatus();
+
+    // ✅ VERIFICAR SI EL BLOQUEO AUTOMÁTICO ESTÁ DESACTIVADO
+    final disableAutoRedirect =
+        await PreferencesService.getDisableAutoRedirect();
+
+    // Solo redirigir si está vinculado Y el bloqueo automático NO está desactivado
+    if (linkStatus && !disableAutoRedirect) {
+      Navigator.pushReplacementNamed(context, '/notificaciones');
+      return;
+    }
+
+    final useAsReceptor = await PreferencesService.getUseAsReceptor();
+    // Solo redirigir si quiere usar como receptor Y el bloqueo automático NO está desactivado
+    if (useAsReceptor && !disableAutoRedirect) {
+      Navigator.pushReplacementNamed(context, '/receptor');
+    }
+
+    // ✅ AGREGAR LOG PARA DEBUG
+    if (linkStatus && disableAutoRedirect) {
+      print(
+        '[DEBUG] Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor',
+      );
+    }
+  } catch (e, stack) {
+    print('Error al verificar ruta inicial: $e');
+    print('Stacktrace: $stack');
+  }
+}
+
+----------------------------------
+
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/models/notification_data.dart';
+import 'package:connect/screens/buscar_emisor_screen.dart';
+import 'package:connect/services/firebase_service.dart';
+import 'package:connect/services/notification_listener_service.dart';
+import 'package:connect/theme_colors.dart';
+import 'package:flutter/material.dart';
+import 'package:connect/services/receptor_service.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connect/services/preferences_service.dart';
+import 'package:connect/services/local_notification_service.dart';
+import 'package:connect/screens/receptor/notification_detail_screen.dart';
+
+class NotificacionesScreen extends StatefulWidget {
+  const NotificacionesScreen({Key? key}) : super(key: key);
+
+  @override
+  State<NotificacionesScreen> createState() => _NotificacionesScreenState();
+}
+
+class _NotificacionesScreenState extends State<NotificacionesScreen> {
+  final ReceptorService _receptorService = ReceptorService();
+
+  bool _isLoading = false;
+  List<Map<String, dynamic>> _notifications = [];
+  StreamSubscription? _notificationSubscription;
+  String? _linkedDeviceId;
+  bool _notificationsEnabled = false; // Add state for the toggle
+  bool _showSubtitle = false;
+  Map<String, List<Map<String, dynamic>>> _groupedNotifications = {};
+  Map<String, bool> _expandedDays = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLinkedDevice();
+    _loadNotificationSettings();
+    _startListeningForReadNotifications();
+
+    // ✅ Sincronizar notificaciones canceladas al inicializar
+    _syncCancelledNotifications();
+  }
+
+  // ✅ Nuevo método para sincronizar notificaciones canceladas
+  Future<void> _syncCancelledNotifications() async {
+    try {
+      await LocalNotificationService.syncCancelledNotificationsWithAndroid();
+    } catch (e) {
+      print('Error al sincronizar notificaciones canceladas: $e');
+    }
+  }
+
+  // Load initial state for the notification toggle
+  Future<void> _loadNotificationSettings() async {
+    final notificationsEnabled =
+        await LocalNotificationService.areNotificationsEnabled();
+    setState(() {
+      _notificationsEnabled = notificationsEnabled;
+    });
+
+    // Iniciar o detener el servicio según el estado del toggle
+    await NotificationListenerService.instance.setListeningEnabled(
+      notificationsEnabled,
+    );
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    _notificationSubscription = null;
+    super.dispose();
+  }
+
+  // Cargar el dispositivo vinculado y comenzar a escuchar notificaciones
+  Future<void> _loadLinkedDevice() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Obtener el ID del dispositivo emisor vinculado
+      final deviceId = await _receptorService.getLinkedDeviceId();
+
+      if (deviceId != null) {
+        setState(() {
+          _linkedDeviceId = deviceId;
+        });
+
+        // Iniciar escucha de notificaciones
+        _startListeningForReadNotifications();
+      } else {
+        // Si no hay dispositivo vinculado, redirigir a la pantalla de vinculación
+        Navigator.pushReplacementNamed(context, '/receptor');
+      }
+    } catch (e) {
+      print('Error al cargar dispositivo vinculado: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  // Iniciar escucha de notificaciones no leídas
+  void _startListeningForReadNotifications() {
+    _notificationSubscription
+        ?.cancel(); // Cancelar suscripción anterior si existe
+
+    _notificationSubscription = _receptorService
+        .listenForSeenNotifications()
+        .listen(
+          (notifications) {
+            if (!mounted) return; // Verificar si el widget sigue montado
+
+            // Agrupar por día
+            final Map<String, List<Map<String, dynamic>>> grouped = {};
+            for (var notification in notifications) {
+              final timestamp = notification['timestamp'] as Timestamp?;
+              if (timestamp == null) continue;
+              final date = timestamp.toDate();
+              final dateKey =
+                  '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+              if (!grouped.containsKey(dateKey)) {
+                grouped[dateKey] = [];
+                if (!_expandedDays.containsKey(dateKey)) {
+                  _expandedDays[dateKey] = true;
+                }
+              }
+              grouped[dateKey]!.add(notification);
+            }
+
+            if (mounted) {
+              // Verificar nuevamente antes de setState
+              setState(() {
+                _notifications = notifications;
+                _groupedNotifications = grouped;
+              });
+            }
+          },
+          onError: (error) {
+            print(
+              'Error en la suscripción de notificaciones no leídas: $error',
+            );
+          },
+        );
+  }
+
+  // Toggle mejorado para local notifications
+  Future<void> _toggleNotifications(bool value) async {
+    if (value && await Permission.notification.isDenied) {
+      final status = await Permission.notification.request();
+      if (status.isDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Se requieren permisos de notificación para esta función',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Habilitar/deshabilitar notificaciones locales
+    await LocalNotificationService.setNotificationsEnabled(value);
+
+    if (value) {
+      // Mostrar mensaje de inicialización
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Inicializando servicio de notificaciones...'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Habilitar el servicio (esto manejará la inicialización automáticamente)
+      await NotificationListenerService.instance.setListeningEnabled(true);
+
+      // Mensaje de confirmación después de la inicialización
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Notificaciones locales habilitadas. Solo se mostrarán notificaciones nuevas.',
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      });
+    } else {
+      // Deshabilitar el servicio
+      await NotificationListenerService.instance.setListeningEnabled(false);
+    }
+
+    if (mounted) {
+      setState(() {
+        _notificationsEnabled = value;
+      });
+    }
+  }
+
+  Future<void> _deleteNotification(Map<String, dynamic> notification) async {
+    try {
+      final notificationId = notification['id'] as String?;
+      final timestamp = notification['timestamp'] as Timestamp?;
+      if (notificationId == null || timestamp == null) return;
+      final date = timestamp.toDate();
+      final dateId =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      // Usa tu servicio de Firebase para eliminar
+      await FirebaseService().deleteNotification(notificationId, dateId);
+    } catch (e) {
+      print('Error al eliminar notificación: \$e');
+    }
+  }
+
+  Widget _buildNotificationToggle() {
+    final isActive = _notificationsEnabled;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showSubtitle = !_showSubtitle;
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.all(0),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.green[50] : Colors.red[50],
+          border: Border.all(
+            color: isActive ? Colors.green : Colors.red,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        // margin: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mostrar notificaciones locales',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? Colors.green[900] : Colors.red[900],
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (_showSubtitle)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1.0),
+                      child: Text(
+                        'Muestra las notificaciones recibidas en la barra de notificaciones',
+                        style: TextStyle(
+                          color: isActive ? Colors.green[700] : Colors.red[700],
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Switch(
+              value: _notificationsEnabled,
+              onChanged: _toggleNotifications,
+              activeColor: Colors.green,
+              inactiveThumbColor: Colors.red,
+              inactiveTrackColor: Colors.red[200],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Método para formatear la fecha en formato legible
+  String _formatDate(String dateKey) {
+    try {
+      final parts = dateKey.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final day = int.parse(parts[2]);
+
+      final date = DateTime(year, month, day);
+      final now = DateTime.now();
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+
+      if (date.year == now.year &&
+          date.month == now.month &&
+          date.day == now.day) {
+        return 'Hoy';
+      } else if (date.year == yesterday.year &&
+          date.month == yesterday.month &&
+          date.day == yesterday.day) {
+        return 'Ayer';
+      } else {
+        // Formato: 25 Mayo 2023
+        final months = [
+          'Enero',
+          'Febrero',
+          'Marzo',
+          'Abril',
+          'Mayo',
+          'Junio',
+          'Julio',
+          'Agosto',
+          'Septiembre',
+          'Octubre',
+          'Noviembre',
+          'Diciembre',
+        ];
+        return '$day ${months[month - 1]} $year';
+      }
+    } catch (e) {
+      return dateKey; // En caso de error, devolver la clave original
+    }
+  }
+
+  // Método para formatear la hora
+  String _formatTime(DateTime timestamp) {
+    final hour = timestamp.hour.toString().padLeft(2, '0');
+    final minute = timestamp.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Receptor de Notificaciones'),
+        automaticallyImplyLeading: false,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(5.0),
+              child: SingleChildScrollView(
+                // Wrap the Column with SingleChildScrollView
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 8),
+                    // card para dispositivo vinculado
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => const BuscarEmisorScreen(),
+                          ),
+                        );
+                      },
+                      child: Card(
+                        margin: const EdgeInsets.all(0),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.link, color: Colors.green),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Dispositivo vinculado',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                    Text(
+                                      'ID: $_linkedDeviceId',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _buildNotificationToggle(),
+                    // const Divider(),
+                    // const SizedBox(height: 8),
+                    // const Text(
+                    //   'Notificaciones recibidas:',
+                    //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    // ),
+                    // const SizedBox(height: 8),
+                    // Remove Expanded from here
+                    _groupedNotifications.isEmpty
+                        ? const Center(
+                            child: Text('No hay notificaciones recibidas'),
+                          )
+                        : ListView(
+                            shrinkWrap: true, // Add shrinkWrap to ListView
+                            physics:
+                                NeverScrollableScrollPhysics(), // Disable ListView's own scrolling
+                            children: _groupedNotifications.entries.map((
+                              entry,
+                            ) {
+                              final dateKey = entry.key;
+                              final notifications = entry.value;
+                              final isExpanded = _expandedDays[dateKey] ?? true;
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ListTile(
+                                    title: Text(
+                                      _formatDate(dateKey),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: Icon(
+                                        isExpanded
+                                            ? Icons.expand_less
+                                            : Icons.expand_more,
+                                      ),
+                                      onPressed: () {
+                                        setState(() {
+                                          _expandedDays[dateKey] = !isExpanded;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                  if (isExpanded)
+                                    ...notifications.map((notification) {
+                                      return Dismissible(
+                                        key: UniqueKey(),
+                                        direction: DismissDirection.endToStart,
+                                        background: Container(
+                                          color: Colors.red,
+                                          alignment: Alignment.centerRight,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                          child: const Icon(
+                                            Icons.delete,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        onDismissed: (direction) async {
+                                          await _deleteNotification(
+                                            notification,
+                                          );
+                                        },
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    NotificationDetailScreen(
+                                                      notificationData:
+                                                          notification,
+                                                    ),
+                                              ),
+                                            );
+                                          },
+                                          child: Card(
+                                            margin: const EdgeInsets.only(
+                                              bottom: 8.0,
+                                              left: 1,
+                                              right: 1,
+                                            ),
+                                            child: ListTile(
+                                              title: Text(
+                                                notification['title'] ??
+                                                    'Sin título',
+                                              ),
+                                              subtitle: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    notification['text'] ??
+                                                        'Sin contenido',
+                                                  ),
+                                                  Text(
+                                                    'App: ${notification['appName'] ?? notification['packageName'] ?? 'Desconocida'}',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontStyle:
+                                                          FontStyle.italic,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              trailing: Text(
+                                                _formatTimestamp(
+                                                  notification['timestamp'],
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                  ],
+                ),
+              ),
+            ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 3,
+            color: customColor[700], // Barra divisoria con customColor
+          ),
+          BottomNavigationBar(
+            currentIndex:
+                1, // 0: Configuración, 1: Notificaciones, 2: No Leídas
+            onTap: (index) {
+              switch (index) {
+                case 0:
+                  Navigator.pushReplacementNamed(context, '/receptor_settings');
+                  break;
+                case 1:
+                  Navigator.pushReplacementNamed(context, '/receptor_settings');
+                  break;
+                case 2:
+                  Navigator.pushReplacementNamed(
+                    context,
+                    '/unread_notifications',
+                  );
+                  break;
+              }
+            },
+            selectedFontSize: 14.0,
+            unselectedFontSize: 12.0,
+            selectedIconTheme: const IconThemeData(size: 37.5),
+            unselectedIconTheme: const IconThemeData(size: 22.5),
+            selectedItemColor:
+                customColor[700], // Color para el ítem seleccionado
+            unselectedItemColor:
+                Colors.black, // Color para los ítems no seleccionados
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.settings),
+                label: 'Configuración',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(
+                  Icons.radio_button_checked,
+                  color: _notificationsEnabled ? Colors.green : Colors.red,
+                ),
+                label: 'Notificaciones',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.mark_email_unread),
+                label: 'No Leídas',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Formatear timestamp para mostrar
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return '';
+
+    final DateTime date = (timestamp as Timestamp).toDate();
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
 }

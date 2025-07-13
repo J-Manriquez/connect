@@ -1,6 +1,7 @@
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/preferences_service.dart'; // ✅ AGREGAR IMPORT
+import 'package:connect/services/device_finder_service.dart'; // ✅ AGREGAR IMPORT PARA TEST
 
 class SettingsScreen extends StatefulWidget {
   final bool isServiceRunning;
@@ -384,6 +385,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                 // ),
                               ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // ✅ BOTÓN DE TEST DE VIBRACIÓN TEMPORAL
+                  Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    elevation: 3,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Diagnóstico de Vibración',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () async {
+                              try {
+                                await DeviceFinderService.instance.testVibration();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Test de vibración ejecutado. Revisa los logs.'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error en test de vibración: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Probar Vibración'),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Este botón es temporal para diagnosticar problemas de vibración.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
                             ),
                           ),
                         ],

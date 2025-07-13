@@ -212,6 +212,17 @@ class _BuscarEmisorScreenState extends State<BuscarEmisorScreen> {
             duration: const Duration(seconds: 3),
           ),
         );
+        
+        // ✅ Si se desactivó la búsqueda, resetear el campo y volver a la pantalla anterior
+        // El listener de DeviceSearchService se encargará de detener el sonido/vibración automáticamente
+        if (!nuevoEstado) {
+          await DeviceSearchService.instance.resetBuscarEmisor();
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          });
+        }
       }
     } catch (e) {
       if (mounted) {

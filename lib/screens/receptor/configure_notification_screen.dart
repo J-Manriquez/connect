@@ -27,6 +27,7 @@ class _ConfigureNotificationScreenState
   bool _textSelected = false;
   bool _extrasSelected = false;
 
+
   @override
   void initState() {
     super.initState();
@@ -198,6 +199,8 @@ class _ConfigureNotificationScreenState
       ),
     );
   }
+
+
 
   void _showSuccessAndReturn(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -461,6 +464,8 @@ class _ConfigureNotificationScreenState
             ),
 
             const SizedBox(height: 16),
+
+
 
             // Información adicional
             Card(

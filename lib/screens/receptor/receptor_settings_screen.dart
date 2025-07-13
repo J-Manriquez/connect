@@ -749,69 +749,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                   ),
                 ),
 
-                const SizedBox(height: 8),
 
-                // Card de Debug Logs para Android 8.0
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: const Text(
-                            'Debugging Android 8.0',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.orange[100],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.bug_report,
-                              color: Colors.orange[700],
-                              size: 24,
-                            ),
-                          ),
-                          title: const Text(
-                            'Logs de Debugging',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          subtitle: const Text(
-                            'Ver logs en tiempo real de notificaciones\ny configuración para Android 8.0',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                          trailing: const Icon(Icons.arrow_forward_ios),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const DebugLogsScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ],
             ),
       bottomNavigationBar: Column(

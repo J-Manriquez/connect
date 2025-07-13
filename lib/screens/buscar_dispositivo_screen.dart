@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:connect/services/device_finder_service.dart';
+import 'package:connect/services/device_search_service.dart';
+import 'package:connect/services/preferences_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:math' as math;
@@ -73,6 +75,23 @@ class _BuscarDispositivoScreenState extends State<BuscarDispositivoScreen>
 
   Future<void> _stopSearch() async {
     await DeviceFinderService.instance.stopDeviceSearch();
+    
+    // ✅ Resetear el campo correspondiente en Firebase
+    try {
+      final DeviceSearchService deviceSearchService = DeviceSearchService.instance;
+      final bool disableAutoRedirect = await PreferencesService.getDisableAutoRedirect();
+      
+      if (disableAutoRedirect) {
+        // Es receptor, resetear buscar-receptor
+        await deviceSearchService.resetBuscarReceptor();
+      } else {
+        // Es emisor, resetear buscar-emisor
+        await deviceSearchService.resetBuscarEmisor();
+      }
+    } catch (e) {
+      print('Error al resetear campos de búsqueda: $e');
+    }
+    
     if (mounted) {
       Navigator.of(context).pop();
     }

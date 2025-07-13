@@ -378,6 +378,16 @@ class MainActivity: FlutterActivity() {
                         result.error("ERROR", "Error al detener búsqueda: ${e.message}", null)
                     }
                 }
+                "testVibration" -> {
+                    try {
+                        deviceFinderManager.testVibration()
+                        result.success(true)
+                        Log.d("MainActivity", "Test de vibración ejecutado")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al ejecutar test de vibración", e)
+                        result.error("ERROR", "Error en test de vibración: ${e.message}", null)
+                    }
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -424,10 +434,13 @@ class MainActivity: FlutterActivity() {
     
     private fun handleNavigationIntent(intent: Intent?) {
         intent?.getStringExtra("navigate_to")?.let { route ->
+            Log.d("MainActivity", "Navegación solicitada a: $route")
+            
             // Enviar el comando de navegación a Flutter
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     deviceFinderChannel.invokeMethod("navigateToRoute", route)
+                    Log.d("MainActivity", "Comando de navegación enviado a Flutter: $route")
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Error al navegar a $route", e)
                 }
@@ -438,6 +451,13 @@ class MainActivity: FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        
+        // ✅ MANEJO ESPECÍFICO PARA DEVICE_FINDER_ACTION
+        if (intent.action == "DEVICE_FINDER_ACTION") {
+            Log.d("MainActivity", "Intent de Device Finder recibido")
+            handleNavigationIntent(intent)
+            return
+        }
         
         // ✅ MANEJO ESPECÍFICO PARA ANDROID 8: Intent de activación de pantalla
         if (intent.action == "WAKE_SCREEN_ACTION" && intent.getBooleanExtra("wakeScreenOnly", false)) {
