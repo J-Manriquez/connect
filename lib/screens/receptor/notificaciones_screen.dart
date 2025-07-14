@@ -179,6 +179,9 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         );
       }
 
+      // Inicializar el receptor correctamente para evitar mostrar notificaciones históricas
+      await _receptorService.initializeReceptorWithoutNotifications();
+      
       // Habilitar el servicio (esto manejará la inicialización automáticamente)
       await NotificationListenerService.instance.setListeningEnabled(true);
 
@@ -197,6 +200,9 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         }
       });
     } else {
+      // Limpiar el estado del receptor al deshabilitar
+      _receptorService.clearReceptorState();
+      
       // Deshabilitar el servicio
       await NotificationListenerService.instance.setListeningEnabled(false);
     }

@@ -1,5 +1,6 @@
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
+import 'package:connect/services/notification_cache_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -323,6 +324,12 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
         final firebaseservice = FirebaseService();
         await firebaseservice.updateLinkStatus(false, deviceId);
       }
+
+      // Limpiar el estado del receptor para evitar mostrar notificaciones históricas
+      _receptorService.clearReceptorState();
+      
+      // Limpiar caché de notificaciones
+      await NotificationCacheService.cleanOldCache();
 
       await PreferencesService.saveUseAsReceptor(false);
       await LocalNotificationService.setNotificationsEnabled(false);

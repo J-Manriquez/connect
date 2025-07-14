@@ -197,6 +197,11 @@ class ReceptorService {
     }
   }
 
+  // Variables para rastrear notificaciones conocidas y evitar mostrar históricas
+  Map<String, Set<String>> _lastKnownNotificationIds = {}; // dateId -> Set<notificationId>
+  DateTime? _receptorStartTime;
+  bool _isReceptorInitialLoad = true;
+
   // Iniciar escucha de notificaciones desde Firebase
   Stream<List<Map<String, dynamic>>> listenForNotifications() async* {
     try {
@@ -207,6 +212,16 @@ class ReceptorService {
         yield [];
         return;
       }
+
+      // Marcar el tiempo de inicio del receptor
+      _receptorStartTime = DateTime.now();
+      _isReceptorInitialLoad = true;
+      
+      // Después de 5 segundos, permitir mostrar notificaciones nuevas
+      Future.delayed(const Duration(seconds: 5), () {
+        _isReceptorInitialLoad = false;
+        print('ReceptorService: Período inicial completado, ahora mostrando notificaciones nuevas');
+      });
 
       final DateTime now = DateTime.now();
       final String dateId =
@@ -227,6 +242,9 @@ class ReceptorService {
         final Map<String, dynamic> notificationsMap =
             snapshot.data()!['notificaciones'] as Map<String, dynamic>;
 
+        // Procesar solo notificaciones nuevas para mostrar localmente
+        _processNewNotificationsForLocalDisplay(notificationsMap, dateId);
+
         final List<Map<String, dynamic>> notificationsList = notificationsMap
             .entries
             .map((entry) {
@@ -235,8 +253,6 @@ class ReceptorService {
                   entry.key; // Agregar el ID de la notificación
 
               if (notif['timestamp'] is Timestamp) {
-                // Mostrar notificación local cuando se detecta una nueva
-                _showLocalNotificationIfNew(notif, entry.key);
                 return notif;
               } else {
                 return null;
@@ -260,6 +276,46 @@ class ReceptorService {
     }
   }
 
+  // Nuevo método para procesar solo notificaciones nuevas para mostrar localmente
+  void _processNewNotificationsForLocalDisplay(
+    Map<String, dynamic> currentNotificationsMap, 
+    String dateId
+  ) {
+    try {
+      final lastKnownIds = _lastKnownNotificationIds[dateId] ?? <String>{};
+      final currentIds = currentNotificationsMap.keys.toSet();
+      
+      // Encontrar solo las notificaciones realmente nuevas
+      final newNotificationIds = currentIds.difference(lastKnownIds);
+      
+      if (newNotificationIds.isNotEmpty && !_isReceptorInitialLoad) {
+        print('ReceptorService: ${newNotificationIds.length} nuevas notificaciones detectadas en $dateId');
+        
+        for (final notificationId in newNotificationIds) {
+          final notificationData = currentNotificationsMap[notificationId];
+          if (notificationData != null) {
+            // Verificar que la notificación sea posterior al inicio del receptor
+            if (_receptorStartTime != null && notificationData['timestamp'] is Timestamp) {
+              final notificationTime = (notificationData['timestamp'] as Timestamp).toDate();
+              if (notificationTime.isAfter(_receptorStartTime!)) {
+                _showLocalNotificationIfNew(notificationData, notificationId);
+              } else {
+                print('ReceptorService: Notificación anterior al inicio del receptor ignorada: $notificationId');
+              }
+            }
+          }
+        }
+      } else if (_isReceptorInitialLoad) {
+        print('ReceptorService: Carga inicial - ${currentIds.length} notificaciones existentes ignoradas');
+      }
+      
+      // Actualizar el estado conocido
+      _lastKnownNotificationIds[dateId] = currentIds;
+    } catch (e) {
+      print('ReceptorService: Error al procesar notificaciones nuevas: $e');
+    }
+  }
+
   // Método privado para mostrar notificación local cuando se detecta una nueva
   // Método mejorado para inicializar el receptor sin mostrar notificaciones existentes
   Future<void> initializeReceptorWithoutNotifications() async {
@@ -270,20 +326,44 @@ class ReceptorService {
         return;
       }
   
-      // Obtener todas las notificaciones existentes
-      final existingNotifications = await getStoredNotifications();
+      // Limpiar estado previo
+      _lastKnownNotificationIds.clear();
+      _receptorStartTime = DateTime.now();
+      _isReceptorInitialLoad = true;
   
-      // Crear un Set con los IDs de notificaciones existentes
-      final Set<String> existingNotificationIds = existingNotifications
-          .map((notification) => notification.id)
-          .toSet();
+      // Obtener todas las notificaciones existentes y marcarlas como conocidas
+      final snapshot = await _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones')
+          .get();
+      
+      Set<String> allExistingIds = {};
+      
+      for (var dayDoc in snapshot.docs) {
+        final data = dayDoc.data();
+        if (data.containsKey('notificaciones')) {
+          final notificationsMap = Map<String, dynamic>.from(data['notificaciones']);
+          final notificationIds = notificationsMap.keys.toSet();
+          
+          // Almacenar IDs conocidos por fecha
+          _lastKnownNotificationIds[dayDoc.id] = notificationIds;
+          allExistingIds.addAll(notificationIds);
+        }
+      }
   
       // Usar el nuevo servicio de caché
-      await NotificationCacheService.registerPreExistingNotifications(existingNotificationIds);
+      await NotificationCacheService.registerPreExistingNotifications(allExistingIds);
   
       print(
-        'Receptor inicializado. ${existingNotificationIds.length} notificaciones existentes registradas como pre-existentes.',
+        'Receptor inicializado. ${allExistingIds.length} notificaciones existentes registradas como pre-existentes.',
       );
+      
+      // Después de 3 segundos, permitir mostrar notificaciones nuevas
+      Future.delayed(const Duration(seconds: 3), () {
+        _isReceptorInitialLoad = false;
+        print('ReceptorService: Inicialización completada, listo para mostrar notificaciones nuevas');
+      });
     } catch (e) {
       print('Error al inicializar receptor: $e');
     }
@@ -645,6 +725,14 @@ class ReceptorService {
       print('Error al extraer fecha del ID: $e');
     }
     return null;
+  }
+
+  // Método para limpiar el estado del receptor al desconectar
+  void clearReceptorState() {
+    _lastKnownNotificationIds.clear();
+    _receptorStartTime = null;
+    _isReceptorInitialLoad = true;
+    print('ReceptorService: Estado del receptor limpiado');
   }
 
   // Obtener el estado del dispositivo emisor
