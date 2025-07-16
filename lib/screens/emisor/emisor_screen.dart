@@ -56,6 +56,7 @@ class _EmisorScreenState extends State<EmisorScreen>
     _loadDeviceId();
     _checkLinkStatus();
     _loadStoredNotifications(); // Cargar notificaciones almacenadas
+    _checkAndAutoStartServiceIfNeeded(); // ✅ Verificar y activar servicio si es necesario
 
     // Crear un stream que se ejecute cada 2 segundos para actualizar las notificaciones
     _updateStream = Stream.periodic(const Duration(seconds: 2));
@@ -72,6 +73,41 @@ class _EmisorScreenState extends State<EmisorScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialRoute(context);
     });
+  }
+
+  // ✅ NUEVO MÉTODO PARA VERIFICAR Y ACTIVAR SERVICIO AUTOMÁTICAMENTE
+  Future<void> _checkAndAutoStartServiceIfNeeded() async {
+    try {
+      // Esperar un poco para que se carguen las preferencias
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Verificar si está configurado como emisor
+      final isConfiguredAsEmisor = await PreferencesService.getDisableAutoRedirect();
+      
+      // Verificar si está configurado como emisor, permisos concedidos pero servicio inactivo
+      if (isConfiguredAsEmisor && !widget.isServiceRunning) {
+        print('EmisorScreen: Emisor detectado inactivo - Notificando al usuario');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('El servicio del emisor está inactivo. Ve a Configuración para activarlo.'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: 'IR A CONFIGURACIÓN',
+                textColor: Colors.white,
+                onPressed: () {
+                  Navigator.pushNamed(context, '/settings');
+                },
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error al verificar estado del servicio en EmisorScreen: $e');
+    }
   }
 
   // Cargar el ID del dispositivo desde SharedPreferences
@@ -118,6 +154,7 @@ class _EmisorScreenState extends State<EmisorScreen>
       _filterNotifications();
       _checkLinkStatus();
       _loadStoredNotifications(); // Actualizar notificaciones almacenadas
+      _checkAndAutoStartServiceIfNeeded(); // ✅ Verificar servicio al volver al primer plano
     }
   }
 

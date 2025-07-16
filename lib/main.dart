@@ -193,7 +193,13 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
 
   // Método para iniciar automáticamente el servicio si es necesario
   Future<void> _autoStartServiceIfNeeded() async {
-    if (!_isServiceRunning && _isPermissionGranted) {
+    // Verificar si la app está configurada como emisor
+    final isConfiguredAsEmisor = await PreferencesService.getDisableAutoRedirect();
+    
+    // Solo iniciar automáticamente si está configurado como emisor,
+    // los permisos están concedidos y el servicio no está corriendo
+    if (isConfiguredAsEmisor && !_isServiceRunning && _isPermissionGranted) {
+      print('App configurada como emisor - Iniciando servicio automáticamente');
       await _startService();
     }
   }
@@ -390,6 +396,20 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   // ✅ SOLUCIÓN: Método para asegurar que los servicios estén activos
   Future<void> _ensureServicesActive() async {
     try {
+      // Verificar estado actual del servicio y permisos
+      await _checkServiceStatus();
+      await _checkPermissionStatus();
+      
+      // Verificar si la app está configurada como emisor
+      final isConfiguredAsEmisor = await PreferencesService.getDisableAutoRedirect();
+      
+      // Si está configurado como emisor, permisos concedidos pero servicio inactivo,
+      // reactivar automáticamente
+      if (isConfiguredAsEmisor && !_isServiceRunning && _isPermissionGranted) {
+        print('Emisor detectado inactivo - Reactivando servicio automáticamente');
+        await _startService();
+      }
+      
       await NotificationListenerService.instance.ensureServiceActive();
     } catch (e) {
       print('Error ensuring services active: $e');

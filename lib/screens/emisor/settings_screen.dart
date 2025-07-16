@@ -39,6 +39,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadAutoRedirectPreference(); // Cargar la preferencia al inicializar
+    _checkAndAutoStartServiceIfNeeded(); // Verificar y activar servicio si es necesario
+  }
+
+  // ✅ NUEVO MÉTODO PARA VERIFICAR Y ACTIVAR SERVICIO AUTOMÁTICAMENTE
+  Future<void> _checkAndAutoStartServiceIfNeeded() async {
+    try {
+      // Esperar un poco para que se carguen las preferencias
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Verificar si está configurado como emisor, permisos concedidos pero servicio inactivo
+      if (_disableAutoRedirect && widget.isPermissionGranted && !widget.isServiceRunning) {
+        print('SettingsScreen: Emisor detectado inactivo - Activando servicio automáticamente');
+        widget.startService();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Servicio reactivado automáticamente para el emisor'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error al verificar y activar servicio automáticamente: $e');
+    }
   }
 
   // ✅ NUEVO MÉTODO PARA CARGAR LA PREFERENCIA
@@ -82,6 +109,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _disableAutoRedirect = value;
         });
 
+        // ✅ NUEVA FUNCIONALIDAD: Si se configura como emisor (value = true),
+        // verificar y activar automáticamente el servicio si es necesario
+        if (value && widget.isPermissionGranted && !widget.isServiceRunning) {
+          print('Configurado como emisor - Activando servicio automáticamente');
+          widget.startService();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Servicio activado automáticamente para el emisor'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
       }
     } catch (e) {
       print('Error al cambiar preferencia de redirección automática: $e');
