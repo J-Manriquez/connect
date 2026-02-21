@@ -1,0 +1,216 @@
+ESTADO ACTUAL - PUENTE DE NOTIFICACIONES POR BLUETOOTH (SIN INTERNET)
+
+Objetivo
+- Enviar notificaciones en un solo sentido: EMISOR -> RECEPTOR.
+- Caso real esperado:
+  - Teléfono (Samsung S22 Ultra): EMISOR (captura notificaciones del sistema).
+  - Tablet Android 9: RECEPTOR (muestra notificaciones locales).
+- La conexión se implementó con Bluetooth clásico (RFCOMM/SPP), no BLE.
+
+
+Arquitectura (alto nivel)
+1) Emisor (Android nativo)
+  - Servicio: NotificationListener (NotificationListenerService) en primer plano.
+  - Captura notificaciones del sistema y decide si enviarlas por Bluetooth.
+  - Envío por Bluetooth: BtClassicClient (RFCOMM/SPP) hacia una MAC guardada.
+
+2) Receptor (Android nativo)
+  - Servicio: BtClassicServerService (Service) en primer plano.
+  - Mantiene un server socket RFCOMM aceptando conexiones entrantes.
+  - Recibe mensajes JSON por socket y crea una notificación local (LocalNotificationManager).
+
+3) Flutter (UI + preferencias)
+  - Pantalla de selección de dispositivo (emisor): guarda la MAC del receptor y solicita conexión.
+  - Pantalla debug del receptor: permite iniciar el servidor y pedir visibilidad temporal.
+  - PreferencesService almacena banderas y la dirección del peer (MAC) en SharedPreferences.
+  - Nota: el módulo Flutter se llama “BleService” y las pantallas se llaman “BLE”, pero hoy el flujo real usa Bluetooth clásico.
+
+
+Componentes principales (archivos clave)
+ANDROID (Kotlin)
+- EMISOR:
+  - android/app/src/main/kotlin/com/example/connect/NotificationListener.kt
+    - onCreate: inicializa BtClassicClient y conecta automáticamente si hay MAC guardada.
+    - onNotificationPosted: filtra y envía JSON al receptor si está habilitado.
+  - android/app/src/main/kotlin/com/example/connect/BtClassicClient.kt
+    - Cliente RFCOMM/SPP con reconexión automática (backoff).
+
+- RECEPTOR:
+  - android/app/src/main/kotlin/com/example/connect/BtClassicServerService.kt
+    - Servidor RFCOMM/SPP en primer plano (START_STICKY).
+    - Acepta sockets y lee payloads (frame: int longitud + bytes).
+  - android/app/src/main/kotlin/com/example/connect/LocalNotificationManager.kt
+    - Muestra notificaciones locales y aplica ajustes (sonido, auto-open, screen wake).
+
+- PUENTE FLUTTER <-> ANDROID:
+  - android/app/src/main/kotlin/com/example/connect/MainActivity.kt
+    - Canal: BLE_CHANNEL (misnomer) usado para:
+      - requestBlePermissions
+      - startBtServer/stopBtServer (inicia/para BtClassicServerService)
+      - startBtDiscovery/stopBtDiscovery (descubrimiento clásico)
+      - connectToPeer (BtClassicClient.connect)
+      - sendNotification (BtClassicClient.send)
+
+FLUTTER (Dart)
+- lib/services/ble_service.dart
+  - MethodChannel('com.example.connect/ble')
+  - API usada por pantallas:
+    - requestPermissions()
+    - startBleScan()/stopBleScan() -> en realidad llama a startBtDiscovery/stopBtDiscovery (clásico)
+    - getBondedDevices()
+    - connectToPeer(address) -> conecta BtClassicClient en Android
+    - startBtServer()/stopBtServer()
+    - makeDiscoverable()
+
+- lib/screens/emisor/seleccion_bl_screen.dart
+  - Lista dispositivos emparejados y encontrados (por discovery).
+  - Al “Conectar”:
+    - PreferencesService.saveBlePeerAddress(address)
+    - BleService.connectToPeer(address)
+
+- lib/screens/receptor/receptor_ble_signal_screen.dart
+  - Botones para:
+    - iniciar servidor: BleService.startBtServer()
+    - pedir visibilidad 5 min: BleService.makeDiscoverable(seconds: 300)
+  - Captura logStream para diagnóstico.
+
+- lib/services/preferences_service.dart
+  - Guarda:
+    - ble_enabled (flutter.ble_enabled)
+    - ble_peer_address (flutter.ble_peer_address)
+    - otras flags de rol/auto redirección.
+
+
+Protocolo de datos (sobre RFCOMM)
+- En el cliente (BtClassicClient):
+  - Se envía un frame: 4 bytes (Int, tamaño) + bytes UTF-8 con JSON.
+  - Si falla el envío, cierra socket y programa reconexión.
+
+- En el servidor (BtClassicServerService):
+  - Lee un Int (len), valida rango (0 < len <= 256KB), luego readFully(len).
+  - Interpreta el payload como String UTF-8.
+  - Parsea JSON y extrae campos:
+    - title, text, packageName, appName, id
+  - Llama LocalNotificationManager.showNotification(...)
+
+
+Flujo real de uso (paso a paso)
+RECEPTOR (Tablet Android 9)
+1) Emparejar (bond) la tablet con el teléfono en Ajustes -> Bluetooth.
+2) Abrir la app en la tablet.
+3) Ir a pantalla de diagnóstico del receptor:
+   - Ruta Flutter: '/receptor_ble_signal'
+4) Pulsar:
+   - “Receptor Bluetooth iniciado” (startBtServer).
+   - “Visibilidad solicitada (5 min)” si hace falta que el teléfono lo detecte por discovery.
+5) Con esto queda un servidor RFCOMM escuchando y mostrando notificaciones locales al recibir JSON.
+
+EMISOR (Samsung S22 Ultra)
+1) Conceder permiso de acceso a notificaciones (NotificationListener).
+2) Activar el servicio del emisor (si aplica desde UI).
+3) Ir a selección de dispositivo:
+   - Ruta Flutter: '/ble_devices'
+4) Seleccionar la tablet por MAC y pulsar “Conectar”.
+   - Esto guarda la MAC y conecta BtClassicClient.
+5) Generar una notificación en una app permitida:
+   - NotificationListener filtra por lista de apps habilitadas.
+   - Si pasa el filtro, manda JSON por BtClassicClient al receptor.
+6) La tablet muestra la notificación local (LocalNotificationManager).
+
+
+Filtros de notificaciones (qué se envía)
+- El emisor ignora paquetes excluidos (por seguridad y para evitar loops):
+  - com.example.connect, android, com.android.systemui, com.android.settings
+- Además, antes de enviar por Bluetooth, el emisor consulta las apps habilitadas:
+  - AppListService(this).getEnabledPackages()
+  - Solo envía si packageName está en esa lista.
+- Aun así, la notificación siempre se envía al MethodChannel “onNotificationReceived” para el flujo Firebase existente.
+
+
+Permisos relevantes
+- Declarados en AndroidManifest.xml (android/app/src/main/AndroidManifest.xml):
+  - BLUETOOTH / BLUETOOTH_ADMIN (legacy)
+  - BLUETOOTH_SCAN / BLUETOOTH_CONNECT / BLUETOOTH_ADVERTISE (Android 12+)
+  - ACCESS_FINE_LOCATION (Android < 12 para discovery/scan)
+  - FOREGROUND_SERVICE (+ DATA_SYNC), WAKE_LOCK, etc.
+- requestBlePermissions (MainActivity) solicita en runtime:
+  - Android 12+: BLUETOOTH_SCAN, BLUETOOTH_CONNECT, BLUETOOTH_ADVERTISE
+  - Android < 12: ACCESS_FINE_LOCATION
+
+
+Reconexión automática (estado actual)
+- BtClassicClient implementa reconexión con backoff exponencial:
+  - delay = min(1000ms * 2^attempt, 30000ms)
+  - Se agenda al fallar connect() o send().
+- NotificationListener intenta conectar en onCreate si:
+  - flutter.ble_enabled == true
+  - flutter.ble_peer_address no está vacío
+
+
+Qué funciona hoy (resumen)
+- Compila y construye APK.
+- Emisor:
+  - Captura notificaciones del sistema.
+  - Filtra por apps habilitadas.
+  - Envía JSON por RFCOMM a la MAC guardada.
+  - Reconecta automáticamente cuando hay fallos.
+- Receptor:
+  - Corre servidor RFCOMM como servicio en primer plano.
+  - Recibe JSON y muestra notificación local.
+  - Permite solicitar visibilidad temporal desde la UI de debug.
+
+
+Pendientes / mejoras recomendadas (para continuar el trabajo)
+1) Nombres y limpieza de la API (deuda técnica)
+  - “BleService”, “BleDeviceSelectionScreen”, “BleScan” hoy hacen funciones de Bluetooth clásico.
+  - Recomendación: renombrar a “BtClassicService” / “BluetoothService” para evitar confusión.
+
+2) Duplicados en MainActivity
+  - Hay casos duplicados en el handler del canal BLE (ej. connectToPeer / startBleScan repetidos).
+  - Recomendación: eliminar duplicados para evitar comportamientos inconsistentes.
+
+3) Estado de conexión hacia Flutter (UX)
+  - Hoy Flutter no recibe un estado claro: conectado / conectando / desconectado / reintentando.
+  - Recomendación: EventChannel para exponer estado y últimos errores.
+
+4) Arranque automático del servidor en receptor
+  - BtClassicServerService se inicia desde UI (pantalla de debug).
+  - Recomendación: arrancar automáticamente si el dispositivo está configurado como receptor (y/o en BOOT_COMPLETED si aplica).
+
+5) Seguridad / autenticación de peer
+  - RFCOMM usa emparejamiento, pero el server acepta cualquier conexión entrante.
+  - Recomendación: handshake de aplicación (token, deviceId, o challenge-response) y lista blanca por MAC.
+
+6) Robustez del protocolo
+  - El frame actual depende de readInt/readFully; si se corrompe el stream, se corta la conexión.
+  - Recomendación: versionar payload (version), validar campos mínimos, limitar tamaños de title/text y normalizar nulls.
+
+7) Manejo de Bluetooth apagado / permisos faltantes (autocuración)
+  - En varios puntos se “retorna” silenciosamente si Bluetooth está apagado.
+  - Recomendación: notificar al usuario y reintentar cuando el adaptador se habilite.
+
+8) Multi-socket y lifecycle en receptor
+  - El server permite múltiples sockets, pero no hay control de “peer principal”.
+  - Recomendación: cerrar conexiones previas al aceptar una nueva si solo se espera 1 emisor.
+
+9) Integración con el flujo existente (Firebase) y modo offline total
+  - Hoy el emisor sigue enviando a Flutter para Firebase además de Bluetooth.
+  - Si el objetivo es “sin internet”, se puede:
+    - desactivar/evitar escrituras a Firebase cuando ble_enabled está activo
+    - o hacer que el receptor también persista localmente (cache) si se requiere histórico.
+
+10) UX de pairing/visibilidad
+  - El flujo depende de que el usuario empareje manualmente y, a veces, de pedir visibilidad.
+  - Recomendación: guiar desde UI con pasos claros y detección de estado (bonded/visible).
+
+
+Notas prácticas para depuración
+- En el receptor, usar '/receptor_ble_signal' para iniciar servidor y ver logs.
+- En el emisor, si no aparecen dispositivos:
+  - emparejar primero en Ajustes Bluetooth,
+  - activar visibilidad en el receptor,
+  - comprobar permisos (Android 12+: scan/connect).
+- Si no llegan notificaciones:
+  - verificar que la app esté en la lista de apps habilitadas (AppListService),
+  - verificar que flutter.ble_peer_address esté guardado,
+  - verificar que el servicio de notificaciones del emisor esté activo.

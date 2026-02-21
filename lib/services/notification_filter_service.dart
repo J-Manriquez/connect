@@ -30,7 +30,7 @@ class NotificationFilterService {
       
       return filteredNotifications;
     } on PlatformException catch (e) {
-      print('Error al filtrar notificaciones: ${e.message}');
+      // print('Error al filtrar notificaciones: ${e.message}');
       // En caso de error, devolver una lista vacía de notificaciones
       return [];
     }
@@ -50,7 +50,7 @@ class NotificationFilterService {
       // Verificar si el paquete está en la lista de habilitados
       return enabledPackages.contains(packageName);
     } on PlatformException catch (e) {
-      print('Error al verificar notificación: ${e.message}');
+      // print('Error al verificar notificación: ${e.message}');
       // En caso de error, NO permitir mostrar la notificación
       return false;
     }
@@ -82,7 +82,7 @@ class NotificationFilterService {
         return enabledPackages;
       }
     } catch (e) {
-      print('Error al obtener lista de apps desde Firebase: $e');
+      // print('Error al obtener lista de apps desde Firebase: $e');
     }
     
     // Si no hay datos en Firebase o hubo un error, usar el método nativo
@@ -108,11 +108,11 @@ class NotificationFilterService {
   // Método para sincronizar las apps habilitadas con Firebase
   static Future<void> syncEnabledAppsWithFirebase() async {
     try {
-      print('Iniciando sincronización con Firebase...');
+      // print('Iniciando sincronización con Firebase...');
       
       // Obtener los paquetes habilitados desde el dispositivo
       final List<dynamic> nativeEnabledPackages = await platform.invokeMethod('getEnabledPackages');
-      print('Paquetes habilitados obtenidos: ${nativeEnabledPackages.length}');
+      // print('Paquetes habilitados obtenidos: ${nativeEnabledPackages.length}');
       
       // Obtener todas las aplicaciones instaladas
       final List<dynamic> result = await platform.invokeMethod('getInstalledApps');
@@ -120,10 +120,10 @@ class NotificationFilterService {
         return Map<String, dynamic>.from(item as Map);
       }).toList();
       
-      print('Total de paquetes obtenidos: ${allPackages.length}');
+      // print('Total de paquetes obtenidos: ${allPackages.length}');
       
       if (allPackages.isEmpty) {
-        print('No se encontraron aplicaciones para sincronizar');
+        // print('No se encontraron aplicaciones para sincronizar');
         return;
       }
       
@@ -137,7 +137,7 @@ class NotificationFilterService {
         ));
       }
       
-      print('Sincronizando ${appList.length} aplicaciones con Firebase');
+      // print('Sincronizando ${appList.length} aplicaciones con Firebase');
       
       // Guardar en Firebase
       await _firebaseService.updateAppList(appList);
@@ -146,10 +146,10 @@ class NotificationFilterService {
       _cachedEnabledPackages = nativeEnabledPackages;
       _lastCacheUpdate = DateTime.now();
       
-      print('Sincronización con Firebase completada exitosamente');
+      // print('Sincronización con Firebase completada exitosamente');
       
     } catch (e) {
-      print('Error al sincronizar apps con Firebase: $e');
+      // print('Error al sincronizar apps con Firebase: $e');
     }
   }
 }

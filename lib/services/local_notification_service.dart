@@ -43,7 +43,7 @@ class LocalNotificationService {
         final String notificationId = data['notificationId'] ?? '';
         if (notificationId.isNotEmpty) {
           await DismissedNotificationsService.markAsDismissed(notificationId);
-          print('Notificación marcada como eliminada desde Android: $notificationId');
+          // print('Notificación marcada como eliminada desde Android: $notificationId');
         }
         break;
     }
@@ -58,9 +58,9 @@ class LocalNotificationService {
         'cancelledIds': dismissedList,
       });
       
-      print('Sincronizadas ${dismissedList.length} notificaciones canceladas con Android');
+      // print('Sincronizadas ${dismissedList.length} notificaciones canceladas con Android');
     } catch (e) {
-      print('Error al sincronizar notificaciones canceladas: $e');
+      // print('Error al sincronizar notificaciones canceladas: $e');
     }
   }
   
@@ -81,13 +81,13 @@ class LocalNotificationService {
   }) async {
     // Verificar si las notificaciones están habilitadas
     if (!await areNotificationsEnabled()) {
-      print('Notificaciones deshabilitadas, no se muestra: $notificationId');
+      // print('Notificaciones deshabilitadas, no se muestra: $notificationId');
       return;
     }
     
     // Verificar si la notificación fue eliminada previamente
     if (await DismissedNotificationsService.isDismissed(notificationId)) {
-      print('Notificación previamente eliminada, no se muestra: $notificationId');
+      // print('Notificación previamente eliminada, no se muestra: $notificationId');
       return;
     }
 
@@ -104,7 +104,7 @@ class LocalNotificationService {
     final notificationSettingsService = NotificationSettingsService();
     final isBlocked = await notificationSettingsService.shouldBlockNotification(notificationData);
     if (isBlocked) {
-      print('Notificación bloqueada por configuración personalizada: $notificationId');
+      // print('Notificación bloqueada por configuración personalizada: $notificationId');
       return;
     }
     
@@ -128,32 +128,32 @@ class LocalNotificationService {
     final hasCustomSound = customSoundConfig != null;
     final effectiveSoundEnabled = hasCustomSound ? false : soundEnabled; // Deshabilitar sonido nativo si hay sonido personalizado
     
-    print('🔍 Vibración habilitada en configuración: $isVibrationEnabledInSettings');
-    print('🔍 Vibración habilitada en notificación: $vibrationEnabled');
-    print('🔍 Configuración personalizada de vibración: $hasCustomVibration');
-    print('🔍 Configuración personalizada de sonido: $hasCustomSound');
-    print('🔍 Se ejecutará vibración después del auto-open: $shouldVibrate');
+    // print('🔍 Vibración habilitada en configuración: $isVibrationEnabledInSettings');
+    // print('🔍 Vibración habilitada en notificación: $vibrationEnabled');
+    // print('🔍 Configuración personalizada de vibración: $hasCustomVibration');
+    // print('🔍 Configuración personalizada de sonido: $hasCustomSound');
+    // print('🔍 Se ejecutará vibración después del auto-open: $shouldVibrate');
     
     // ✅ DEBUGGING: Verificar valores en SharedPreferences
-     print('=== VALORES EN SHAREDPREFERENCES ===');
-     print('KEY_SCREEN_WAKE_ENABLED ($KEY_SCREEN_WAKE_ENABLED): $screenWakeEnabled');
-     print('KEY_AUTO_OPEN_ENABLED ($KEY_AUTO_OPEN_ENABLED): $autoOpenEnabled');
-     print('Todas las claves: ${prefs.getKeys()}');
-     print('🔍 VERIFICACIÓN CRÍTICA: autoOpenEnabled = $autoOpenEnabled');
-     print('====================================');
+     // print('=== VALORES EN SHAREDPREFERENCES ===');
+     // print('KEY_SCREEN_WAKE_ENABLED ($KEY_SCREEN_WAKE_ENABLED): $screenWakeEnabled');
+     // print('KEY_AUTO_OPEN_ENABLED ($KEY_AUTO_OPEN_ENABLED): $autoOpenEnabled');
+     // print('Todas las claves: ${prefs.getKeys()}');
+     // print('🔍 VERIFICACIÓN CRÍTICA: autoOpenEnabled = $autoOpenEnabled');
+     // print('====================================');
     
     // ✅ CAMBIO: Auto-open ahora funciona independientemente de screen wake
     final effectiveAutoOpenEnabled = autoOpenEnabled; // Sin dependencia de screenWakeEnabled
     
     // ✅ LOGGING mejorado
-    print('=== CONFIGURACIÓN DE NOTIFICACIÓN ===');
-    print('Screen Wake Enabled: $screenWakeEnabled');
-    print('Auto Open Requested: $autoOpenEnabled');
-    print('Auto Open Effective: $effectiveAutoOpenEnabled (independiente)');
-    print('Sound Enabled: $soundEnabled');
-    print('Vibration Enabled: $vibrationEnabled');
-    print('Notification ID: $notificationId');
-    print('=====================================');
+    // print('=== CONFIGURACIÓN DE NOTIFICACIÓN ===');
+    // print('Screen Wake Enabled: $screenWakeEnabled');
+    // print('Auto Open Requested: $autoOpenEnabled');
+    // print('Auto Open Effective: $effectiveAutoOpenEnabled (independiente)');
+    // print('Sound Enabled: $soundEnabled');
+    // print('Vibration Enabled: $vibrationEnabled');
+    // print('Notification ID: $notificationId');
+    // print('=====================================');
     
     try {
       // ✅ PRIMERO: Enviar notificación al lado nativo (esto activará auto-open inmediatamente)
@@ -169,7 +169,7 @@ class LocalNotificationService {
         'autoOpenEnabled': effectiveAutoOpenEnabled, // ✅ Usar valor efectivo
       });
       
-      print('Notificación enviada exitosamente a Android');
+      // print('Notificación enviada exitosamente a Android');
       
       // ✅ SEGUNDO: Ejecutar sonido personalizado si está configurado
       if (hasCustomSound) {
@@ -178,12 +178,12 @@ class LocalNotificationService {
           if (soundId != null) {
             final customSound = await CustomSoundService.getSoundById(soundId);
             if (customSound != null) {
-              print('🔊 Reproduciendo sonido personalizado: ${customSound.name}');
+              // print('🔊 Reproduciendo sonido personalizado: ${customSound.name}');
               await CustomSoundService.playSound(customSound);
             }
           }
         } catch (e) {
-          print('❌ Error al reproducir sonido personalizado: $e');
+          // print('❌ Error al reproducir sonido personalizado: $e');
         }
       }
       
@@ -195,44 +195,44 @@ class LocalNotificationService {
             final pattern = customVibrationConfig!['pattern'] as List<dynamic>?;
             if (pattern != null) {
               final vibrationPattern = pattern.cast<int>();
-              print('🔊 Ejecutando patrón de vibración personalizado de configuración');
+              // print('🔊 Ejecutando patrón de vibración personalizado de configuración');
               await VibrationPatternService.playPatternFromList(vibrationPattern);
             }
           } else {
             // Usar patrón seleccionado globalmente
             final selectedPattern = await VibrationPatternService.getSelectedPattern();
             if (selectedPattern != null) {
-              print('🔊 Ejecutando patrón de vibración global después del auto-open: ${selectedPattern.name}');
+              // print('🔊 Ejecutando patrón de vibración global después del auto-open: ${selectedPattern.name}');
               await VibrationPatternService.playPattern(selectedPattern);
             } else {
-              print('🔊 No hay patrón seleccionado, usando vibración simple después del auto-open');
+              // print('🔊 No hay patrón seleccionado, usando vibración simple después del auto-open');
               await Vibration.vibrate(duration: 500);
             }
           }
         } catch (e) {
-          print('❌ Error al ejecutar vibración después del auto-open: $e');
+          // print('❌ Error al ejecutar vibración después del auto-open: $e');
           // Fallback a vibración simple
           try {
             await Vibration.vibrate(duration: 500);
           } catch (fallbackError) {
-            print('❌ Error en vibración de fallback después del auto-open: $fallbackError');
+            // print('❌ Error en vibración de fallback después del auto-open: $fallbackError');
           }
         }
       } else if (!isVibrationEnabledInSettings && !hasCustomVibration) {
-        print('⚠️ Vibración deshabilitada en configuración, saltando vibración');
+        // print('⚠️ Vibración deshabilitada en configuración, saltando vibración');
       } else {
-        print('⚠️ Vibración deshabilitada para esta notificación, saltando vibración');
+        // print('⚠️ Vibración deshabilitada para esta notificación, saltando vibración');
       }
       
     } catch (e) {
-      print('Error al mostrar notificación: $e');
+      // print('Error al mostrar notificación: $e');
     }
   }
   
   // ✅ CAMBIO: Validación simplificada sin dependencia entre configuraciones
   static Future<bool> validateConfiguration() async {
     // Ya no hay dependencias entre auto-open y screen wake
-    print('Configuración validada - Auto-open independiente de screen wake');
+    // print('Configuración validada - Auto-open independiente de screen wake');
     return true;
   }
   
@@ -242,7 +242,7 @@ class LocalNotificationService {
     
     // Auto-open ahora funciona independientemente
     await prefs.setBool(KEY_AUTO_OPEN_ENABLED, enabled);
-    print('Auto-open ${enabled ? 'habilitado' : 'deshabilitado'} (independiente de screen wake)');
+    // print('Auto-open ${enabled ? 'habilitado' : 'deshabilitado'} (independiente de screen wake)');
     
     // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL EN EL LADO NATIVO
     await _updateNativeSettings();
@@ -255,7 +255,7 @@ class LocalNotificationService {
         'notificationId': notificationId,
       });
     } catch (e) {
-      print('Error al cancelar notificación: $e');
+      // print('Error al cancelar notificación: $e');
     }
   }
   
@@ -331,12 +331,12 @@ class LocalNotificationService {
         'soundEnabled': soundEnabled,
       });
       
-      print('⚡ CONFIGURACIÓN NATIVA ACTUALIZADA EN TIEMPO REAL:');
-      print('   screenWakeEnabled: $screenWakeEnabled');
-      print('   autoOpenEnabled: $autoOpenEnabled');
-      print('   soundEnabled: $soundEnabled');
+      // print('⚡ CONFIGURACIÓN NATIVA ACTUALIZADA EN TIEMPO REAL:');
+      // print('   screenWakeEnabled: $screenWakeEnabled');
+      // print('   autoOpenEnabled: $autoOpenEnabled');
+      // print('   soundEnabled: $soundEnabled');
     } catch (e) {
-      print('❌ Error al actualizar configuración nativa: $e');
+      // print('❌ Error al actualizar configuración nativa: $e');
     }
   }
 }

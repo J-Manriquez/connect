@@ -42,7 +42,7 @@ class _VibrationPatternsScreenState extends State<VibrationPatternsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error al cargar patrones: $e');
+      // print('Error al cargar patrones: $e');
       setState(() {
         _isLoading = false;
       });
@@ -73,7 +73,7 @@ class _VibrationPatternsScreenState extends State<VibrationPatternsScreen> {
         );
       }
     } catch (e) {
-      print('Error al seleccionar patrón: $e');
+      // print('Error al seleccionar patrón: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al seleccionar patrón: $e'),
@@ -159,7 +159,7 @@ class _VibrationPatternsScreenState extends State<VibrationPatternsScreen> {
         ),
       );
     } catch (e) {
-      print('❌ Error en test de vibración: $e');
+      // print('❌ Error en test de vibración: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error en test de vibración: $e'),

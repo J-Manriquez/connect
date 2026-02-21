@@ -54,7 +54,7 @@ class _NotificationSoundSelectionScreenState
         _isLoading = false;
       });
     } catch (e) {
-      print('Error al cargar sonidos: $e');
+      // print('Error al cargar sonidos: $e');
       setState(() {
         _isLoading = false;
       });
@@ -96,7 +96,7 @@ class _NotificationSoundSelectionScreenState
         }
       });
     } catch (e) {
-      print('Error al reproducir sonido: $e');
+      // print('Error al reproducir sonido: $e');
       setState(() {
         _currentlyPlayingId = null;
       });
@@ -116,7 +116,7 @@ class _NotificationSoundSelectionScreenState
         _currentlyPlayingId = null;
       });
     } catch (e) {
-      print('Error al detener sonido: $e');
+      // print('Error al detener sonido: $e');
     }
   }
 
@@ -159,7 +159,7 @@ class _NotificationSoundSelectionScreenState
         }
       }
     } catch (e) {
-      print('Error al agregar sonido: $e');
+      // print('Error al agregar sonido: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al agregar sonido: $e'),
@@ -251,7 +251,7 @@ class _NotificationSoundSelectionScreenState
         }
       }
     } catch (e) {
-      print('Error al guardar configuración: $e');
+      // print('Error al guardar configuración: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

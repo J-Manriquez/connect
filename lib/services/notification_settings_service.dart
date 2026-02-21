@@ -21,7 +21,7 @@ class NotificationSettingsService {
           .map((doc) => NotificationSettings.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      print('Error al obtener configuraciones de notificaciones: $e');
+      // print('Error al obtener configuraciones de notificaciones: $e');
       return [];
     }
   }
@@ -37,10 +37,10 @@ class NotificationSettingsService {
           .doc(settings.id)
           .set(settings.toMap());
 
-      print('Configuración de notificación guardada: ${settings.id}');
+      // print('Configuración de notificación guardada: ${settings.id}');
       return true;
     } catch (e) {
-      print('Error al guardar configuración de notificación: $e');
+      // print('Error al guardar configuración de notificación: $e');
       return false;
     }
   }
@@ -58,10 +58,10 @@ class NotificationSettingsService {
           .doc(settings.id)
           .update(updatedSettings.toMap());
 
-      print('Configuración de notificación actualizada: ${settings.id}');
+      // print('Configuración de notificación actualizada: ${settings.id}');
       return true;
     } catch (e) {
-      print('Error al actualizar configuración de notificación: $e');
+      // print('Error al actualizar configuración de notificación: $e');
       return false;
     }
   }
@@ -77,10 +77,10 @@ class NotificationSettingsService {
           .doc(settingsId)
           .delete();
 
-      print('Configuración de notificación eliminada: $settingsId');
+      // print('Configuración de notificación eliminada: $settingsId');
       return true;
     } catch (e) {
-      print('Error al eliminar configuración de notificación: $e');
+      // print('Error al eliminar configuración de notificación: $e');
       return false;
     }
   }
@@ -101,7 +101,7 @@ class NotificationSettingsService {
       }
       return null;
     } catch (e) {
-      print('Error al obtener configuración de notificación: $e');
+      // print('Error al obtener configuración de notificación: $e');
       return null;
     }
   }
@@ -113,14 +113,14 @@ class NotificationSettingsService {
       
       for (final setting in settings) {
         if (setting.bloqueado && setting.matchesNotification(notification)) {
-          print('Notificación bloqueada por configuración: ${setting.id}');
+          // print('Notificación bloqueada por configuración: ${setting.id}');
           return true;
         }
       }
       
       return false;
     } catch (e) {
-      print('Error al verificar bloqueo de notificación: $e');
+      // print('Error al verificar bloqueo de notificación: $e');
       return false;
     }
   }
@@ -134,7 +134,7 @@ class NotificationSettingsService {
         if (setting.vibrationEnabled && setting.matchesNotification(notification)) {
           final vibrationConfig = setting.additionalData['vibration'];
           if (vibrationConfig != null) {
-            print('Configuración de vibración personalizada encontrada: ${setting.id}');
+            // print('Configuración de vibración personalizada encontrada: ${setting.id}');
             return Map<String, dynamic>.from(vibrationConfig);
           }
         }
@@ -142,7 +142,7 @@ class NotificationSettingsService {
       
       return null;
     } catch (e) {
-      print('Error al obtener configuración de vibración: $e');
+      // print('Error al obtener configuración de vibración: $e');
       return null;
     }
   }
@@ -156,7 +156,7 @@ class NotificationSettingsService {
         if (setting.soundEnabled && setting.matchesNotification(notification)) {
           final soundConfig = setting.additionalData['sound'];
           if (soundConfig != null) {
-            print('Configuración de sonido personalizada encontrada: ${setting.id}');
+            // print('Configuración de sonido personalizada encontrada: ${setting.id}');
             return Map<String, dynamic>.from(soundConfig);
           }
         }
@@ -164,7 +164,7 @@ class NotificationSettingsService {
       
       return null;
     } catch (e) {
-      print('Error al obtener configuración de sonido: $e');
+      // print('Error al obtener configuración de sonido: $e');
       return null;
     }
   }
@@ -185,10 +185,10 @@ class NotificationSettingsService {
             'updatedAt': Timestamp.now(),
           });
 
-      print('Configuración de vibración actualizada: $settingsId');
+      // print('Configuración de vibración actualizada: $settingsId');
       return true;
     } catch (e) {
-      print('Error al actualizar configuración de vibración: $e');
+      // print('Error al actualizar configuración de vibración: $e');
       return false;
     }
   }
@@ -209,10 +209,10 @@ class NotificationSettingsService {
             'updatedAt': Timestamp.now(),
           });
 
-      print('Configuración de sonido actualizada: $settingsId');
+      // print('Configuración de sonido actualizada: $settingsId');
       return true;
     } catch (e) {
-      print('Error al actualizar configuración de sonido: $e');
+      // print('Error al actualizar configuración de sonido: $e');
       return false;
     }
   }
@@ -232,7 +232,7 @@ class NotificationSettingsService {
                 .toList();
           });
     }).handleError((error) {
-      print('Error en stream de configuraciones: $error');
+      // print('Error en stream de configuraciones: $error');
       return <NotificationSettings>[];
     });
   }
@@ -250,7 +250,7 @@ class NotificationSettingsService {
       
       return null;
     } catch (e) {
-      print('Error al buscar configuración coincidente: $e');
+      // print('Error al buscar configuración coincidente: $e');
       return null;
     }
   }

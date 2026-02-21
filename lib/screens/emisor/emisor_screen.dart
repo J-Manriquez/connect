@@ -85,28 +85,28 @@ class _EmisorScreenState extends State<EmisorScreen>
       final isConfiguredAsEmisor = await PreferencesService.getDisableAutoRedirect();
       
       // Verificar si está configurado como emisor, permisos concedidos pero servicio inactivo
-      if (isConfiguredAsEmisor && !widget.isServiceRunning) {
-        print('EmisorScreen: Emisor detectado inactivo - Notificando al usuario');
+      // if (isConfiguredAsEmisor && !widget.isServiceRunning) {
+      //   // print('EmisorScreen: Emisor detectado inactivo - Notificando al usuario');
         
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('El servicio del emisor está inactivo. Ve a Configuración para activarlo.'),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 4),
-              action: SnackBarAction(
-                label: 'IR A CONFIGURACIÓN',
-                textColor: Colors.white,
-                onPressed: () {
-                  Navigator.pushNamed(context, '/settings');
-                },
-              ),
-            ),
-          );
-        }
-      }
+      //   if (mounted) {
+      //     ScaffoldMessenger.of(context).showSnackBar(
+      //       SnackBar(
+      //         content: const Text('El servicio del emisor está inactivo. Ve a Configuración para activarlo.'),
+      //         backgroundColor: Colors.orange,
+      //         duration: const Duration(seconds: 4),
+      //         action: SnackBarAction(
+      //           label: 'IR A CONFIGURACIÓN',
+      //           textColor: Colors.white,
+      //           onPressed: () {
+      //             Navigator.pushNamed(context, '/settings');
+      //           },
+      //         ),
+      //       ),
+      //     );
+      //   }
+      // }
     } catch (e) {
-      print('Error al verificar estado del servicio en EmisorScreen: $e');
+      // print('Error al verificar estado del servicio en EmisorScreen: $e');
     }
   }
 
@@ -134,7 +134,7 @@ class _EmisorScreenState extends State<EmisorScreen>
         });
       }
     } catch (e) {
-      print('Error al verificar estado de vinculación: $e');
+      // print('Error al verificar estado de vinculación: $e');
     }
   }
 
@@ -216,9 +216,9 @@ class _EmisorScreenState extends State<EmisorScreen>
         _isLoading = false;
       });
 
-      // print('Notificaciones cargadas desde Firebase: ${notifications.length}');
+      // // print('Notificaciones cargadas desde Firebase: ${notifications.length}');
     } catch (e) {
-      print('Error al cargar notificaciones desde Firebase: $e');
+      // print('Error al cargar notificaciones desde Firebase: $e');
       setState(() {
         _isLoading = false;
       });
@@ -234,15 +234,13 @@ class _EmisorScreenState extends State<EmisorScreen>
         final uniqueId = notification.id;
         // 2. Convertir el String de milisegundos a un entero
         final int millisecondsSinceEpoch = int.parse(uniqueId);
-        print('Milisegundos (int): $millisecondsSinceEpoch');
+        // print('Milisegundos (int): $millisecondsSinceEpoch');
 
         // 3. Crear un objeto DateTime a partir de los milisegundos
         final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
           millisecondsSinceEpoch,
         );
-        print(
-          'Objeto DateTime: $dateTimeObject',
-        ); // Esto mostrará la fecha y la hora completas
+        // print(          'Objeto DateTime: $dateTimeObject',        ); // Esto mostrará la fecha y la hora completas
 
         // 4. Formatear el objeto DateTime a "aaaa-mm-dd"
         // Para esto, nos aseguramos de que el mes y el día tengan dos dígitos (ej. 05 en lugar de 5)
@@ -268,7 +266,7 @@ class _EmisorScreenState extends State<EmisorScreen>
         await _loadStoredNotifications();
       }
     } catch (e) {
-      print('Error al marcar notificación como leída: $e');
+      // print('Error al marcar notificación como leída: $e');
     }
   }
 
@@ -278,15 +276,13 @@ class _EmisorScreenState extends State<EmisorScreen>
       final uniqueId = notification.id;
       // 2. Convertir el String de milisegundos a un entero
       final int millisecondsSinceEpoch = int.parse(uniqueId);
-      print('Milisegundos (int): $millisecondsSinceEpoch');
+      // print('Milisegundos (int): $millisecondsSinceEpoch');
 
       // 3. Crear un objeto DateTime a partir de los milisegundos
       final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
         millisecondsSinceEpoch,
       );
-      print(
-        'Objeto DateTime: $dateTimeObject',
-      ); // Esto mostrará la fecha y la hora completas
+      // print(        'Objeto DateTime: $dateTimeObject',      ); // Esto mostrará la fecha y la hora completas
 
       // 4. Formatear el objeto DateTime a "aaaa-mm-dd"
       // Para esto, nos aseguramos de que el mes y el día tengan dos dígitos (ej. 05 en lugar de 5)
@@ -307,7 +303,7 @@ class _EmisorScreenState extends State<EmisorScreen>
       // Recargar notificaciones después de eliminar
       await _loadStoredNotifications();
     } catch (e) {
-      print('Error al eliminar notificación: $e');
+      // print('Error al eliminar notificación: $e');
     }
   }
 
@@ -965,12 +961,10 @@ Future<void> _checkInitialRoute(BuildContext context) async {
 
     // ✅ AGREGAR LOG PARA DEBUG
     if (linkStatus && disableAutoRedirect) {
-      print(
-        '[DEBUG] Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor',
-      );
+      // print(        '[DEBUG] Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor',      );
     }
   } catch (e, stack) {
-    print('Error al verificar ruta inicial: $e');
-    print('Stacktrace: $stack');
+    // print('Error al verificar ruta inicial: $e');
+    // print('Stacktrace: $stack');
   }
 }

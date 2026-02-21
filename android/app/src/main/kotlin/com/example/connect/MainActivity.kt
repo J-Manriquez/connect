@@ -9,12 +9,19 @@ import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
 import android.view.WindowManager // ✅ Agregar import
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.content.Context
+import android.content.BroadcastReceiver
 import android.app.ActivityManager
+import android.os.PowerManager
+import android.net.Uri
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.content.IntentFilter
 
 
 
@@ -25,15 +32,28 @@ class MainActivity: FlutterActivity() {
     private val RECEPTOR_CHANNEL = "com.example.connect/local_notifications" // Para LocalNotificationManager (RECEPTOR)
     private val DEVICE_FINDER_CHANNEL = "com.example.connect/device_finder" // ✅ NUEVO CANAL
     private val SOUND_CHANNEL = "com.example.connect/notification_sound" // ✅ CANAL PARA SONIDOS PERSONALIZADOS
+    private val SOUND_EVENTS_CHANNEL = "com.example.connect/sound_events"
+    private val BATTERY_CHANNEL = "com.example.connect/battery" // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
+    private val BLE_CHANNEL = "com.example.connect/ble"
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
     private lateinit var deviceFinderChannel: MethodChannel // ✅ NUEVO CANAL
     internal lateinit var soundChannel: MethodChannel // ✅ CANAL PARA SONIDOS PERSONALIZADOS
+    private lateinit var soundEventsChannel: EventChannel
+    private var soundEventsSink: EventChannel.EventSink? = null
+    private lateinit var batteryChannel: MethodChannel // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
+    private lateinit var bleChannel: MethodChannel
     private lateinit var appListService: AppListService
     private lateinit var localNotificationManager: LocalNotificationManager
     private lateinit var vibrationManager: VibrationManager
     private lateinit var deviceFinderManager: DeviceFinderManager // ✅ NUEVO SERVICIO
+    private var bleGattServerManager: BleGattServerManager? = null
+    private var bleGattClientManager: BleGattClientManager? = null
+
+    private var btAdapter: BluetoothAdapter? = null
+    private var btDiscoveryReceiver: BroadcastReceiver? = null
+    private var btDiscoveryRegistered: Boolean = false
 
     companion object {
         var instance: MainActivity? = null
@@ -48,7 +68,7 @@ class MainActivity: FlutterActivity() {
         appListService = AppListService(this)
         localNotificationManager = LocalNotificationManager(this)
         vibrationManager = VibrationManager(this)
-        deviceFinderManager = DeviceFinderManager(this) // ✅ INICIALIZAR SERVICIO
+        deviceFinderManager = DeviceFinderManager.getInstance(this) // ✅ INICIALIZAR SERVICIO
 
         // Canal para EMISOR (NotificationListener)
         emisorChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EMISOR_CHANNEL)
@@ -66,6 +86,20 @@ class MainActivity: FlutterActivity() {
         
         // ✅ CANAL PARA SONIDOS PERSONALIZADOS
         soundChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SOUND_CHANNEL)
+        soundEventsChannel = EventChannel(flutterEngine.dartExecutor.binaryMessenger, SOUND_EVENTS_CHANNEL)
+        soundEventsChannel.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                soundEventsSink = events
+            }
+            override fun onCancel(arguments: Any?) {
+                soundEventsSink = null
+            }
+        })
+        
+        // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
+        batteryChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_CHANNEL)
+        bleChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BLE_CHANNEL)
+        btAdapter = BluetoothAdapter.getDefaultAdapter()
         
         // Iniciar automáticamente el servicio si el permiso está concedido
         if (isNotificationServiceEnabled()) {
@@ -415,8 +449,406 @@ class MainActivity: FlutterActivity() {
             }
         }
         
+        // ✅ CONFIGURAR MANEJADOR PARA CANAL DE OPTIMIZACIÓN DE BATERÍA
+        batteryChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestBatteryOptimizationPermission" -> {
+                    try {
+                        requestBatteryOptimizationPermission()
+                        result.success(true)
+                        Log.d("MainActivity", "Solicitud de permisos de optimización de batería iniciada")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al solicitar permisos de optimización de batería", e)
+                        result.error("ERROR", "Error al solicitar permisos: ${e.message}", null)
+                    }
+                }
+                "isBatteryOptimizationIgnored" -> {
+                    try {
+                        val isIgnored = isBatteryOptimizationIgnored()
+                        result.success(isIgnored)
+                        Log.d("MainActivity", "Estado de optimización de batería: $isIgnored")
+                    } catch (e: Exception) {
+                        Log.e("MainActivity", "Error al verificar estado de optimización de batería", e)
+                        result.error("ERROR", "Error al verificar estado: ${e.message}", null)
+                    }
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        bleChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "requestBlePermissions" -> {
+                    try {
+                        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+                        if (adapter != null && !adapter.isEnabled) {
+                            startActivity(Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            requestPermissions(arrayOf(
+                                android.Manifest.permission.BLUETOOTH_SCAN,
+                                android.Manifest.permission.BLUETOOTH_CONNECT,
+                                android.Manifest.permission.BLUETOOTH_ADVERTISE
+                            ), 1001)
+                        } else {
+                            requestPermissions(arrayOf(
+                                android.Manifest.permission.ACCESS_FINE_LOCATION
+                            ), 1002)
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "openLocationSettings" -> {
+                    try {
+                        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "startBtServer" -> {
+                    try {
+                        val i = Intent(this, BtClassicServerService::class.java).setAction(BtClassicServerService.ACTION_START)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "stopBtServer" -> {
+                    try {
+                        val i = Intent(this, BtClassicServerService::class.java).setAction(BtClassicServerService.ACTION_STOP)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "getBtServerStatus" -> {
+                    try {
+                        result.success(
+                            mapOf(
+                                "running" to BtClassicServerService.isServiceRunning,
+                                "connectedCount" to BtClassicServerService.connectedPeers,
+                                "lastPeerAddress" to BtClassicServerService.lastPeerAddress,
+                                "lastPeerName" to BtClassicServerService.lastPeerName,
+                                "lastMediaUpdatedAtMs" to BtClassicServerService.lastMediaUpdatedAtMs
+                            )
+                        )
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "getLastBtMediaState" -> {
+                    try {
+                        val prefs = applicationContext.getSharedPreferences("bt_media_cache_v1", Context.MODE_PRIVATE)
+                        val json = prefs.getString("media_json", null)
+                        val updatedAtMs = prefs.getLong("updatedAtMs", 0L)
+                        result.success(mapOf("json" to json, "updatedAtMs" to updatedAtMs))
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "sendBtServerMessage" -> {
+                    try {
+                        val args = call.arguments as Map<String, Any?>
+                        val json = org.json.JSONObject(args).toString()
+                        val i = Intent(this, BtClassicServerService::class.java)
+                            .setAction(BtClassicServerService.ACTION_SEND_TO_PEERS)
+                            .putExtra(BtClassicServerService.EXTRA_JSON, json)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "getBondedDevices" -> {
+                    try {
+                        val adapter = btAdapter
+                        val bonded = adapter?.bondedDevices?.map { d ->
+                            mapOf(
+                                "address" to d.address,
+                                "name" to (d.name ?: ""),
+                                "bondState" to d.bondState
+                            )
+                        } ?: emptyList()
+                        result.success(bonded)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "startBtDiscovery" -> {
+                    try {
+                        startBtDiscovery()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "stopBtDiscovery" -> {
+                    try {
+                        stopBtDiscovery()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "makeDiscoverable" -> {
+                    try {
+                        val seconds = (call.argument<Int>("seconds") ?: 300).coerceIn(60, 3600)
+                        val intent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
+                        intent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, seconds)
+                        startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "startGattServer" -> {
+                    try {
+                        if (bleGattServerManager == null) bleGattServerManager = BleGattServerManager(this, bleChannel)
+                        bleGattServerManager?.start()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "stopGattServer" -> {
+                    try {
+                        bleGattServerManager?.stop()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "sendConnectionPing" -> {
+                    try {
+                        bleGattServerManager?.sendConnectionPing()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "startGattClient" -> {
+                    try {
+                        if (bleGattClientManager == null) bleGattClientManager = BleGattClientManager(this, bleChannel)
+                        bleGattClientManager?.start()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "stopGattClient" -> {
+                    try {
+                        bleGattClientManager?.stop()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "startBleScan" -> {
+                    try {
+                        if (bleGattClientManager == null) bleGattClientManager = BleGattClientManager(this, bleChannel)
+                        bleGattClientManager?.startScanOnly()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "stopBleScan" -> {
+                    try {
+                        bleGattClientManager?.stopScanOnly()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "connectToPeer" -> {
+                    try {
+                        val address = call.argument<String>("address")
+                        if (address != null) {
+                            BtClassicClient.init(this)
+                            BtClassicClient.connect(address)
+                            result.success(true)
+                        } else {
+                            result.error("INVALID_ARGS", "address requerido", null)
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "startBleScan" -> {
+                    try {
+                        if (bleGattClientManager == null) bleGattClientManager = BleGattClientManager(this, bleChannel)
+                        bleGattClientManager?.startScanOnly()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "stopBleScan" -> {
+                    try {
+                        bleGattClientManager?.stopScanOnly()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "connectToPeer" -> {
+                    try {
+                        val address = call.argument<String>("address")
+                        if (address != null) {
+                            BtClassicClient.init(this)
+                            BtClassicClient.connect(address)
+                            result.success(true)
+                        } else {
+                            result.error("INVALID_ARGS", "address requerido", null)
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "sendNotification" -> {
+                    try {
+                        val args = call.arguments as Map<String, Any?>
+                        val json = org.json.JSONObject(args).toString()
+                        BtClassicClient.init(this)
+                        BtClassicClient.send(json)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "getAdapterInfo" -> {
+                    try {
+                        val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
+                        val name = adapter?.name ?: ""
+                        val address = adapter?.address ?: ""
+                        result.success(mapOf("name" to name, "address" to address))
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "getBleEnv" -> {
+                    try {
+                        val bm = getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
+                        val adapter = bm.adapter
+                        val enabled = adapter?.isEnabled == true
+                        val hasScanPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_SCAN) == android.content.pm.PackageManager.PERMISSION_GRANTED else true
+                        val hasConnectPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT) == android.content.pm.PackageManager.PERMISSION_GRANTED else true
+                        val hasFineLocation = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED else true
+                        val lm = getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+                        val locationEnabled = try { lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) || lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { false }
+                        result.success(mapOf(
+                            "enabled" to enabled,
+                            "hasScanPerm" to hasScanPerm,
+                            "hasConnectPerm" to hasConnectPerm,
+                            "hasFineLocation" to hasFineLocation,
+                            "locationEnabled" to locationEnabled
+                        ))
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "shareLogFile" -> {
+                    try {
+                        val path = call.argument<String>("path")
+                        val mime = call.argument<String>("mime") ?: "text/plain"
+                        val pkg = call.argument<String>("package")
+                        if (path != null) {
+                            val file = java.io.File(path)
+                            val uri = androidx.core.content.FileProvider.getUriForFile(this, this.packageName + ".fileprovider", file)
+                            val intent = Intent(Intent.ACTION_SEND)
+                            intent.type = mime
+                            intent.putExtra(Intent.EXTRA_STREAM, uri)
+                            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            if (pkg != null && pkg.isNotEmpty()) {
+                                try {
+                                    packageManager.getPackageInfo(pkg, 0)
+                                    intent.`package` = pkg
+                                } catch (_: Exception) { /* paquete no disponible */ }
+                            }
+                            startActivity(Intent.createChooser(intent, "Compartir log"))
+                            result.success(true)
+                        } else {
+                            result.error("INVALID_ARGS", "path requerido", null)
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "updateWidget" -> {
+                    try {
+                        MediaWidgetProvider.updateAll(applicationContext)
+                        MediaWidgetProviderStyle2.updateAll(applicationContext)
+                        MediaWidgetProviderStyle3.updateAll(applicationContext)
+                        MediaWidgetProviderStyle4.updateAll(applicationContext)
+                        MediaWidgetProviderStyle5.updateAll(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        
         // Verificar si se debe navegar a una pantalla específica
         handleNavigationIntent(intent)
+    }
+
+    private fun startBtDiscovery() {
+        val adapter = btAdapter ?: return
+        if (!adapter.isEnabled) return
+        if (adapter.isDiscovering) {
+            try { adapter.cancelDiscovery() } catch (_: Exception) {}
+        }
+        if (!btDiscoveryRegistered) {
+            btDiscoveryReceiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    val action = intent?.action ?: return
+                    if (action == BluetoothDevice.ACTION_FOUND) {
+                        val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                        val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0).toInt()
+                        if (device != null) {
+                            try {
+                                bleChannel.invokeMethod(
+                                    "onBleScanResult",
+                                    mapOf(
+                                        "address" to device.address,
+                                        "name" to (device.name ?: ""),
+                                        "rssi" to rssi,
+                                        "ping" to false,
+                                        "compatible" to true
+                                    )
+                                )
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
+            }
+            val filter = IntentFilter()
+            filter.addAction(BluetoothDevice.ACTION_FOUND)
+            registerReceiver(btDiscoveryReceiver, filter)
+            btDiscoveryRegistered = true
+        }
+        adapter.startDiscovery()
+    }
+
+    private fun stopBtDiscovery() {
+        val adapter = btAdapter
+        if (adapter != null && adapter.isDiscovering) {
+            try { adapter.cancelDiscovery() } catch (_: Exception) {}
+        }
+        if (btDiscoveryRegistered) {
+            try { unregisterReceiver(btDiscoveryReceiver) } catch (_: Exception) {}
+            btDiscoveryReceiver = null
+            btDiscoveryRegistered = false
+        }
     }
 
 
@@ -447,10 +879,32 @@ class MainActivity: FlutterActivity() {
             }, 1000) // Esperar 1 segundo para que Flutter esté listo
         }
     }
+
+    private fun handleMediaLaunchIntent(intent: Intent?): Boolean {
+        if (intent?.action != "MEDIA_LAUNCH_ACTION") return false
+        val pkg = intent.getStringExtra("packageName")?.trim().orEmpty()
+        try {
+            if (pkg.isNotBlank()) {
+                val launch = packageManager.getLaunchIntentForPackage(pkg)
+                if (launch != null) {
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(launch)
+                }
+            }
+        } catch (_: Exception) {
+        }
+        try {
+            intent.removeExtra("packageName")
+        } catch (_: Exception) {
+        }
+        return true
+    }
     
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+
+        if (handleMediaLaunchIntent(intent)) return
         
         // ✅ MANEJO ESPECÍFICO PARA DEVICE_FINDER_ACTION
         if (intent.action == "DEVICE_FINDER_ACTION") {
@@ -474,7 +928,6 @@ class MainActivity: FlutterActivity() {
                     setTurnScreenOn(true)
                     
                     window.addFlags(
-                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                         WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                         WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
                         WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
@@ -512,6 +965,7 @@ class MainActivity: FlutterActivity() {
     
     override fun onResume() {
         super.onResume()
+        if (handleMediaLaunchIntent(intent)) return
         handleNotificationIntent(intent)
     }
     
@@ -572,11 +1026,6 @@ class MainActivity: FlutterActivity() {
                             Log.d("MainActivity", "Usando métodos para Android 8.1+ (API 27+)")
                             setShowWhenLocked(true)
                             setTurnScreenOn(true)
-                            
-                            // Para Android 10+ agregar flag adicional
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                            }
                         }
                         // Android 8.0 (API 26) - Manejo específico
                         Build.VERSION.SDK_INT == Build.VERSION_CODES.O -> {
@@ -593,7 +1042,6 @@ class MainActivity: FlutterActivity() {
                             window.addFlags(
                                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
                             )
                         }
@@ -603,7 +1051,6 @@ class MainActivity: FlutterActivity() {
                             window.addFlags(
                                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
                                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                                 WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
                             )
                         }
@@ -611,8 +1058,6 @@ class MainActivity: FlutterActivity() {
                     
                     // ✅ MEJORAR: Manejo específico para segundo plano SOLO si screenWakeEnabled
                     if (fromBackground) {
-                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                        
                         // ✅ CORREGIR: Mover tarea al frente de forma segura
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                             try {
@@ -709,6 +1154,50 @@ class MainActivity: FlutterActivity() {
 
     fun notifyAppListUpdated() {
         appListChannel.invokeMethod("onAppListUpdated", null)
+    }
+    
+    // ✅ MÉTODOS PARA OPTIMIZACIÓN DE BATERÍA
+    private fun requestBatteryOptimizationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val packageName = packageName
+            
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    intent.data = Uri.parse("package:$packageName")
+                    startActivity(intent)
+                    Log.d("MainActivity", "Solicitando permisos de optimización de batería para: $packageName")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error al solicitar permisos de optimización de batería", e)
+                    // Fallback: abrir configuración general de optimización de batería
+                    try {
+                        val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        startActivity(fallbackIntent)
+                        Log.d("MainActivity", "Abriendo configuración general de optimización de batería")
+                    } catch (fallbackException: Exception) {
+                        Log.e("MainActivity", "Error al abrir configuración de optimización de batería", fallbackException)
+                    }
+                }
+            } else {
+                Log.d("MainActivity", "La aplicación ya está exenta de optimización de batería")
+            }
+        } else {
+            Log.d("MainActivity", "Optimización de batería no disponible en esta versión de Android")
+        }
+    }
+    
+    private fun isBatteryOptimizationIgnored(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val packageName = packageName
+            val isIgnored = powerManager.isIgnoringBatteryOptimizations(packageName)
+            Log.d("MainActivity", "Estado de optimización de batería para $packageName: $isIgnored")
+            isIgnored
+        } else {
+            Log.d("MainActivity", "Optimización de batería no disponible en esta versión de Android")
+            true // En versiones anteriores, consideramos que no hay optimización
+        }
     }
     
 }

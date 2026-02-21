@@ -28,21 +28,21 @@ class DeviceFinderService {
     switch (call.method) {
       case 'navigateToRoute':
         final String route = call.arguments as String;
-        print('DeviceFinderService: Navegación solicitada a $route');
+        // print('DeviceFinderService: Navegación solicitada a $route');
         
         if (navigatorKey?.currentState != null) {
           try {
             navigatorKey!.currentState!.pushNamed(route);
-            print('DeviceFinderService: Navegación exitosa a $route');
+            // print('DeviceFinderService: Navegación exitosa a $route');
           } catch (e) {
-            print('DeviceFinderService: Error navegando a $route: $e');
+            // print('DeviceFinderService: Error navegando a $route: $e');
           }
         } else {
-          print('DeviceFinderService: NavigatorKey no disponible');
+          // print('DeviceFinderService: NavigatorKey no disponible');
         }
         break;
       default:
-        print('DeviceFinderService: Método no implementado: ${call.method}');
+        // print('DeviceFinderService: Método no implementado: ${call.method}');
     }
   }
 
@@ -61,7 +61,7 @@ class DeviceFinderService {
         navigatorKey!.currentState!.pushNamed('/buscar_dispositivo');
       }
       
-      print('DeviceFinderService: Búsqueda de dispositivo iniciada');
+      // print('DeviceFinderService: Búsqueda de dispositivo iniciada');
       
       // Auto-detener después de 30 segundos si no se detiene manualmente
       _searchTimer = Timer(const Duration(seconds: 30), () {
@@ -69,7 +69,7 @@ class DeviceFinderService {
       });
       
     } catch (e) {
-      print('Error al iniciar búsqueda de dispositivo: $e');
+      // print('Error al iniciar búsqueda de dispositivo: $e');
       _isSearching = false;
     }
   }
@@ -93,19 +93,19 @@ class DeviceFinderService {
         if (disableAutoRedirect) {
           // Es receptor, resetear buscar-receptor en el dispositivo emisor
           await DeviceSearchService.instance.resetBuscarReceptor();
-          print('DeviceFinderService: Campo buscar-receptor reseteado (dispositivo receptor)');
+          // print('DeviceFinderService: Campo buscar-receptor reseteado (dispositivo receptor)');
         } else {
           // Es emisor, resetear buscar-emisor en el dispositivo receptor
           await DeviceSearchService.instance.resetBuscarEmisor();
-          print('DeviceFinderService: Campo buscar-emisor reseteado (dispositivo emisor)');
+          // print('DeviceFinderService: Campo buscar-emisor reseteado (dispositivo emisor)');
         }
       } catch (e) {
-        print('DeviceFinderService: Error al resetear campos de Firebase: $e');
+        // print('DeviceFinderService: Error al resetear campos de Firebase: $e');
       }
       
-      print('DeviceFinderService: Búsqueda de dispositivo detenida');
+      // print('DeviceFinderService: Búsqueda de dispositivo detenida');
     } catch (e) {
-      print('Error al detener búsqueda de dispositivo: $e');
+      // print('Error al detener búsqueda de dispositivo: $e');
     }
   }
 
@@ -115,9 +115,9 @@ class DeviceFinderService {
   Future<void> testVibration() async {
     try {
       await _channel.invokeMethod('testVibration');
-      print('DeviceFinderService: Test de vibración ejecutado');
+      // print('DeviceFinderService: Test de vibración ejecutado');
     } catch (e) {
-      print('Error al ejecutar test de vibración: $e');
+      // print('Error al ejecutar test de vibración: $e');
     }
   }
 

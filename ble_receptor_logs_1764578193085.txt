@@ -1,0 +1,51 @@
+Nombre: ULTRA Ai 3
+Dirección: 02:00:00:00:00:00
+
+[2025-12-01T05:36:02.456196][env] enabled=true scanPerm=true connectPerm=true fineLocation=true locationEnabled=true
+[2025-12-01T05:36:08.621751][ui] send_ping
+[2025-12-01T05:36:08.621][flutter] sendConnectionPing {
+ "source": "flutter",
+ "event": "sendConnectionPing",
+ "timestamp": 1764578168621
+}
+[2025-12-01T05:36:08.622][server] ping_start {
+ "source": "server",
+ "event": "ping_start",
+ "timestamp": 1764578168622
+}
+[2025-12-01T05:36:08.624][server] advertising_stopped {
+ "source": "server",
+ "event": "advertising_stopped",
+ "timestamp": 1764578168624
+}
+[2025-12-01T05:36:08.633][server] ping_advertising_started {
+ "source": "server",
+ "event": "ping_advertising_started",
+ "timestamp": 1764578168633
+}
+[2025-12-01T05:36:08.651][server] ping_advertise_success {
+ "mode": null,
+ "connectable": true,
+ "tx": 3,
+ "source": "server",
+ "event": "ping_advertise_success",
+ "timestamp": 1764578168651
+}
+[2025-12-01T05:36:13.636][server] ping_advertising_stopped {
+ "source": "server",
+ "event": "ping_advertising_stopped",
+ "timestamp": 1764578173636
+}
+[2025-12-01T05:36:13.640][server] advertising_resumed {
+ "source": "server",
+ "event": "advertising_resumed",
+ "timestamp": 1764578173640
+}
+[2025-12-01T05:36:13.660][server] advertise_success {
+ "mode": null,
+ "connectable": true,
+ "tx": 3,
+ "source": "server",
+ "event": "advertise_success",
+ "timestamp": 1764578173660
+}

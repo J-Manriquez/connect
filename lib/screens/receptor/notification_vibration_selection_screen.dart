@@ -43,7 +43,7 @@ class _NotificationVibrationSelectionScreenState
         _isLoading = false;
       });
     } catch (e) {
-      print('Error al cargar patrones: $e');
+      // print('Error al cargar patrones: $e');
       setState(() {
         _isLoading = false;
       });
@@ -67,7 +67,7 @@ class _NotificationVibrationSelectionScreenState
         ),
       );
     } catch (e) {
-      print('Error al seleccionar patrón: $e');
+      // print('Error al seleccionar patrón: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al seleccionar patrón: $e'),
@@ -131,7 +131,7 @@ class _NotificationVibrationSelectionScreenState
         }
       }
     } catch (e) {
-      print('Error al guardar configuración: $e');
+      // print('Error al guardar configuración: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

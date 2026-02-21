@@ -3,20 +3,19 @@ import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/services/notification_cache_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:connect/services/local_notification_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:connect/services/preferences_service.dart';
-import 'package:connect/screens/debug_logs_screen.dart';
+import 'package:connect/services/ble_service.dart';
 import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
 import 'package:connect/screens/receptor/custom_sound_selection_screen.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
 import 'package:restart_app/restart_app.dart';
-import 'package:flutter_phoenix/flutter_phoenix.dart';
 
 class ReceptorSettingsScreen extends StatefulWidget {
-  const ReceptorSettingsScreen({Key? key}) : super(key: key);
+  const ReceptorSettingsScreen({super.key});
 
   @override
   State<ReceptorSettingsScreen> createState() => _ReceptorSettingsScreenState();
@@ -30,6 +29,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   bool _autoOpenEnabled = false;
   bool _vibrationEnabled = false;
   bool _soundEnabled = true; // ✅ NUEVA VARIABLE PARA SONIDO
+  bool _showLocalNotificationsSubtitle = false;
   bool _isLoading = true;
 
   // ✅ SOLUCIÓN: Añadir referencia al servicio
@@ -53,7 +53,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     // ✅ VERIFICACIÓN ADICIONAL: Confirmar sincronización al inicializar
     // await _reloadAutoOpenState();
 
-    print('🏁 INICIALIZACIÓN COMPLETA: autoOpenEnabled = $_autoOpenEnabled');
+    // print('🏁 INICIALIZACIÓN COMPLETA: autoOpenEnabled = $_autoOpenEnabled');
   }
 
   @override
@@ -78,11 +78,11 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
           await LocalNotificationService.areNotificationsEnabled();
 
       if (notificationsEnabled && !_notificationService.isListening) {
-        print('ReceptorSettingsScreen: Reactivando servicio de notificaciones');
+        // print('ReceptorSettingsScreen: Reactivando servicio de notificaciones');
         await _notificationService.setListeningEnabled(true);
       }
     } catch (e) {
-      print('ReceptorSettingsScreen: Error al reactivar servicio: $e');
+      // print('ReceptorSettingsScreen: Error al reactivar servicio: $e');
     }
   }
 
@@ -111,21 +111,21 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
         _isLoading = false;
       });
 
-      print('✅ CONFIGURACIÓN CARGADA:');
-      print('- Notificaciones: $notificationsEnabled');
-      print('- Screen Wake: $screenWakeEnabled');
-      print('- Auto Open: $autoOpenEnabled (independiente)');
-      print('- Vibración: $vibrationEnabled');
-      print('- Sonido: $soundEnabled'); // ✅ LOG PARA SONIDO
+      // print('✅ CONFIGURACIÓN CARGADA:');
+      // print('- Notificaciones: $notificationsEnabled');
+      // print('- Screen Wake: $screenWakeEnabled');
+      // print('- Auto Open: $autoOpenEnabled (independiente)');
+      // print('- Vibración: $vibrationEnabled');
+      // print('- Sonido: $soundEnabled'); // ✅ LOG PARA SONIDO
 
       // ✅ SINCRONIZAR CONFIGURACIÓN NATIVA AL CARGAR
       await LocalNotificationService.setScreenWakeEnabled(screenWakeEnabled);
       await LocalNotificationService.setAutoOpenEnabled(autoOpenEnabled);
-      print('🎯 CONFIGURACIÓN NATIVA SINCRONIZADA AL INICIALIZAR');
+      // print('🎯 CONFIGURACIÓN NATIVA SINCRONIZADA AL INICIALIZAR');
 
       _ensureNotificationServiceActive();
     } catch (e) {
-      print('❌ Error al cargar configuración: $e');
+      // print('❌ Error al cargar configuración: $e');
       setState(() {
         _isLoading = false;
       });
@@ -136,24 +136,22 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   void _toggleScreenWake(bool? value) async {
     if (value == null) return;
 
-    print('🔄 INICIANDO _toggleScreenWake: $value');
+    // print('🔄 INICIANDO _toggleScreenWake: $value');
 
     // ✅ 1. Actualizar UI inmediatamente
     setState(() {
       _screenWakeEnabled = value;
     });
-    print('✅ UI actualizada inmediatamente: $_screenWakeEnabled');
+    // print('✅ UI actualizada inmediatamente: $_screenWakeEnabled');
 
     try {
       // ✅ 2. Guardar en SharedPreferences Y ACTUALIZAR CONFIGURACIÓN NATIVA EN TIEMPO REAL
       await LocalNotificationService.setScreenWakeEnabled(value);
-      print(
-        '✅ setScreenWakeEnabled($value) ejecutado - Configuración nativa actualizada automáticamente',
-      );
+      // print(        '✅ setScreenWakeEnabled($value) ejecutado - Configuración nativa actualizada automáticamente',      );
 
-      print('🎉 SCREEN WAKE CONFIGURADO EN TIEMPO REAL: $value');
+      // print('🎉 SCREEN WAKE CONFIGURADO EN TIEMPO REAL: $value');
     } catch (e) {
-      print('❌ ERROR en _toggleScreenWake: $e');
+      // print('❌ ERROR en _toggleScreenWake: $e');
       // Revertir UI en caso de error
       setState(() {
         _screenWakeEnabled = !value;
@@ -164,27 +162,25 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   void _toggleAutoOpen(bool? value) async {
     if (value == null) return;
 
-    print('🔄 INICIANDO _toggleAutoOpen: $value');
+    // print('🔄 INICIANDO _toggleAutoOpen: $value');
 
     // ✅ 1. Actualizar UI inmediatamente
     setState(() {
       _autoOpenEnabled = value;
     });
-    print('✅ UI actualizada inmediatamente: $_autoOpenEnabled');
+    // print('✅ UI actualizada inmediatamente: $_autoOpenEnabled');
 
     try {
       // ✅ 2. Guardar en SharedPreferences Y ACTUALIZAR CONFIGURACIÓN NATIVA EN TIEMPO REAL
       await LocalNotificationService.setAutoOpenEnabled(value);
-      print(
-        '✅ setAutoOpenEnabled($value) ejecutado - Configuración nativa actualizada automáticamente',
-      );
+      // print('✅ setAutoOpenEnabled($value) ejecutado - Configuración nativa actualizada automáticamente',      );
 
       // ✅ 3. Verificar que se guardó correctamente
       final savedValue = await LocalNotificationService.isAutoOpenEnabled();
-      print('✅ VERIFICACIÓN: Valor guardado en SharedPreferences: $savedValue');
+      // print('✅ VERIFICACIÓN: Valor guardado en SharedPreferences: $savedValue');
 
       if (savedValue != value) {
-        print('❌ ERROR: El valor no se guardó correctamente');
+        // print('❌ ERROR: El valor no se guardó correctamente');
         // Revertir UI en caso de error
         setState(() {
           _autoOpenEnabled = !value;
@@ -192,17 +188,15 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
         return;
       }
 
-      print('🎉 AUTO-OPEN CONFIGURADO EN TIEMPO REAL: $value');
+      // print('🎉 AUTO-OPEN CONFIGURADO EN TIEMPO REAL: $value');
 
       // ✅ SOLUCIÓN: Reinicio forzado SOLO cuando se DESACTIVA autoOpenEnabled
       if (!value) {
-        print(
-          '🔄 AUTO-OPEN DESACTIVADO: Iniciando reinicio forzado de la aplicación',
-        );
+        // print(          '🔄 AUTO-OPEN DESACTIVADO: Iniciando reinicio forzado de la aplicación',        );
         _forceAppRestart();
       }
     } catch (e) {
-      print('❌ ERROR en _toggleAutoOpen: $e');
+      // print('❌ ERROR en _toggleAutoOpen: $e');
       // Revertir UI en caso de error
       setState(() {
         _autoOpenEnabled = !value;
@@ -213,22 +207,22 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   void _toggleVibration(bool? value) async {
     if (value == null) return;
 
-    print('🔄 INICIANDO _toggleVibration: $value');
+    // print('🔄 INICIANDO _toggleVibration: $value');
 
     // ✅ 1. Actualizar UI inmediatamente
     setState(() {
       _vibrationEnabled = value;
     });
-    print('✅ UI actualizada inmediatamente: $_vibrationEnabled');
+    // print('✅ UI actualizada inmediatamente: $_vibrationEnabled');
 
     try {
       // ✅ 2. Guardar en SharedPreferences
       await VibrationPatternService.setVibrationEnabled(value);
-      print('✅ setVibrationEnabled($value) ejecutado');
+      // print('✅ setVibrationEnabled($value) ejecutado');
 
-      print('🎉 VIBRACIÓN CONFIGURADA: $value');
+      // print('🎉 VIBRACIÓN CONFIGURADA: $value');
     } catch (e) {
-      print('❌ ERROR en _toggleVibration: $e');
+      // print('❌ ERROR en _toggleVibration: $e');
       // Revertir UI en caso de error
       setState(() {
         _vibrationEnabled = !value;
@@ -240,22 +234,22 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   void _toggleSound(bool? value) async {
     if (value == null) return;
 
-    print('🔄 INICIANDO _toggleSound: $value');
+    // print('🔄 INICIANDO _toggleSound: $value');
 
     // ✅ 1. Actualizar UI inmediatamente
     setState(() {
       _soundEnabled = value;
     });
-    print('✅ UI actualizada inmediatamente: $_soundEnabled');
+    // print('✅ UI actualizada inmediatamente: $_soundEnabled');
 
     try {
       // ✅ 2. Guardar en SharedPreferences Y ACTUALIZAR CONFIGURACIÓN NATIVA EN TIEMPO REAL
       await LocalNotificationService.setSoundEnabled(value);
-      print('✅ setSoundEnabled($value) ejecutado - Configuración nativa actualizada automáticamente');
+      // print('✅ setSoundEnabled($value) ejecutado - Configuración nativa actualizada automáticamente');
 
-      print('🎉 SONIDO CONFIGURADO EN TIEMPO REAL: $value');
+      // print('🎉 SONIDO CONFIGURADO EN TIEMPO REAL: $value');
     } catch (e) {
-      print('❌ ERROR en _toggleSound: $e');
+      // print('❌ ERROR en _toggleSound: $e');
       // Revertir UI en caso de error
       setState(() {
         _soundEnabled = !value;
@@ -266,7 +260,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   // ✅ SOLUCIÓN: Método para forzar el reinicio de la aplicación
   Future<void> _forceAppRestart() async {
     try {
-      print('🔄 INICIANDO REINICIO FORZADO DE LA APLICACIÓN');
+      // print('🔄 INICIANDO REINICIO FORZADO DE LA APLICACIÓN');
 
       // Mostrar indicador de carga
       showDialog(
@@ -293,11 +287,12 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       // En Android, esto cerrará la app y el usuario tendrá que abrirla manualmente
       // await SystemNavigator.pop();
       Restart.restartApp();
-      print('✅ APLICACIÓN CERRADA - El usuario debe abrirla manualmente');
+      // print('✅ APLICACIÓN CERRADA - El usuario debe abrirla manualmente');
     } catch (e) {
-      print('❌ ERROR durante el reinicio forzado: $e');
+      // print('❌ ERROR durante el reinicio forzado: $e');
 
       // Cerrar diálogo de carga si hay error
+      if (!mounted) return;
       if (Navigator.canPop(context)) {
         Navigator.of(context).pop();
       }
@@ -318,7 +313,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       final deviceId = await _receptorService.getLinkedDeviceId();
-      await prefs.remove(ReceptorService.KEY_LINKED_DEVICE_ID);
+      await prefs.remove(ReceptorService.keyLinkedDeviceId);
 
       if (deviceId != null) {
         final firebaseservice = FirebaseService();
@@ -335,6 +330,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       await LocalNotificationService.setNotificationsEnabled(false);
       await NotificationListenerService.instance.setListeningEnabled(false);
 
+      if (!mounted) return;
       setState(() {
         _notificationsEnabled = false;
       });
@@ -347,7 +343,8 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
         ),
       );
     } catch (e) {
-      print('Error al desvincular dispositivo: $e');
+      // print('Error al desvincular dispositivo: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al desvincular dispositivo: $e'),
@@ -355,6 +352,123 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
         ),
       );
     }
+  }
+
+  Future<void> _toggleLocalNotificationsEnabled(bool value) async {
+    if (value && await Permission.notification.isDenied) {
+      final status = await Permission.notification.request();
+      if (!mounted) return;
+      if (status.isDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Se requieren permisos de notificación para esta función',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    await LocalNotificationService.setNotificationsEnabled(value);
+
+    if (value) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Inicializando servicio de notificaciones...'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      await _receptorService.initializeReceptorWithoutNotifications();
+      await NotificationListenerService.instance.setListeningEnabled(true);
+
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Notificaciones locales habilitadas. Solo se mostrarán notificaciones nuevas.',
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      });
+    } else {
+      _receptorService.clearReceptorState();
+      await NotificationListenerService.instance.setListeningEnabled(false);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _notificationsEnabled = value;
+    });
+  }
+
+  Widget _buildLocalNotificationsToggleCard() {
+    final isActive = _notificationsEnabled;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showLocalNotificationsSubtitle = !_showLocalNotificationsSubtitle;
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.green[50] : Colors.red[50],
+          border: Border.all(
+            color: isActive ? Colors.green : Colors.red,
+            width: 2,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mostrar notificaciones locales',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? Colors.green[900] : Colors.red[900],
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (_showLocalNotificationsSubtitle)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1.0),
+                      child: Text(
+                        'Muestra las notificaciones recibidas en la barra de notificaciones',
+                        style: TextStyle(
+                          color: isActive ? Colors.green[700] : Colors.red[700],
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Switch(
+              value: _notificationsEnabled,
+              onChanged: _toggleLocalNotificationsEnabled,
+              activeColor: Colors.green,
+              inactiveThumbColor: Colors.red,
+              inactiveTrackColor: Colors.red[200],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -407,6 +521,61 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             ),
                           ),
                         ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.pushNamed(context, '/receptor_ble_signal'),
+                            icon: const Icon(Icons.bluetooth_searching),
+                            label: const Text(
+                              'Configurar conexión Bluetooth',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              backgroundColor: customColor[500],
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Container(
+                        //   margin: const EdgeInsets.symmetric(
+                        //     vertical: 8,
+                        //     horizontal: 8,
+                        //   ),
+                        //   child: ElevatedButton.icon(
+                        //     onPressed: () =>
+                        //         Navigator.pushNamed(context, '/widget_styles'),
+                        //     icon: const Icon(Icons.widgets),
+                        //     label: const Text(
+                        //       'Estilos del widget',
+                        //       style: TextStyle(
+                        //         fontSize: 16,
+                        //         fontWeight: FontWeight.bold,
+                        //       ),
+                        //     ),
+                        //     style: ElevatedButton.styleFrom(
+                        //       minimumSize: const Size.fromHeight(48),
+                        //       padding: const EdgeInsets.symmetric(vertical: 16),
+                        //       backgroundColor: customColor[600],
+                        //       foregroundColor: Colors.white,
+                        //       shape: RoundedRectangleBorder(
+                        //         borderRadius: BorderRadius.circular(8),
+                        //       ),
+                        //     ),
+                        //   ),
+                        // ),
+                        
+                        _buildLocalNotificationsToggleCard(),
                       ],
                     ),
                   ),
@@ -448,14 +617,14 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             ),
                           ),
                           title: const Text(
-                            'Configuraciones de Notificaciones',
+                            'Bloqueo, sonido y vibracion de Notificaciones',
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                           subtitle: const Text(
-                            'Gestionar configuraciones personalizadas\nde sonido, vibración y bloqueos',
+                            'Gestionar configuraciones personalizadas de sonido, vibración y bloqueos segun contenido de notificaciones',
                             style: TextStyle(
                               fontSize: 14,
                               fontStyle: FontStyle.italic,
@@ -796,11 +965,11 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                   Icons.radio_button_checked,
                   color: _notificationsEnabled ? Colors.green : Colors.red,
                 ),
-                label: 'Notificaciones',
+                label: 'Conexión',
               ),
               const BottomNavigationBarItem(
                 icon: Icon(Icons.mark_email_unread),
-                label: 'No Leídas',
+                label: 'Notificaciones',
               ),
             ],
           ),
@@ -809,3 +978,6 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     );
   }
 }
+
+
+

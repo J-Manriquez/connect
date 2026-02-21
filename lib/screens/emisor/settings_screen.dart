@@ -1,7 +1,6 @@
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/preferences_service.dart'; // ✅ AGREGAR IMPORT
-import 'package:connect/services/device_finder_service.dart'; // ✅ AGREGAR IMPORT PARA TEST
 
 class SettingsScreen extends StatefulWidget {
   final bool isServiceRunning;
@@ -33,12 +32,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoadingFirebase = false;
   bool _disableAutoRedirect = false; // ✅ NUEVA VARIABLE DE ESTADO
   bool _isLoadingAutoRedirect = false; // ✅ LOADING STATE
+  bool _keepAppActive = false; // ✅ NUEVA VARIABLE PARA MANTENER APP ACTIVA
+  bool _isLoadingKeepAppActive = false; // ✅ LOADING STATE PARA MANTENER APP ACTIVA
 
   // ✅ AGREGAR EN initState()
   @override
   void initState() {
     super.initState();
     _loadAutoRedirectPreference(); // Cargar la preferencia al inicializar
+    _loadKeepAppActivePreference(); // Cargar la preferencia de mantener app activa
     _checkAndAutoStartServiceIfNeeded(); // Verificar y activar servicio si es necesario
   }
 
@@ -50,7 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       
       // Verificar si está configurado como emisor, permisos concedidos pero servicio inactivo
       if (_disableAutoRedirect && widget.isPermissionGranted && !widget.isServiceRunning) {
-        print('SettingsScreen: Emisor detectado inactivo - Activando servicio automáticamente');
+        // print('SettingsScreen: Emisor detectado inactivo - Activando servicio automáticamente');
         widget.startService();
         
         if (mounted) {
@@ -64,7 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     } catch (e) {
-      print('Error al verificar y activar servicio automáticamente: $e');
+      // print('Error al verificar y activar servicio automáticamente: $e');
     }
   }
 
@@ -76,7 +78,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _disableAutoRedirect = disable;
       });
     } catch (e) {
-      print('Error al cargar preferencia de redirección automática: $e');
+      // print('Error al cargar preferencia de redirección automática: $e');
+    }
+  }
+
+  // ✅ NUEVO MÉTODO PARA CARGAR LA PREFERENCIA DE MANTENER APP ACTIVA
+  Future<void> _loadKeepAppActivePreference() async {
+    try {
+      final keepActive = await PreferencesService.getKeepAppActive();
+      setState(() {
+        _keepAppActive = keepActive;
+      });
+    } catch (e) {
+      // print('Error al cargar preferencia de mantener aplicación activa: $e');
     }
   }
 
@@ -112,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // ✅ NUEVA FUNCIONALIDAD: Si se configura como emisor (value = true),
         // verificar y activar automáticamente el servicio si es necesario
         if (value && widget.isPermissionGranted && !widget.isServiceRunning) {
-          print('Configurado como emisor - Activando servicio automáticamente');
+          // print('Configurado como emisor - Activando servicio automáticamente');
           widget.startService();
           
           if (mounted) {
@@ -126,7 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     } catch (e) {
-      print('Error al cambiar preferencia de redirección automática: $e');
+      // print('Error al cambiar preferencia de redirección automática: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -139,6 +153,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() {
           _isLoadingAutoRedirect = false;
+        });
+      }
+    }
+  }
+
+  // ✅ NUEVO MÉTODO PARA MANEJAR EL TOGGLE DE MANTENER APP ACTIVA
+  Future<void> _handleKeepAppActiveToggle(bool value) async {
+    setState(() {
+      _isLoadingKeepAppActive = true;
+    });
+
+    try {
+      final success = await PreferencesService.saveKeepAppActive(value);
+      if (success) {
+        setState(() {
+          _keepAppActive = value;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                value 
+                  ? 'Aplicación configurada para mantenerse activa'
+                  : 'Aplicación ya no se mantendrá activa automáticamente'
+              ),
+              backgroundColor: value ? Colors.green : Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // print('Error al cambiar preferencia de mantener aplicación activa: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al guardar la configuración'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingKeepAppActive = false;
         });
       }
     }
@@ -292,6 +351,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ],
                           ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.pushNamed(context, '/ble_devices'),
+                            icon: const Icon(Icons.bluetooth),
+                            label: const Text('Seleccionar dispositivo Bluetooth'),
+                          ),
+                        ),
                         ],
                       ),
                     ),
@@ -434,7 +502,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
 
-                  // ✅ BOTÓN DE TEST DE VIBRACIÓN TEMPORAL
+                  // ✅ NUEVO CARD PARA MANTENER APLICACIÓN ACTIVA
                   Card(
                     margin: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -447,44 +515,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Diagnóstico de Vibración',
+                            'Configuración de Aplicación:',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: () async {
-                              try {
-                                await DeviceFinderService.instance.testVibration();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Test de vibración ejecutado. Revisa los logs.'),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Error en test de vibración: $e'),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                              foregroundColor: Colors.white,
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Reproducción multimedia'),
+                            subtitle: const Text(
+                              'Selecciona la aplicación por defecto para iniciar reproducción desde widgets',
                             ),
-                            child: const Text('Probar Vibración'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () =>
+                                Navigator.pushNamed(context, '/media_reproduction'),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
-                            'Este botón es temporal para diagnosticar problemas de vibración.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Mantener aplicación activa:',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _keepAppActive
+                                          ? 'La aplicación se mantendrá activa y se iniciará automáticamente'
+                                          : 'La aplicación puede cerrarse normalmente',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: _keepAppActive
+                                            ? Colors.green[700]
+                                            : Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _isLoadingKeepAppActive
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Switch(
+                                      value: _keepAppActive,
+                                      onChanged: _handleKeepAppActiveToggle,
+                                      activeColor: Colors.green,
+                                      inactiveTrackColor: customColor[200],
+                                      inactiveThumbColor: Colors.grey[300],
+                                    ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange[200]!),
+                            ),
+                            child: Column(
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_outlined,
+                                  color: Colors.orange[700],
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Cuando esta opción esté activada, la aplicación se iniciará automáticamente al encender el dispositivo y se mantendrá activa en segundo plano. Esto puede afectar el rendimiento de la batería.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.orange[700],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],

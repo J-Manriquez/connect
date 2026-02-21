@@ -40,7 +40,7 @@ class FirebaseService {
         'notificaciones.$notificationId': FieldValue.delete(),
       });
 
-      print('Notificación eliminada: $notificationId');
+      // print('Notificación eliminada: $notificationId');
 
       // Verificar si quedan notificaciones en el documento
       final docSnapshot = await dayDocRef.get();
@@ -53,11 +53,11 @@ class FirebaseService {
         // Si no quedan notificaciones, eliminar el documento del día
         if (notificationsMap.isEmpty) {
           await dayDocRef.delete();
-          print('Documento del día eliminado: $dateId (sin notificaciones)');
+          // print('Documento del día eliminado: $dateId (sin notificaciones)');
         }
       }
     } catch (e) {
-      print('Error al eliminar notificación: $e');
+      // print('Error al eliminar notificación: $e');
     }
   }
 
@@ -90,9 +90,9 @@ class FirebaseService {
       );
 
       await docRef.set(deviceData.toMap());
-      print('Documento inicializado en Firebase con ID: $deviceId');
+      // print('Documento inicializado en Firebase con ID: $deviceId');
     } else {
-      print('El documento ya existe en Firebase con ID: $deviceId');
+      // print('El documento ya existe en Firebase con ID: $deviceId');
     }
   }
 
@@ -111,7 +111,7 @@ class FirebaseService {
       ]),
     });
 
-    print('Estado del servicio actualizado: $isRunning');
+    // print('Estado del servicio actualizado: $isRunning');
   }
 
   // Actualiza el estado de vinculación
@@ -129,7 +129,7 @@ class FirebaseService {
       ]),
     });
 
-    print('Estado de vinculación actualizado: $isLinked');
+    // print('Estado de vinculación actualizado: $isLinked');
   }
 
   // Actualiza el estado de guardado
@@ -147,7 +147,7 @@ class FirebaseService {
       ]),
     });
 
-    print('Estado de guardado actualizado: $isSaving');
+    // print('Estado de guardado actualizado: $isSaving');
   }
 
   // Actualiza la lista de aplicaciones
@@ -163,9 +163,7 @@ class FirebaseService {
         final isSaving = data?['status-guardado'] ?? false;
 
         if (!isSaving) {
-          print(
-            'Guardado en Firebase no está habilitado, omitiendo actualización de apps',
-          );
+          // print(            'Guardado en Firebase no está habilitado, omitiendo actualización de apps',          );
           return;
         }
       }
@@ -181,12 +179,10 @@ class FirebaseService {
         ]),
       });
 
-      print(
-        'Lista de aplicaciones actualizada en Firebase: ${apps.length} apps',
-      );
+      // print(        'Lista de aplicaciones actualizada en Firebase: ${apps.length} apps',      );
     } catch (e) {
-      print('Error al actualizar lista de aplicaciones en Firebase: $e');
-      throw e;
+      // print('Error al actualizar lista de aplicaciones en Firebase: $e');
+      rethrow;
     }
   }
 
@@ -209,7 +205,7 @@ class FirebaseService {
       final List<dynamic> appsList = data['lista-apps'];
       return appsList.map((appData) => AppData.fromMap(appData)).toList();
     } catch (e) {
-      print('Error al obtener lista de aplicaciones desde Firebase: $e');
+      // print('Error al obtener lista de aplicaciones desde Firebase: $e');
       return [];
     }
   }
@@ -228,7 +224,7 @@ class FirebaseService {
       final data = docSnapshot.data();
       return data?['status-guardado'] ?? false;
     } catch (e) {
-      print('Error al obtener estado de guardado desde Firebase: $e');
+      // print('Error al obtener estado de guardado desde Firebase: $e');
       return false;
     }
   }
@@ -236,22 +232,20 @@ class FirebaseService {
   // Obtiene el estado de vinculación
   Future<bool> getLinkStatus() async {
     final deviceId = await getDeviceId();
-    print('[DEBUG] getLinkStatus: deviceId = \$deviceId');
+    // print('[DEBUG] getLinkStatus: deviceId = \$deviceId');
     final docRef = _firestore.collection('dispositivos').doc(deviceId);
     try {
       final docSnapshot = await docRef.get();
-      print(
-        '[DEBUG] getLinkStatus: docSnapshot.exists = \${docSnapshot.exists}',
-      );
+      // print(        '[DEBUG] getLinkStatus: docSnapshot.exists = \${docSnapshot.exists}',      );
       if (!docSnapshot.exists) {
         return false;
       }
       final data = docSnapshot.data();
       final status = data?['status-vinculacion'] ?? false;
-      print('[DEBUG] getLinkStatus: status-vinculacion = \$status');
+      // print('[DEBUG] getLinkStatus: status-vinculacion = \$status');
       return status;
     } catch (e) {
-      print('Error al obtener estado de vinculación desde Firebase: \$e');
+      // print('Error al obtener estado de vinculación desde Firebase: \$e');
       return false;
     }
   }
@@ -271,43 +265,50 @@ class FirebaseService {
     // Si todos los campos de contenido están vacíos, filtrar la notificación
     if (title.isEmpty && text.isEmpty && bigText.isEmpty && 
         body.isEmpty && mensaje.isEmpty && contenido.isEmpty) {
-      //print('Notificación filtrada: Contenido vacío - Package: $packageName');
+      //// print('Notificación filtrada: Contenido vacío - Package: $packageName');
       return true;
+    }
+
+    final List<String> allTexts = [
+      notification['title'] ?? '',
+      notification['text'] ?? '',
+      notification['bigText'] ?? '',
+      notification['subText'] ?? '',
+      notification['summaryText'] ?? '',
+      notification['infoText'] ?? '',
+      notification['contentInfo'] ?? '',
+      notification['body'] ?? '',
+      notification['mensaje'] ?? '',
+      notification['contenido'] ?? '',
+      notification['titulo'] ?? '',
+    ];
+    
+    final String allContent = allTexts.join(' ').toLowerCase();
+    final String normalizedContent = allContent
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u')
+        .replaceAll(RegExp(r'[ñ]'), 'n')
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    
+    final List<RegExp> globalMessagePatterns = [
+      RegExp(r'\b\d+\s*mensajes?\s*nuevos?\b'),
+      RegExp(r'\b\d+\s*new\s*messages?\b'),
+    ];
+    for (final pattern in globalMessagePatterns) {
+      if (pattern.hasMatch(normalizedContent)) {
+        return true;
+      }
     }
     
     // Solo aplicar filtros a WhatsApp e Instagram
     if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b' || 
         packageName == 'com.instagram.android') {
-      // Recopilar TODOS los textos posibles de la notificación
-      final List<String> allTexts = [
-        notification['title'] ?? '',
-        notification['text'] ?? '',
-        notification['bigText'] ?? '',
-        notification['subText'] ?? '',
-        notification['summaryText'] ?? '',
-        notification['infoText'] ?? '',
-        notification['contentInfo'] ?? '',
-        notification['body'] ?? '',
-        notification['mensaje'] ?? '',
-        notification['contenido'] ?? '',
-        notification['titulo'] ?? '',
-      ];
-      
-      // Combinar todos los textos y normalizar
-      final String allContent = allTexts.join(' ').toLowerCase();
-      // Normalizar: remover acentos, caracteres especiales y espacios múltiples
-      final String normalizedContent = allContent
-          .replaceAll(RegExp(r'[áàäâ]'), 'a')
-          .replaceAll(RegExp(r'[éèëê]'), 'e')
-          .replaceAll(RegExp(r'[íìïî]'), 'i')
-          .replaceAll(RegExp(r'[óòöô]'), 'o')
-          .replaceAll(RegExp(r'[úùüû]'), 'u')
-          .replaceAll(RegExp(r'[ñ]'), 'n')
-          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-      
-      print('Contenido normalizado para filtro: "$normalizedContent"');
+      // print('Contenido normalizado para filtro: "$normalizedContent"');
       
       // Filtros específicos para Instagram
       if (packageName == 'com.instagram.android') {
@@ -321,7 +322,7 @@ class FirebaseService {
         
         for (final keyword in uploadKeywords) {
           if (normalizedContent.contains(keyword)) {
-            print('Notificación filtrada: Subida de contenido - "$normalizedContent"');
+            // print('Notificación filtrada: Subida de contenido - "$normalizedContent"');
             return true;
           }
         }
@@ -338,7 +339,7 @@ class FirebaseService {
         
         for (final keyword in storyKeywords) {
           if (normalizedContent.contains(keyword)) {
-            print('Notificación filtrada: Historia - "$normalizedContent"');
+            // print('Notificación filtrada: Historia - "$normalizedContent"');
             return true;
           }
         }
@@ -362,7 +363,7 @@ class FirebaseService {
         
         for (final keyword in callKeywords) {
           if (normalizedContent.contains(keyword)) {
-            print('Notificación filtrada: Llamada Instagram - "$normalizedContent"');
+            // print('Notificación filtrada: Llamada Instagram - "$normalizedContent"');
             return true;
           }
         }
@@ -381,7 +382,7 @@ class FirebaseService {
         
         for (final pattern in messagePatterns) {
           if (pattern.hasMatch(normalizedContent)) {
-            print('Notificación filtrada: Resumen de mensajes - "$normalizedContent"');
+            // print('Notificación filtrada: Resumen de mensajes - "$normalizedContent"');
             return true;
           }
         }
@@ -389,7 +390,7 @@ class FirebaseService {
         // Filtro 2: Llamadas
         final List<String> callKeywords = [
           'llamando',
-          'Llamada en curso'
+          'Llamada en curso',
           'calling',
           'llamada entrante',
           'incoming call',
@@ -403,7 +404,7 @@ class FirebaseService {
         
         for (final keyword in callKeywords) {
           if (normalizedContent.contains(keyword)) {
-            print('Notificación filtrada: Llamada - "$normalizedContent"');
+            // print('Notificación filtrada: Llamada - "$normalizedContent"');
             return true;
           }
         }
@@ -420,7 +421,7 @@ class FirebaseService {
         
         for (final keyword in backupKeywords) {
           if (normalizedContent.contains(keyword)) {
-            print('Notificación filtrada: Copia de seguridad - "$normalizedContent"');
+            // print('Notificación filtrada: Copia de seguridad - "$normalizedContent"');
             return true;
           }
         }
@@ -441,7 +442,7 @@ class FirebaseService {
         
         for (final keyword in genericKeywords) {
           if (normalizedContent.contains(keyword)) {
-            print('Notificación filtrada: Contenido genérico - "$normalizedContent"');
+            // print('Notificación filtrada: Contenido genérico - "$normalizedContent"');
             return true;
           }
         }
@@ -477,7 +478,7 @@ class FirebaseService {
       final String? lastHash = prefs.getString(_lastNotificationKey);
       
       if (lastHash != null && lastHash == currentHash) {
-        print('Notificación duplicada detectada: $currentHash');
+        // print('Notificación duplicada detectada: $currentHash');
         return true;
       }
       
@@ -485,7 +486,7 @@ class FirebaseService {
       await prefs.setString(_lastNotificationKey, currentHash);
       return false;
     } catch (e) {
-      print('Error al verificar notificación duplicada: $e');
+      // print('Error al verificar notificación duplicada: $e');
       return false;
     }
   }
@@ -494,13 +495,13 @@ class FirebaseService {
   Future<void> saveNotification(Map<String, dynamic> notification) async {
     // Verificar si la notificación debe ser filtrada
     if (_shouldFilterNotification(notification)) {
-      print('Notificación filtrada, no se guardará en Firebase');
+      // print('Notificación filtrada, no se guardará en Firebase');
       return;
     }
 
     // Verificar si es una notificación duplicada
     if (await _isDuplicateNotification(notification)) {
-      print('Notificación duplicada, no se guardará en Firebase');
+      // print('Notificación duplicada, no se guardará en Firebase');
       return;
     }
 
@@ -532,7 +533,7 @@ class FirebaseService {
       'notificaciones.${notificationData.id}': notificationData.toMap(),
     });
 
-    print('Notificación guardada con ID: ${notificationData.id}');
+    // print('Notificación guardada con ID: ${notificationData.id}');
   }
 
   // Actualiza el estado de visualización de una notificación
@@ -555,9 +556,42 @@ class FirebaseService {
       'notificaciones.$notificationId.status-visualizacion': visualizado,
     });
 
-    print(
-      'Estado de visualización actualizado para notificación $notificationId: $visualizado',
-    );
+    // print(      'Estado de visualización actualizado para notificación $notificationId: $visualizado',    );
+  }
+
+  Future<bool> updateNotificationVisualizationStatusForDevice(
+    String deviceId,
+    String notificationId,
+    String dateId,
+    bool visualizado,
+  ) async {
+    final dayDocRef = _firestore
+        .collection('dispositivos')
+        .doc(deviceId)
+        .collection('notificaciones')
+        .doc(dateId);
+
+    try {
+      final dayDoc = await dayDocRef.get();
+      if (!dayDoc.exists) {
+        final parts = dateId.split('-');
+        final int? year = parts.isNotEmpty ? int.tryParse(parts[0]) : null;
+        final int? month = parts.length >= 2 ? int.tryParse(parts[1]) : null;
+        final int? day = parts.length >= 3 ? int.tryParse(parts[2]) : null;
+
+        await dayDocRef.set({
+          if (year != null && month != null && day != null)
+            'fecha': Timestamp.fromDate(DateTime(year, month, day)),
+        });
+      }
+
+      await dayDocRef.update({
+        'notificaciones.$notificationId.status-visualizacion': visualizado,
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // Obtiene todas las notificaciones almacenadas para el dispositivo
@@ -583,31 +617,22 @@ class FirebaseService {
 
           notificationsMap.forEach((notificationId, notificationData) {
             try {
-              if (notificationData != null &&
-                  notificationData is Map<String, dynamic>) {
-                // Añadir el ID del día al mapa para poder actualizar el estado después
-                final Map<String, dynamic> notificationDataMap =
-                    Map<String, dynamic>.from(notificationData);
-                notificationDataMap['dateId'] = dayDoc.id;
+              if (notificationData == null ||
+                  notificationData is! Map<String, dynamic>) {
+                return;
+              }
 
-                // Verificar que timestamp existe y es un Timestamp
-                if (notificationDataMap.containsKey('timestamp') &&
-                    notificationDataMap['timestamp'] is Timestamp) {
-                  allNotifications.add(
-                    NotificationData.fromMap(notificationDataMap),
-                  );
-                } else {
-                  // print('Error: timestamp inválido en notificación $notificationId');
-                }
-              } else {
-                print(
-                  'Error: datos de notificación inválidos para $notificationId',
+              final Map<String, dynamic> notificationDataMap =
+                  Map<String, dynamic>.from(notificationData);
+              notificationDataMap['dateId'] = dayDoc.id;
+
+              if (notificationDataMap.containsKey('timestamp') &&
+                  notificationDataMap['timestamp'] is Timestamp) {
+                allNotifications.add(
+                  NotificationData.fromMap(notificationDataMap),
                 );
               }
-            } catch (e) {
-              print('Error al procesar notificación $notificationId: $e');
-              // Continuar con la siguiente notificación
-            }
+            } catch (_) {}
           });
         }
       }
@@ -615,11 +640,10 @@ class FirebaseService {
       // Ordenar las notificaciones por fecha, más recientes primero
       allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-      // print('Notificaciones procesadas correctamente: ${allNotifications.length}');
+      // // print('Notificaciones procesadas correctamente: ${allNotifications.length}');
       return allNotifications;
-    } catch (e, stackTrace) {
-      print('Error al obtener notificaciones almacenadas: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
+      // print('Error al obtener notificaciones almacenadas: $e');
       return [];
     }
   }

@@ -1,0 +1,141 @@
+Guía de Implementación BLE GATT para Connect
+
+Contexto de la App
+- Emisor: captura notificaciones del sistema (servicio nativo `NotificationListener`) y decide si las guarda en Firebase tras filtros.
+- Receptor: escucha cambios en Firestore y muestra notificaciones locales (`LocalNotificationService`).
+- Integraciones relevantes:
+  - Envío desde Emisor: punto de inserción tras filtrar/guardar en `lib/main.dart:223–249`.
+  - Mostrar en Receptor: `lib/services/local_notification_service.dart:67–111` valida y muestra.
+  - Salud del servicio: `lib/services/notification_listener_service.dart:317–330` para reinicios.
+
+Objetivo BLE GATT
+- Transmitir notificaciones directamente entre dos dispositivos usando BLE GATT, sin depender de Internet.
+- Diseño recomendado para wearables Android 8/9: Receptor (reloj) como servidor GATT; Emisor (teléfono) como cliente GATT.
+
+Compatibilidad y requisitos
+- Android 8/9: BLE GATT soportado por Wear OS 2.x y la mayoría de relojes Android.
+- Permisos:
+  - Android ≤11: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION` (para escaneo BLE).
+  - Android 12+: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_ADVERTISE` (si el receptor anuncia), y considerar `NEARBY_DEVICES` si el OEM lo requiere.
+- Rendimiento: BLE reduce consumo frente a SPP/Classic.
+
+Fases de implementación
+1) Diseño de protocolo y modelo de datos.
+2) Servidor GATT en Receptor (Android nativo).
+3) Cliente GATT en Emisor (Flutter con canal nativo si es necesario).
+4) Integración con la lógica actual de Emisor/Receptor.
+5) Persistencia de peer y reconexión automática.
+6) Permisos y solicitud en tiempo de ejecución.
+7) Pruebas y validación en dispositivos.
+8) Endurecimiento: seguridad, backoff y telemetría.
+
+Fase 1: Diseño de protocolo y modelo de datos
+Pasos:
+- Definir payload JSON mínimo: `id`, `packageName`, `appName`, `title`, `text`, `timestamp` (ms desde epoch).
+- Versionar el payload con `version: 1` para futuras extensiones.
+- Establecer límites BLE: tamaño de MTU típico 185–517 bytes; fragmentar mensajes en bloques seguros (p.ej., 180 bytes).
+- Definir cabeceras de fragmentación: `{seq: <n>, total: <m>}` y un identificador de mensaje `msgId` (usar `id`).
+- Normalizar codificación: UTF-8 para JSON; evitar binarios grandes.
+
+Fase 2: Servidor GATT en Receptor (Android nativo)
+Pasos:
+- Inicializar BluetoothManager y BluetoothAdapter.
+- Crear un GATT Server (`BluetoothGattServer`) y registrar un `BluetoothGattServerCallback`.
+- Definir Service UUID (propio de Connect) y Characteristics:
+  - `notif_rx` (Write / Write No Response): recepción de fragmentos JSON.
+  - `ack_tx` (Notify): confirmaciones opcionales.
+- Agregar el servicio y características al GATT Server.
+- Publicidad (advertising) BLE si el reloj lo soporta: usar `BluetoothLeAdvertiser` con `AdvertiseData` incluyendo Service UUID.
+- En `onCharacteristicWrite`:
+  - Validar la characteristic y recomponer fragmentos por `msgId` y `seq`.
+  - Al completar todos los fragmentos, parsear JSON y construir el `Map<String,dynamic>`.
+  - Invocar `LocalNotificationService.showNotification(...)` en Flutter para mostrar:
+    - Inserción en `lib/services/local_notification_service.dart:67–111`.
+- Enviar `ack_tx` opcional (Notify) con estado recibido.
+
+Fase 3: Cliente GATT en Emisor (Flutter/nativo)
+Pasos:
+- Solicitar permisos BLE según versión (ver Fase 6).
+- Escanear dispositivos cercanos filtrando por Service UUID del receptor.
+- Conectar (`BluetoothGatt`) y descubrir servicios.
+- Obtener handle de `notif_rx` characteristic.
+- Fragmentar el JSON siguiendo el formato definido y escribir cada fragmento con `WRITE_TYPE_NO_RESPONSE` (si soportado) o `WRITE_TYPE_DEFAULT`.
+- Confirmar entrega con ACK opcional (suscribirse a `ack_tx` Notify si se usa).
+- Implementar reconexión con backoff exponencial ante `GATT_CONNECTION_CONGESTED`, `GATT_FAILURE` o desconexión.
+
+Fase 4: Integración con la lógica actual
+Pasos:
+- Emisor: lugar de envío BLE tras filtrar/guardar.
+  - Integración en `lib/main.dart:223–249` dentro del case `'onNotificationReceived'`:
+    - Tras `NotificationFilterService.shouldShowNotification(...)` y antes o después de guardar en Firebase, invocar `BleClient.send(notificationData)` si hay conexión.
+- Receptor: mostrar notificaciones recibidas por BLE.
+  - En el callback del GATT Server, cuando se reconstruye el `Map`, llamar a `LocalNotificationService.showNotification(...)`.
+- Salud y reconexión:
+  - Reusar `_ensureServicesActive()` en `lib/main.dart:405–426` para añadir verificación BLE y reconexión.
+  - Apoyarse en `NotificationListenerService.instance.restartIfNeeded()` (`lib/services/notification_listener_service.dart:317–330`).
+
+Fase 5: Persistencia y reconexión
+Pasos:
+- Guardar en `SharedPreferences` (vía `PreferencesService`) los datos del peer:
+  - `peer_address` (MAC/ID BLE), `service_uuid`, `last_seen`.
+- Al iniciar la app o al `resumed`, intentar reconectar automáticamente al peer guardado.
+- Implementar un ciclo de reconexión con backoff: 1s, 2s, 4s, máx 30s, reiniciar al éxito.
+- Registrar estado para UI (conectado, intentando, desconectado) si se requiere.
+
+Fase 6: Permisos y runtime
+Pasos:
+- Android ≤11:
+  - Declarar en `AndroidManifest.xml`: `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION`.
+  - Solicitar en tiempo de ejecución `ACCESS_FINE_LOCATION` para escaneo BLE.
+- Android 12+:
+  - Declarar: `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_ADVERTISE` (si receptor anuncia).
+  - Solicitar en tiempo de ejecución `BLUETOOTH_SCAN` y `BLUETOOTH_CONNECT`.
+- Integrar con la UI de Configuración para guiar al usuario.
+
+Fase 7: Pruebas y validación
+Pasos:
+- Emparejar/conectar: confirmar que el emisor detecta el receptor por Service UUID.
+- Envío básico: generar una notificación en el emisor y comprobar que el receptor la muestra como notificación local.
+- Fragmentación: validar envío de payloads largos (títulos/texto extensos) y recomposición.
+- Desconexión: apagar Bluetooth en el reloj y confirmar reconexión automática al volver a encender.
+- Consumo: medir impacto en batería durante varias horas.
+- Robustez: simular pérdida de fragmentos y confirmar reintento/descarta mensaje incompleto.
+
+Fase 8: Endurecimiento
+Pasos:
+- Seguridad básica: añadir firma/HMAC en el último fragmento y validar integridad.
+- Telemetría: registrar métricas (latencia, reintentos, desconexiones) en Firebase para diagnóstico.
+- Control de flujo: si `ack_tx` se usa, limitar el ritmo de envío ante congestión BLE.
+
+Protocolo de datos (ejemplo JSON)
+{
+  "version": 1,
+  "id": "1733059999123",
+  "packageName": "com.whatsapp",
+  "appName": "WhatsApp",
+  "title": "Nuevo mensaje",
+  "text": "Hola desde BLE",
+  "timestamp": 1733059999123
+}
+
+Puntos de integración específicos
+- Envío desde Emisor: `lib/main.dart:223–249` dentro de `'onNotificationReceived'`.
+- Mostrar en Receptor: `lib/services/local_notification_service.dart:67–111`.
+- Salud y reintentos: `lib/main.dart:405–426` y `lib/services/notification_listener_service.dart:317–330`.
+
+Notas de compatibilidad
+- Wear OS 2.x (Android 8/9) suele soportar GATT Server y Advertising; si el reloj no anuncia, invertir roles (teléfono como servidor) y mantener el mismo Service UUID.
+- Para relojes “Android completo” con soporte Classic SPP, se puede ofrecer como fallback si BLE no está disponible.
+
+Plan mínimo incremental
+1) Implementar GATT Server en Receptor con `notif_rx` y publicidad básica.
+2) Implementar Cliente GATT en Emisor, conexión y escritura fragmentada.
+3) Integrar llamadas a `LocalNotificationService.showNotification(...)` en Receptor.
+4) Añadir persistencia y reconexión.
+5) Pruebas en campo y ajustes de MTU/fragmentación.
+
+Referencias internas de Connect
+- `NotificationListener.kt` (servicio nativo del Emisor): `android/app/src/main/kotlin/com/example/connect/NotificationListener.kt:69–88`.
+- `MainActivity.kt` canales de comunicación: `android/app/src/main/kotlin/com/example/connect/MainActivity.kt:57–129`.
+- `LocalNotificationService` (mostrar locales): `lib/services/local_notification_service.dart:67–111`.
+- `main.dart` flujo de notificaciones del Emisor: `lib/main.dart:213–249` y manejo de salud: `lib/main.dart:405–426`.

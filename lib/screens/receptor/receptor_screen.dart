@@ -48,7 +48,7 @@ class _ReceptorScreenState extends State<ReceptorScreen> {
         Navigator.pushReplacementNamed(context, '/notificaciones');
       }
     } catch (e) {
-      print('Error al verificar estado de vinculación: $e');
+      // print('Error al verificar estado de vinculación: $e');
     } finally {
       setState(() {
         _isLoading = false;

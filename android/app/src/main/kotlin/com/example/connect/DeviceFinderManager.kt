@@ -11,6 +11,8 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -32,6 +34,19 @@ class DeviceFinderManager(private val context: Context) {
     companion object {
         private const val NOTIFICATION_CHANNEL_ID = "device_finder_channel"
         private const val NOTIFICATION_ID = 9999
+
+        @Volatile
+        private var sharedInstance: DeviceFinderManager? = null
+
+        fun getInstance(context: Context): DeviceFinderManager {
+            val appContext = context.applicationContext
+            val existing = sharedInstance
+            if (existing != null) return existing
+            return synchronized(this) {
+                val again = sharedInstance
+                if (again != null) again else DeviceFinderManager(appContext).also { sharedInstance = it }
+            }
+        }
     }
     
     init {
@@ -74,6 +89,7 @@ class DeviceFinderManager(private val context: Context) {
         }
     }
     
+    @Synchronized
     fun startDeviceSearch() {
         if (isSearching) return
         
@@ -164,6 +180,7 @@ class DeviceFinderManager(private val context: Context) {
         }
     }
     
+    @Synchronized
     fun stopDeviceSearch() {
         if (!isSearching) return
         
@@ -205,11 +222,25 @@ class DeviceFinderManager(private val context: Context) {
                         activity.window.addFlags(
                             WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
                             WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
                         )
                         Log.d("DeviceFinderManager", "Usando flags tradicionales para encender pantalla")
                     }
+
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                                activity.setShowWhenLocked(false)
+                                activity.setTurnScreenOn(false)
+                            }
+                            activity.window.clearFlags(
+                                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                            )
+                        } catch (_: Exception) {
+                        }
+                    }, 3000)
                 }
             } ?: Log.w("DeviceFinderManager", "MainActivity.instance es null, no se puede encender pantalla")
             
@@ -221,6 +252,9 @@ class DeviceFinderManager(private val context: Context) {
     
     private fun startSound() {
         try {
+            if (mediaPlayer?.isPlaying == true) return
+            stopSound()
+
             // Usar el tono de alarma predeterminado o el de llamada
             val alarmUri: Uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)

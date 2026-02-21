@@ -4,7 +4,7 @@ import 'package:connect/models/notification_settings.dart';
 import 'package:connect/services/notification_settings_service.dart';
 
 class NotificationSettingsListScreen extends StatefulWidget {
-  const NotificationSettingsListScreen({Key? key}) : super(key: key);
+  const NotificationSettingsListScreen({super.key});
 
   @override
   State<NotificationSettingsListScreen> createState() =>
@@ -36,7 +36,7 @@ class _NotificationSettingsListScreenState
         _isLoading = false;
       });
     } catch (e) {
-      print('Error al cargar configuraciones: $e');
+      // print('Error al cargar configuraciones: $e');
       setState(() {
         _isLoading = false;
       });
@@ -64,8 +64,11 @@ class _NotificationSettingsListScreenState
       ),
     );
 
+    if (!mounted) return;
+
     if (confirmed == true) {
       final success = await _settingsService.deleteNotificationSettings(settings.id);
+      if (!mounted) return;
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -146,12 +149,38 @@ class _NotificationSettingsListScreenState
               children: [
                 _buildInfoRow('Estado', setting.bloqueado ? 'Bloqueado' : 'Configurado'),
                 _buildInfoRow('Aplicación', setting.notificationData['appName'] ?? setting.notificationData['packageName'] ?? 'Desconocida'),
-                if (setting.notificationData['title'] != null && setting.notificationData['title'].isNotEmpty)
-                  _buildInfoRow('Título', setting.notificationData['title']),
-                if (setting.notificationData['text'] != null && setting.notificationData['text'].isNotEmpty)
-                  _buildInfoRow('Contenido', setting.notificationData['text']),
+                _buildInfoRow('Título', (setting.notificationData['title'] ?? '').toString().trim().isEmpty ? 'No configurado' : setting.notificationData['title']),
+                _buildInfoRow('Contenido', (setting.notificationData['text'] ?? '').toString().trim().isEmpty ? 'No configurado' : setting.notificationData['text']),
                 _buildInfoRow('Vibración', setting.vibrationEnabled ? 'Habilitada' : 'Deshabilitada'),
+                if (setting.vibrationEnabled && setting.additionalData['vibration'] is Map)
+                  _buildInfoRow(
+                    'Patrón',
+                    ((setting.additionalData['vibration'] as Map)['patternName'] ??
+                            (setting.additionalData['vibration'] as Map)['patternId'] ??
+                            '')
+                        .toString()
+                        .trim()
+                        .isEmpty
+                        ? 'Desconocido'
+                        : ((setting.additionalData['vibration'] as Map)['patternName'] ??
+                                (setting.additionalData['vibration'] as Map)['patternId'])
+                            .toString(),
+                  ),
                 _buildInfoRow('Sonido', setting.soundEnabled ? 'Habilitado' : 'Deshabilitado'),
+                if (setting.soundEnabled && setting.additionalData['sound'] is Map)
+                  _buildInfoRow(
+                    'Sonido personalizado',
+                    ((setting.additionalData['sound'] as Map)['soundName'] ??
+                            (setting.additionalData['sound'] as Map)['soundId'] ??
+                            '')
+                        .toString()
+                        .trim()
+                        .isEmpty
+                        ? 'Desconocido'
+                        : ((setting.additionalData['sound'] as Map)['soundName'] ??
+                                (setting.additionalData['sound'] as Map)['soundId'])
+                            .toString(),
+                  ),
                 _buildInfoRow('Creado', _formatDate(setting.createdAt)),
                 _buildInfoRow('Actualizado', _formatDate(setting.updatedAt)),
                 if (setting.bloqueado)

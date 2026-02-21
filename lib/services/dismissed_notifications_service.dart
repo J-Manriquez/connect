@@ -19,7 +19,7 @@ class DismissedNotificationsService {
       dismissedList.add(notificationId);
       await prefs.setStringList(_keyDismissedNotifications, dismissedList);
       await prefs.setInt('${_keyDismissedTimestamp}_$notificationId', DateTime.now().millisecondsSinceEpoch);
-      print('Notificación marcada como eliminada: $notificationId');
+      // print('Notificación marcada como eliminada: $notificationId');
     }
   }
   
@@ -50,7 +50,7 @@ class DismissedNotificationsService {
     }
     
     await prefs.setStringList(_keyDismissedNotifications, updatedList);
-    print('Limpieza completada. Notificaciones eliminadas: ${dismissedList.length - updatedList.length}');
+    // print('Limpieza completada. Notificaciones eliminadas: ${dismissedList.length - updatedList.length}');
   }
   
   // Limpiar todas las notificaciones eliminadas
@@ -64,6 +64,6 @@ class DismissedNotificationsService {
     }
     
     await prefs.remove(_keyDismissedNotifications);
-    print('Todas las notificaciones eliminadas han sido limpiadas');
+    // print('Todas las notificaciones eliminadas han sido limpiadas');
   }
 }

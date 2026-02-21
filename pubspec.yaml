@@ -23,6 +23,8 @@ dependencies:
   file_picker: ^8.1.2
   audioplayers: ^6.2.0
   path_provider: ^2.1.4
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
   
 
 dev_dependencies:

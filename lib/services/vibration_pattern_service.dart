@@ -82,7 +82,7 @@ class VibrationPatternService {
       
       return patterns;
     } catch (e) {
-      print('Error al obtener patrones de vibración: $e');
+      // print('Error al obtener patrones de vibración: $e');
       return [defaultPattern];
     }
   }
@@ -94,7 +94,7 @@ class VibrationPatternService {
       
       // Verificar que no sea el patrón predeterminado
       if (pattern.isDefault) {
-        print('No se puede guardar el patrón predeterminado');
+        // print('No se puede guardar el patrón predeterminado');
         return false;
       }
       
@@ -108,10 +108,10 @@ class VibrationPatternService {
       final patternsJson = json.encode(customPatterns.map((p) => p.toJson()).toList());
       
       await prefs.setString(_patternsKey, patternsJson);
-      print('✅ Patrón de vibración guardado: ${pattern.name}');
+      // print('✅ Patrón de vibración guardado: ${pattern.name}');
       return true;
     } catch (e) {
-      print('❌ Error al guardar patrón de vibración: $e');
+      // print('❌ Error al guardar patrón de vibración: $e');
       return false;
     }
   }
@@ -120,7 +120,7 @@ class VibrationPatternService {
   static Future<bool> deletePattern(String patternId) async {
     try {
       if (patternId == 'default') {
-        print('No se puede eliminar el patrón predeterminado');
+        // print('No se puede eliminar el patrón predeterminado');
         return false;
       }
       
@@ -140,10 +140,10 @@ class VibrationPatternService {
         await setSelectedPattern('default');
       }
       
-      print('✅ Patrón de vibración eliminado: $patternId');
+      // print('✅ Patrón de vibración eliminado: $patternId');
       return true;
     } catch (e) {
-      print('❌ Error al eliminar patrón de vibración: $e');
+      // print('❌ Error al eliminar patrón de vibración: $e');
       return false;
     }
   }
@@ -160,7 +160,7 @@ class VibrationPatternService {
         orElse: () => defaultPattern,
       );
     } catch (e) {
-      print('Error al obtener patrón seleccionado: $e');
+      // print('Error al obtener patrón seleccionado: $e');
       return defaultPattern;
     }
   }
@@ -170,10 +170,10 @@ class VibrationPatternService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_selectedPatternKey, patternId);
-      print('✅ Patrón de vibración seleccionado: $patternId');
+      // print('✅ Patrón de vibración seleccionado: $patternId');
       return true;
     } catch (e) {
-      print('❌ Error al seleccionar patrón de vibración: $e');
+      // print('❌ Error al seleccionar patrón de vibración: $e');
       return false;
     }
   }
@@ -181,42 +181,42 @@ class VibrationPatternService {
   // Reproducir un patrón de vibración
   static Future<void> playPattern(VibrationPattern pattern) async {
     try {
-      print('🔍 Iniciando reproducción de patrón: ${pattern.name}');
+      // print('🔍 Iniciando reproducción de patrón: ${pattern.name}');
       
       // Verificar si el dispositivo soporta vibración usando el paquete vibration
       final hasVibrator = await Vibration.hasVibrator() ?? false;
-      print('🔍 Dispositivo tiene vibrador: $hasVibrator');
+      // print('🔍 Dispositivo tiene vibrador: $hasVibrator');
       if (!hasVibrator) {
-        print('❌ El dispositivo no soporta vibración');
+        // print('❌ El dispositivo no soporta vibración');
         return;
       }
       
       // Verificar si la vibración está habilitada
       final isEnabled = await isVibrationEnabled();
-      print('🔍 Vibración habilitada: $isEnabled');
+      // print('🔍 Vibración habilitada: $isEnabled');
       if (!isEnabled) {
-        print('❌ La vibración está deshabilitada');
+        // print('❌ La vibración está deshabilitada');
         return;
       }
       
-      print('🔊 Reproduciendo patrón: ${pattern.name}');
-      print('📱 Patrón original: ${pattern.pattern}');
+      // print('🔊 Reproduciendo patrón: ${pattern.name}');
+      // print('📱 Patrón original: ${pattern.pattern}');
       
       // Convertir a List<int> para el patrón
       final vibrationPattern = pattern.pattern.map((e) => e.toInt()).toList();
-      print('📱 Patrón convertido: $vibrationPattern');
+      // print('📱 Patrón convertido: $vibrationPattern');
       
       // Verificar si el dispositivo soporta patrones personalizados
       final hasCustomVibrationsSupport = await Vibration.hasCustomVibrationsSupport() ?? false;
-      print('🔍 Soporte para patrones personalizados: $hasCustomVibrationsSupport');
+      // print('🔍 Soporte para patrones personalizados: $hasCustomVibrationsSupport');
       
       if (hasCustomVibrationsSupport) {
         // Usar el paquete vibration para reproducir el patrón
         await Vibration.vibrate(pattern: vibrationPattern);
-        print('✅ Patrón reproducido con paquete vibration');
+        // print('✅ Patrón reproducido con paquete vibration');
       } else {
         // Fallback: usar vibración simple repetida
-        print('🔄 Dispositivo no soporta patrones, usando vibración simple repetida');
+        // print('🔄 Dispositivo no soporta patrones, usando vibración simple repetida');
         for (int i = 0; i < vibrationPattern.length; i++) {
           if (i % 2 == 1) { // Solo vibrar en índices impares (las pausas están en pares)
             await Vibration.vibrate(duration: vibrationPattern[i]);
@@ -225,21 +225,21 @@ class VibrationPatternService {
             }
           }
         }
-        print('✅ Patrón simulado con vibraciones simples');
+        // print('✅ Patrón simulado con vibraciones simples');
       }
       
-      print('✅ Patrón de vibración reproducido exitosamente');
+      // print('✅ Patrón de vibración reproducido exitosamente');
     } catch (e) {
-      print('❌ Error al reproducir patrón de vibración: $e');
-      print('❌ Stack trace: ${StackTrace.current}');
+      // print('❌ Error al reproducir patrón de vibración: $e');
+      // print('❌ Stack trace: ${StackTrace.current}');
       
       // Intentar vibración simple como fallback
       try {
-        print('🔄 Intentando vibración simple como fallback...');
+        // print('🔄 Intentando vibración simple como fallback...');
         await Vibration.vibrate(duration: 500);
-        print('✅ Vibración simple de fallback exitosa');
+        // print('✅ Vibración simple de fallback exitosa');
       } catch (fallbackError) {
-        print('❌ Error en vibración de fallback: $fallbackError');
+        // print('❌ Error en vibración de fallback: $fallbackError');
       }
     }
   }
@@ -255,44 +255,44 @@ class VibrationPatternService {
   // Reproducir un patrón desde una lista de enteros
   static Future<void> playPatternFromList(List<int> patternList) async {
     try {
-      print('🔍 Iniciando reproducción de patrón desde lista: $patternList');
+      // print('🔍 Iniciando reproducción de patrón desde lista: $patternList');
       
       // Verificar si el dispositivo soporta vibración usando el paquete vibration
       final hasVibrator = await Vibration.hasVibrator() ?? false;
-      print('🔍 Dispositivo tiene vibrador: $hasVibrator');
+      // print('🔍 Dispositivo tiene vibrador: $hasVibrator');
       if (!hasVibrator) {
-        print('❌ El dispositivo no soporta vibración');
+        // print('❌ El dispositivo no soporta vibración');
         return;
       }
       
       // Verificar si la vibración está habilitada
       final isEnabled = await isVibrationEnabled();
-      print('🔍 Vibración habilitada: $isEnabled');
+      // print('🔍 Vibración habilitada: $isEnabled');
       if (!isEnabled) {
-        print('❌ La vibración está deshabilitada');
+        // print('❌ La vibración está deshabilitada');
         return;
       }
       
       // Validar el patrón
       if (!isValidPattern(patternList)) {
-        print('❌ Patrón inválido: $patternList');
+        // print('❌ Patrón inválido: $patternList');
         return;
       }
       
-      print('🔊 Reproduciendo patrón desde lista');
-      print('📱 Patrón: $patternList');
+      // print('🔊 Reproduciendo patrón desde lista');
+      // print('📱 Patrón: $patternList');
       
       // Verificar si el dispositivo soporta patrones personalizados
       final hasCustomVibrationsSupport = await Vibration.hasCustomVibrationsSupport() ?? false;
-      print('🔍 Soporte para patrones personalizados: $hasCustomVibrationsSupport');
+      // print('🔍 Soporte para patrones personalizados: $hasCustomVibrationsSupport');
       
       if (hasCustomVibrationsSupport) {
         // Usar el paquete vibration para reproducir el patrón
         await Vibration.vibrate(pattern: patternList);
-        print('✅ Patrón reproducido con paquete vibration');
+        // print('✅ Patrón reproducido con paquete vibration');
       } else {
         // Fallback: usar vibración simple repetida
-        print('🔄 Dispositivo no soporta patrones, usando vibración simple repetida');
+        // print('🔄 Dispositivo no soporta patrones, usando vibración simple repetida');
         for (int i = 0; i < patternList.length; i++) {
           if (i % 2 == 1) { // Solo vibrar en índices impares (las pausas están en pares)
             await Vibration.vibrate(duration: patternList[i]);
@@ -301,21 +301,21 @@ class VibrationPatternService {
             }
           }
         }
-        print('✅ Patrón simulado con vibraciones simples');
+        // print('✅ Patrón simulado con vibraciones simples');
       }
       
-      print('✅ Patrón de vibración reproducido exitosamente desde lista');
+      // print('✅ Patrón de vibración reproducido exitosamente desde lista');
     } catch (e) {
-      print('❌ Error al reproducir patrón desde lista: $e');
-      print('❌ Stack trace: ${StackTrace.current}');
+      // print('❌ Error al reproducir patrón desde lista: $e');
+      // print('❌ Stack trace: ${StackTrace.current}');
       
       // Intentar vibración simple como fallback
       try {
-        print('🔄 Intentando vibración simple como fallback...');
+        // print('🔄 Intentando vibración simple como fallback...');
         await Vibration.vibrate(duration: 500);
-        print('✅ Vibración simple de fallback exitosa');
+        // print('✅ Vibración simple de fallback exitosa');
       } catch (fallbackError) {
-        print('❌ Error en vibración de fallback: $fallbackError');
+        // print('❌ Error en vibración de fallback: $fallbackError');
       }
     }
   }
@@ -323,30 +323,30 @@ class VibrationPatternService {
   // Reproducir vibración simple
   static Future<void> playSimpleVibration({int duration = 500}) async {
     try {
-      print('🔍 Iniciando vibración simple de ${duration}ms');
+      // print('🔍 Iniciando vibración simple de ${duration}ms');
       
       // Verificar si el dispositivo soporta vibración usando el paquete vibration
       final hasVibrator = await Vibration.hasVibrator() ?? false;
-      print('🔍 Dispositivo tiene vibrador: $hasVibrator');
+      // print('🔍 Dispositivo tiene vibrador: $hasVibrator');
       if (!hasVibrator) {
-        print('❌ El dispositivo no soporta vibración');
+        // print('❌ El dispositivo no soporta vibración');
         return;
       }
       
       // Verificar si la vibración está habilitada
       final isEnabled = await isVibrationEnabled();
-      print('🔍 Vibración habilitada: $isEnabled');
+      // print('🔍 Vibración habilitada: $isEnabled');
       if (!isEnabled) {
-        print('❌ La vibración está deshabilitada');
+        // print('❌ La vibración está deshabilitada');
         return;
       }
       
       // Reproducir vibración simple usando el paquete vibration
       await Vibration.vibrate(duration: duration);
       
-      print('✅ Vibración simple reproducida exitosamente');
+      // print('✅ Vibración simple reproducida exitosamente');
     } catch (e) {
-      print('❌ Error al reproducir vibración simple: $e');
+      // print('❌ Error al reproducir vibración simple: $e');
       rethrow;
     }
   }
@@ -354,34 +354,34 @@ class VibrationPatternService {
   // Método para probar la vibración (usado para debugging)
   static Future<void> testVibration() async {
     try {
-      print('🔍 Iniciando test de vibración');
+      // print('🔍 Iniciando test de vibración');
       
       // Verificar capacidades del dispositivo
       final hasVibrator = await Vibration.hasVibrator() ?? false;
       final hasAmplitudeControl = await Vibration.hasAmplitudeControl() ?? false;
       final hasCustomVibrationsSupport = await Vibration.hasCustomVibrationsSupport() ?? false;
       
-      print('🔍 Capacidades del dispositivo:');
-      print('  - Tiene vibrador: $hasVibrator');
-      print('  - Control de amplitud: $hasAmplitudeControl');
-      print('  - Patrones personalizados: $hasCustomVibrationsSupport');
+      // print('🔍 Capacidades del dispositivo:');
+      // print('  - Tiene vibrador: $hasVibrator');
+      // print('  - Control de amplitud: $hasAmplitudeControl');
+      // print('  - Patrones personalizados: $hasCustomVibrationsSupport');
       
       if (!hasVibrator) {
-        print('❌ El dispositivo no tiene vibrador');
+        // print('❌ El dispositivo no tiene vibrador');
         return;
       }
       
       // Test de vibración simple
-      print('🔄 Probando vibración simple...');
+      // print('🔄 Probando vibración simple...');
       await Vibration.vibrate(duration: 500);
       await Future.delayed(const Duration(milliseconds: 1000));
       
       // Test de patrón si está soportado
       if (hasCustomVibrationsSupport) {
-        print('🔄 Probando patrón de vibración...');
+        // print('🔄 Probando patrón de vibración...');
         await Vibration.vibrate(pattern: [0, 300, 100, 300, 100, 300]);
       } else {
-        print('🔄 Simulando patrón con vibraciones simples...');
+        // print('🔄 Simulando patrón con vibraciones simples...');
         await Vibration.vibrate(duration: 300);
         await Future.delayed(const Duration(milliseconds: 100));
         await Vibration.vibrate(duration: 300);
@@ -389,9 +389,9 @@ class VibrationPatternService {
         await Vibration.vibrate(duration: 300);
       }
       
-      print('✅ Test de vibración completado');
+      // print('✅ Test de vibración completado');
     } catch (e) {
-      print('❌ Error en test de vibración: $e');
+      // print('❌ Error en test de vibración: $e');
       rethrow;
     }
   }
@@ -402,7 +402,7 @@ class VibrationPatternService {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool(_vibrationEnabledKey) ?? true; // Por defecto habilitada
     } catch (e) {
-      print('Error al verificar estado de vibración: $e');
+      // print('Error al verificar estado de vibración: $e');
       return true;
     }
   }
@@ -412,10 +412,10 @@ class VibrationPatternService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_vibrationEnabledKey, enabled);
-      print('✅ Vibración ${enabled ? "habilitada" : "deshabilitada"}');
+      // print('✅ Vibración ${enabled ? "habilitada" : "deshabilitada"}');
       return true;
     } catch (e) {
-      print('❌ Error al cambiar estado de vibración: $e');
+      // print('❌ Error al cambiar estado de vibración: $e');
       return false;
     }
   }
@@ -440,10 +440,10 @@ class VibrationPatternService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_patternsKey);
       await setSelectedPattern('default');
-      print('✅ Todos los patrones personalizados eliminados');
+      // print('✅ Todos los patrones personalizados eliminados');
       return true;
     } catch (e) {
-      print('❌ Error al limpiar patrones: $e');
+      // print('❌ Error al limpiar patrones: $e');
       return false;
     }
   }

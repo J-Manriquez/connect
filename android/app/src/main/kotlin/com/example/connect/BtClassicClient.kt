@@ -1,0 +1,623 @@
+package com.example.connect
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothSocket
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.AudioManager
+import android.media.session.MediaController
+import android.net.Uri
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Base64
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import io.flutter.FlutterInjector
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.embedding.engine.loader.FlutterLoader
+import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugins.GeneratedPluginRegistrant
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+import java.io.EOFException
+import java.util.UUID
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
+
+object BtClassicClient {
+    private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    private const val MEDIA_LAUNCH_CHANNEL_ID = "media_launch_channel"
+
+    private var appContext: Context? = null
+    private val ioExecutor = Executors.newSingleThreadExecutor()
+    private val scheduler = ScheduledThreadPoolExecutor(1)
+
+    private var socket: BluetoothSocket? = null
+    private var input: DataInputStream? = null
+    private var out: DataOutputStream? = null
+    private var targetAddress: String? = null
+    private var reconnectAttempt: Int = 0
+    private val reconnectScheduled = AtomicBoolean(false)
+    private val readerRunning = AtomicBoolean(false)
+    private var readerThread: Thread? = null
+
+    private var flutterEngine: FlutterEngine? = null
+    private var btHiveChannel: MethodChannel? = null
+    private var deviceFinderManager: DeviceFinderManager? = null
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+        println("[btclassic][client] init")
+    }
+
+    fun connect(address: String) {
+        val current = targetAddress
+        val s = socket
+        if (current == address && s != null && s.isConnected) {
+            println("[btclassic][client] connect ignored: already_connected address=$address")
+            return
+        }
+        targetAddress = address
+        reconnectAttempt = 0
+        println("[btclassic][client] connect requested address=$address")
+        ioExecutor.execute { connectInternal(address) }
+    }
+
+    fun disconnect() {
+        targetAddress = null
+        reconnectAttempt = 0
+        println("[btclassic][client] disconnect requested")
+        ioExecutor.execute { closeInternal() }
+    }
+
+    fun send(json: String): Boolean {
+        val addr = targetAddress ?: run {
+            println("[btclassic][client] send rejected: no targetAddress")
+            return false
+        }
+        println("[btclassic][client] send queued bytes=${json.toByteArray(Charsets.UTF_8).size} addr=$addr")
+        ioExecutor.execute {
+            val ok = trySendInternal(json)
+            println("[btclassic][client] send result ok=$ok")
+            if (!ok) scheduleReconnect(addr)
+        }
+        return true
+    }
+
+    private fun connectInternal(address: String) {
+        closeInternal()
+        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+        if (!adapter.isEnabled) return
+        try {
+            try { adapter.cancelDiscovery() } catch (_: Exception) {}
+            val device = adapter.getRemoteDevice(address)
+            val s = device.createRfcommSocketToServiceRecord(SPP_UUID)
+            s.connect()
+            socket = s
+            input = DataInputStream(s.inputStream)
+            out = DataOutputStream(s.outputStream)
+            reconnectAttempt = 0
+            reconnectScheduled.set(false)
+            Log.d("BtClassicClient", "connected: $address")
+            println("[btclassic][client] connected address=$address")
+            startReaderThread(address)
+        } catch (e: Exception) {
+            Log.d("BtClassicClient", "connect_failed: ${e.message ?: ""}")
+            println("[btclassic][client] connect_failed address=$address err=${e.message ?: ""}")
+            closeInternal()
+            scheduleReconnect(address)
+        }
+    }
+
+    private fun trySendInternal(json: String): Boolean {
+        val bytes = json.toByteArray(Charsets.UTF_8)
+        val o = out ?: return false
+        return try {
+            o.writeInt(bytes.size)
+            o.write(bytes)
+            o.flush()
+            true
+        } catch (e: Exception) {
+            Log.d("BtClassicClient", "send_failed: ${e.message ?: ""}")
+            println("[btclassic][client] send_failed err=${e.message ?: ""}")
+            closeInternal()
+            false
+        }
+    }
+
+    private fun scheduleReconnect(address: String) {
+        if (reconnectScheduled.getAndSet(true)) return
+        val attempt = reconnectAttempt.coerceAtMost(8)
+        val delayMs = (1000L shl attempt).coerceAtMost(30000L)
+        reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(50)
+        scheduler.schedule({
+            reconnectScheduled.set(false)
+            ioExecutor.execute {
+                if (targetAddress == address) connectInternal(address)
+            }
+        }, delayMs, TimeUnit.MILLISECONDS)
+        Log.d("BtClassicClient", "reconnect_scheduled: $delayMs ms")
+    }
+
+    private fun startReaderThread(address: String) {
+        readerRunning.set(true)
+        readerThread = Thread {
+            try {
+                val i = input ?: return@Thread
+                while (readerRunning.get() && targetAddress == address) {
+                    val len = try { i.readInt() } catch (e: EOFException) { break }
+                    if (len <= 0 || len > 1024 * 256) break
+                    val data = ByteArray(len)
+                    i.readFully(data)
+                    handleIncomingPayload(String(data, Charsets.UTF_8))
+                }
+            } catch (_: Exception) {
+            } finally {
+                ioExecutor.execute {
+                    val shouldReconnect = targetAddress == address
+                    closeInternal()
+                    if (shouldReconnect) scheduleReconnect(address)
+                }
+            }
+        }.also { it.start() }
+    }
+
+    private fun handleIncomingPayload(json: String) {
+        try {
+            val obj = JSONObject(json)
+            val type = obj.optString("type", "")
+            when (type) {
+                "media_command" -> {
+                    val command = obj.optString("command", "")
+                    val positionMs = try { obj.optLong("positionMs", -1L) } catch (_: Exception) { -1L }
+                    val ctx = appContext ?: return
+                    handleMediaCommand(ctx, command, positionMs)
+                }
+                "volume_command" -> {
+                    val ctx = appContext ?: return
+                    val pct = try { obj.optInt("pct", -1) } catch (_: Exception) { -1 }
+                    val level = try { obj.optInt("level", -1) } catch (_: Exception) { -1 }
+                    val max = try { obj.optInt("max", -1) } catch (_: Exception) { -1 }
+                    handleVolumeCommand(ctx, pct, level, max)
+                }
+                "volume_request" -> {
+                    val ctx = appContext ?: return
+                    sendVolumeState(ctx)
+                }
+                "launch_default_media_app" -> {
+                    val ctx = appContext ?: return
+                    val pkg = obj.optString("packageName", "").trim()
+                    handleLaunchDefaultMediaApp(ctx, pkg)
+                }
+                "visualization_update" -> {
+                    val deviceId = obj.optString("deviceId", "")
+                    val dateId = obj.optString("dateId", "")
+                    val notificationId = obj.optString("notificationId", "")
+                    val visualizado = obj.optBoolean("visualizado", true)
+
+                    if (deviceId.isBlank() || dateId.isBlank() || notificationId.isBlank()) return
+
+                    ensureFlutterEngine()
+                    btHiveChannel?.invokeMethod(
+                        "onBtVisualizationUpdate",
+                        mapOf(
+                            "type" to type,
+                            "deviceId" to deviceId,
+                            "dateId" to dateId,
+                            "notificationId" to notificationId,
+                            "visualizado" to visualizado
+                        )
+                    )
+                }
+                "device_search" -> {
+                    val action = obj.optString("action", "start")
+                    val ctx = appContext ?: return
+                    deviceFinderManager = DeviceFinderManager.getInstance(ctx)
+                    if (action == "stop") {
+                        try { deviceFinderManager?.stopDeviceSearch() } catch (_: Exception) {}
+                    } else {
+                        try { deviceFinderManager?.startDeviceSearch() } catch (_: Exception) {}
+                    }
+                }
+                "debug_log" -> {
+                    val source = obj.optString("source", "receptor")
+                    val message = obj.optString("message", "")
+                    val ts = obj.optLong("timestamp", 0L)
+                    println("[btclassic][debug][$source][$ts] $message")
+                }
+                else -> return
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun handleLaunchDefaultMediaApp(ctx: Context, pkgFromPayload: String) {
+        val pkg = if (pkgFromPayload.isNotBlank()) {
+            pkgFromPayload
+        } else {
+            try {
+                val prefs = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                prefs.getString("flutter.media_default_app_package", null)?.trim().orEmpty()
+            } catch (_: Exception) {
+                ""
+            }
+        }
+        if (pkg.isBlank()) return
+
+        val pm = try { ctx.packageManager } catch (_: Exception) { null } ?: return
+        val appLabel = try {
+            val appInfo = pm.getApplicationInfo(pkg, 0)
+            pm.getApplicationLabel(appInfo).toString()
+        } catch (_: Exception) {
+            pkg
+        }
+
+        val launch = try { pm.getLaunchIntentForPackage(pkg) } catch (_: Exception) { null }
+        if (launch != null) {
+            try {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(launch)
+                return
+            } catch (_: Exception) {
+            }
+        }
+
+        try {
+            showMediaLaunchNotification(ctx, pkg, appLabel)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun showMediaLaunchNotification(ctx: Context, pkg: String, appLabel: String) {
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                MEDIA_LAUNCH_CHANNEL_ID,
+                "Apertura de multimedia",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            nm.createNotificationChannel(channel)
+        }
+
+        val openIntent = Intent(ctx, MainActivity::class.java).apply {
+            action = "MEDIA_LAUNCH_ACTION"
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("packageName", pkg)
+        }
+        val pi = PendingIntent.getActivity(
+            ctx,
+            pkg.hashCode(),
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
+        )
+
+        val n = NotificationCompat.Builder(ctx, MEDIA_LAUNCH_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Abrir $appLabel")
+            .setContentText("Toca para activar la aplicación multimedia seleccionada")
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setFullScreenIntent(pi, true)
+            .build()
+
+        nm.notify(10021, n)
+    }
+
+    private fun immutableFlag(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+    }
+
+    private fun handleMediaCommand(ctx: Context, command: String, positionMs: Long) {
+        try {
+            val msm = ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager ?: return
+            val component = ComponentName(ctx, NotificationListener::class.java)
+            val controllers = try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList<MediaController>() }
+            val controller = selectBestController(controllers) ?: return
+            val controls = controller.transportControls
+
+            when (command) {
+                "play" -> controls.play()
+                "pause" -> controls.pause()
+                "toggle" -> {
+                    val state = controller.playbackState?.state ?: PlaybackState.STATE_NONE
+                    val isPlaying = state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
+                    if (isPlaying) controls.pause() else controls.play()
+                }
+                "next" -> controls.skipToNext()
+                "previous" -> controls.skipToPrevious()
+                "seekTo" -> if (positionMs >= 0) controls.seekTo(positionMs)
+            }
+
+            val delayMs = if (command == "seekTo") 700L else 450L
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    sendMediaStateSnapshot(ctx)
+                } catch (_: Exception) {
+                }
+            }, delayMs)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun handleVolumeCommand(ctx: Context, pct: Int, level: Int, max: Int) {
+        try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+            val streamMax = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            if (streamMax <= 0) return
+
+            val target = when {
+                pct in 0..100 -> ((pct.toDouble() / 100.0) * streamMax.toDouble()).roundToInt()
+                level >= 0 && max > 0 -> ((level.toDouble() / max.toDouble()) * streamMax.toDouble()).roundToInt()
+                else -> return
+            }.coerceIn(0, streamMax)
+
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+            sendVolumeState(ctx)
+            Handler(Looper.getMainLooper()).postDelayed({
+                try { sendMediaStateSnapshot(ctx) } catch (_: Exception) {}
+            }, 250L)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun sendVolumeState(ctx: Context) {
+        try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+            val level = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            if (max <= 0 || level < 0) return
+            val pct = ((level.toDouble() / max.toDouble()) * 100.0).toInt().coerceIn(0, 100)
+
+            val payload = HashMap<String, Any?>()
+            payload["type"] = "volume_state"
+            payload["time"] = System.currentTimeMillis()
+            payload["level"] = level
+            payload["max"] = max
+            payload["pct"] = pct
+
+            send(JSONObject(payload as Map<*, *>).toString())
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun encodeArtBase64(metadata: android.media.MediaMetadata?): String? {
+        if (metadata == null) return null
+
+        fun computeSampleSize(width: Int, height: Int, maxSide: Int): Int {
+            var sample = 1
+            while (width / sample > maxSide || height / sample > maxSide) {
+                sample *= 2
+            }
+            return sample.coerceAtLeast(1)
+        }
+
+        fun decodeBitmapFromUri(uriString: String, maxSide: Int): Bitmap? {
+            val ctx = appContext ?: return null
+            val uri = try { Uri.parse(uriString) } catch (_: Exception) { null } ?: return null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            try {
+                ctx.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, bounds)
+                }
+            } catch (_: Exception) {
+                return null
+            }
+
+            val outW = bounds.outWidth
+            val outH = bounds.outHeight
+            if (outW <= 0 || outH <= 0) return null
+
+            val sample = computeSampleSize(outW, outH, maxSide)
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            return try {
+                ctx.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, opts)
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        val maxSide = 220
+
+        val raw: Bitmap? =
+            metadata.getBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART)
+                ?: metadata.getBitmap(android.media.MediaMetadata.METADATA_KEY_ART)
+                ?: metadata.getBitmap(android.media.MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+
+        val uriString: String? = if (raw == null) {
+            metadata.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+                ?: metadata.getString(android.media.MediaMetadata.METADATA_KEY_ART_URI)
+                ?: metadata.getString(android.media.MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
+        } else {
+            null
+        }
+
+        val fromUri = if (!uriString.isNullOrBlank()) {
+            decodeBitmapFromUri(uriString, maxSide)
+        } else {
+            null
+        }
+
+        val bmp = raw ?: fromUri ?: return null
+
+        val width = bmp.width
+        val height = bmp.height
+        val scaled = if (width > maxSide || height > maxSide) {
+            val ratio = if (width >= height) {
+                maxSide.toFloat() / width.toFloat()
+            } else {
+                maxSide.toFloat() / height.toFloat()
+            }
+            val w = (width * ratio).toInt().coerceAtLeast(1)
+            val h = (height * ratio).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(bmp, w, h, true)
+        } else {
+            bmp
+        }
+
+        val tryQualities = listOf(70, 55, 45)
+        for (q in tryQualities) {
+            val baos = ByteArrayOutputStream()
+            try {
+                scaled.compress(Bitmap.CompressFormat.JPEG, q, baos)
+                val bytes = baos.toByteArray()
+                if (bytes.size <= 120_000) {
+                    return Base64.encodeToString(bytes, Base64.NO_WRAP)
+                }
+            } catch (_: Exception) {
+            } finally {
+                try { baos.close() } catch (_: Exception) {}
+            }
+        }
+        return null
+    }
+
+    private fun sendMediaStateSnapshot(ctx: Context) {
+        val msm = ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager ?: return
+        val component = ComponentName(ctx, NotificationListener::class.java)
+        val controllers = try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList<MediaController>() }
+        val controller = selectBestController(controllers) ?: return
+
+        val state = controller.playbackState
+        val metadata = controller.metadata
+
+        val playbackState = state?.state ?: PlaybackState.STATE_NONE
+        val isPlaying = playbackState == PlaybackState.STATE_PLAYING ||
+                playbackState == PlaybackState.STATE_BUFFERING
+
+        val actions = state?.actions ?: 0L
+        val canPlayPause = (actions and PlaybackState.ACTION_PLAY) != 0L ||
+                (actions and PlaybackState.ACTION_PAUSE) != 0L ||
+                (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L
+        val canSkipNext = (actions and PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
+        val canSkipPrev = (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
+        val canSeek = (actions and PlaybackState.ACTION_SEEK_TO) != 0L
+
+        val title = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
+            ?: metadata?.getString(android.media.MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+        val artist = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST)
+            ?: metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+        val album = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM)
+        val durationMs = metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+        val positionMs = state?.position ?: 0L
+        val packageName = controller.packageName ?: ""
+
+        if (packageName.isBlank() || title.isNullOrBlank()) return
+
+        val appName = try {
+            val appInfo = ctx.packageManager.getApplicationInfo(packageName, 0)
+            ctx.packageManager.getApplicationLabel(appInfo).toString()
+        } catch (_: Exception) {
+            packageName
+        }
+
+        val payload = HashMap<String, Any?>()
+        payload["type"] = "media_state"
+        payload["time"] = System.currentTimeMillis()
+        payload["packageName"] = packageName
+        payload["appName"] = appName
+        payload["title"] = title
+        payload["artist"] = artist ?: ""
+        payload["album"] = album ?: ""
+        payload["durationMs"] = durationMs
+        payload["positionMs"] = positionMs
+        payload["isPlaying"] = isPlaying
+        payload["canPlayPause"] = canPlayPause
+        payload["canSkipNext"] = canSkipNext
+        payload["canSkipPrev"] = canSkipPrev
+        payload["canSeek"] = canSeek
+
+        try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val level = am?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: -1
+            val max = am?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: -1
+            if (level >= 0 && max > 0) {
+                val pct = ((level.toDouble() / max.toDouble()) * 100.0).toInt().coerceIn(0, 100)
+                payload["volumeLevel"] = level
+                payload["volumeMax"] = max
+                payload["volumePct"] = pct
+            }
+        } catch (_: Exception) {
+        }
+
+        val artBase64 = encodeArtBase64(metadata)
+        if (!artBase64.isNullOrBlank()) {
+            payload["artMime"] = "image/jpeg"
+            payload["artBase64"] = artBase64
+        }
+
+        try {
+            send(JSONObject(payload as Map<*, *>).toString())
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun selectBestController(controllers: List<MediaController>): MediaController? {
+        if (controllers.isEmpty()) return null
+        val playing = controllers.firstOrNull { c ->
+            val state = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
+        }
+        if (playing != null) return playing
+        val paused = controllers.firstOrNull { c ->
+            val state = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            state == PlaybackState.STATE_PAUSED
+        }
+        return paused ?: controllers.first()
+    }
+
+    private fun ensureFlutterEngine() {
+        if (flutterEngine != null) return
+        val ctx = appContext ?: return
+        try {
+            val loader: FlutterLoader = FlutterInjector.instance().flutterLoader()
+            if (!loader.initialized()) {
+                loader.startInitialization(ctx)
+                loader.ensureInitializationComplete(ctx, null)
+            }
+
+            val engine = FlutterEngine(ctx)
+            GeneratedPluginRegistrant.registerWith(engine)
+            engine.dartExecutor.executeDartEntrypoint(
+                DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "btHiveMain")
+            )
+            btHiveChannel = MethodChannel(engine.dartExecutor.binaryMessenger, "com.example.connect/bt_hive_bridge")
+            flutterEngine = engine
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun closeInternal() {
+        readerRunning.set(false)
+        try { readerThread?.interrupt() } catch (_: Exception) {}
+        readerThread = null
+        try { input?.close() } catch (_: Exception) {}
+        input = null
+        try { out?.close() } catch (_: Exception) {}
+        out = null
+        try { socket?.close() } catch (_: Exception) {}
+        socket = null
+    }
+}

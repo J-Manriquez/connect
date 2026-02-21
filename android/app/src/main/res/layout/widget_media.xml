@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="#000000">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/widget_bg"
+            android:layout_width="72dp"
+            android:layout_height="72dp"
+            android:scaleType="centerCrop"
+            android:src="@android:drawable/ic_menu_gallery" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="10dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Sin reproducción"
+                android:textColor="#FFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widget_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Conecta el emisor para controlar"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/widget_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="10dp"
+        android:progressDrawable="@drawable/widget_progress_with_thumb"
+        android:max="1000"
+        android:progress="0" />
+
+    <TextView
+        android:id="@+id/widget_time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="0:00 / 0:00"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <LinearLayout
+        android:id="@+id/widget_controls_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="10dp">
+
+        <ImageView
+            android:id="@+id/widget_volume_btn"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:adjustViewBounds="true"
+            android:scaleType="centerInside"
+            android:src="@drawable/widget_ic_volume"
+            android:tint="#FFFFFF" />
+
+        <ImageView
+            android:id="@+id/widget_prev"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:adjustViewBounds="true"
+            android:scaleType="centerInside"
+            android:src="@drawable/widget_ic_prev"
+            android:tint="#FFFFFF" />
+
+        <ImageView
+            android:id="@+id/widget_play_pause"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:adjustViewBounds="true"
+            android:scaleType="centerInside"
+            android:src="@drawable/widget_ic_play"
+            android:tint="#FFFFFF" />
+
+        <ImageView
+            android:id="@+id/widget_next"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:adjustViewBounds="true"
+            android:scaleType="centerInside"
+            android:src="@drawable/widget_ic_next"
+            android:tint="#FFFFFF" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/widget_volume_panel"
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:layout_marginTop="8dp"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/widget_volume_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:progressDrawable="@drawable/widget_progress_with_thumb"
+            android:max="100"
+            android:progress="0" />
+
+        <LinearLayout
+            android:id="@+id/widget_volume_segments"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal">
+
+            <TextView android:id="@+id/widget_vol_0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_10" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_20" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_30" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_40" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_50" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_60" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_70" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_80" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_90" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+            <TextView android:id="@+id/widget_vol_100" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
+        </LinearLayout>
+    </FrameLayout>
+
+</LinearLayout>

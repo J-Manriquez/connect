@@ -49,8 +49,10 @@ class NotificationData {
 
   factory NotificationData.fromNotificationMap(Map<String, dynamic> notification) {
     final DateTime now = DateTime.now();
-    // Usar el timestamp como ID en formato de milisegundos desde la época
-    final String uniqueId = now.millisecondsSinceEpoch.toString();
+    final String providedId = (notification['id'] ?? '').toString().trim();
+    final String uniqueId =
+        providedId.isNotEmpty ? providedId : now.millisecondsSinceEpoch.toString();
+    final DateTime timestamp = _extractTimestamp(notification) ?? now;
     
     return NotificationData(
       id: uniqueId,
@@ -58,10 +60,30 @@ class NotificationData {
       text: notification['text'] ?? '',
       packageName: notification['packageName'] ?? '',
       appName: notification['appName'] ?? '',
-      timestamp: now,
+      timestamp: timestamp,
       extras: Map<String, dynamic>.from(notification['extras'] ?? {}),
       statusVisualizacion: false, // Siempre inicializar como false para nuevas notificaciones
     );
+  }
+
+  static DateTime? _extractTimestamp(Map<String, dynamic> notification) {
+    final dynamic ts = notification['timestamp'];
+    if (ts is Timestamp) return ts.toDate();
+    if (ts is DateTime) return ts;
+    if (ts is int) return DateTime.fromMillisecondsSinceEpoch(ts);
+    if (ts is String) {
+      final ms = int.tryParse(ts);
+      if (ms != null) return DateTime.fromMillisecondsSinceEpoch(ms);
+    }
+
+    final dynamic time = notification['time'];
+    if (time is int) return DateTime.fromMillisecondsSinceEpoch(time);
+    if (time is String) {
+      final ms = int.tryParse(time);
+      if (ms != null) return DateTime.fromMillisecondsSinceEpoch(ms);
+    }
+
+    return null;
   }
   
   // Método para crear una copia de la notificación con el estado de visualización actualizado

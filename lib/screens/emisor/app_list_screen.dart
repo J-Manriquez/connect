@@ -175,7 +175,7 @@ class _AppListScreenState extends State<AppListScreen> {
 
       await NotificationFilterService.syncEnabledAppsWithFirebase();
     } on PlatformException catch (e) {
-      print("Error al actualizar estado de la aplicación: ${e.message}");
+      // print("Error al actualizar estado de la aplicación: ${e.message}");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error al actualizar estado: ${e.message}")),
       );

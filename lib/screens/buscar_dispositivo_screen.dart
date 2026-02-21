@@ -89,7 +89,7 @@ class _BuscarDispositivoScreenState extends State<BuscarDispositivoScreen>
         await deviceSearchService.resetBuscarEmisor();
       }
     } catch (e) {
-      print('Error al resetear campos de búsqueda: $e');
+      // print('Error al resetear campos de búsqueda: $e');
     }
     
     if (mounted) {

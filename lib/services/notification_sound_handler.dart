@@ -14,7 +14,7 @@ class NotificationSoundHandler {
     if (_isInitialized) return;
     
     try {
-      print('🔊 Inicializando NotificationSoundHandler');
+      // print('🔊 Inicializando NotificationSoundHandler');
       
       // Configurar el canal de métodos para recibir comandos desde Android
       _channel.setMethodCallHandler(_handleMethodCall);
@@ -22,27 +22,27 @@ class NotificationSoundHandler {
       // Escuchar eventos de sonido desde Android
       _soundEventSubscription = _eventChannel.receiveBroadcastStream().listen(
         (event) {
-          print('🔊 Evento de sonido recibido: $event');
+          // print('🔊 Evento de sonido recibido: $event');
           if (event == 'PLAY_CUSTOM_SOUND') {
             _playCustomSoundFromAndroid();
           }
         },
         onError: (error) {
-          print('❌ Error en stream de eventos de sonido: $error');
+          // print('❌ Error en stream de eventos de sonido: $error');
         },
       );
       
       _isInitialized = true;
-      print('✅ NotificationSoundHandler inicializado correctamente');
+      // print('✅ NotificationSoundHandler inicializado correctamente');
     } catch (e) {
-      print('❌ Error al inicializar NotificationSoundHandler: $e');
+      // print('❌ Error al inicializar NotificationSoundHandler: $e');
     }
   }
 
   // Manejar llamadas de métodos desde Android
   static Future<dynamic> _handleMethodCall(MethodCall call) async {
     try {
-      print('🔊 Método recibido desde Android: ${call.method}');
+      // print('🔊 Método recibido desde Android: ${call.method}');
       
       switch (call.method) {
         case 'playCustomSound':
@@ -61,14 +61,14 @@ class NotificationSoundHandler {
           return await CustomSoundService.isSoundEnabled();
         
         default:
-          print('⚠️ Método no reconocido: ${call.method}');
+          // print('⚠️ Método no reconocido: ${call.method}');
           throw PlatformException(
             code: 'UNIMPLEMENTED',
             message: 'Método ${call.method} no implementado',
           );
       }
     } catch (e) {
-      print('❌ Error al manejar método ${call.method}: $e');
+      // print('❌ Error al manejar método ${call.method}: $e');
       rethrow;
     }
   }
@@ -76,36 +76,36 @@ class NotificationSoundHandler {
   // Reproducir sonido personalizado cuando es llamado desde Android
   static Future<void> _playCustomSoundFromAndroid() async {
     try {
-      print('🔊 Reproduciendo sonido personalizado desde comando de Android');
+      // print('🔊 Reproduciendo sonido personalizado desde comando de Android');
       
       // Verificar si los sonidos personalizados están habilitados
       final isEnabled = await CustomSoundService.isSoundEnabled();
       if (!isEnabled) {
-        print('❌ Sonidos personalizados deshabilitados');
+        // print('❌ Sonidos personalizados deshabilitados');
         return;
       }
       
       // Obtener y reproducir el sonido seleccionado
       final selectedSound = await CustomSoundService.getSelectedSound();
       if (selectedSound != null) {
-        print('🎵 Reproduciendo sonido: ${selectedSound.name}');
+        // print('🎵 Reproduciendo sonido: ${selectedSound.name}');
         await CustomSoundService.playSound(selectedSound);
-        print('✅ Sonido personalizado reproducido exitosamente');
+        // print('✅ Sonido personalizado reproducido exitosamente');
       } else {
-        print('⚠️ No hay sonido seleccionado');
+        // print('⚠️ No hay sonido seleccionado');
       }
     } catch (e) {
-      print('❌ Error al reproducir sonido personalizado: $e');
+      // print('❌ Error al reproducir sonido personalizado: $e');
     }
   }
 
   // Reproducir sonido personalizado manualmente (para testing)
   static Future<void> playSelectedSound() async {
     try {
-      print('🔊 Reproduciendo sonido personalizado manualmente');
+      // print('🔊 Reproduciendo sonido personalizado manualmente');
       await CustomSoundService.playSelectedSound();
     } catch (e) {
-      print('❌ Error al reproducir sonido manualmente: $e');
+      // print('❌ Error al reproducir sonido manualmente: $e');
     }
   }
 
@@ -122,9 +122,9 @@ class NotificationSoundHandler {
         'isEnabled': isEnabled,
       });
       
-      print('✅ Configuración de sonido notificada a Android');
+      // print('✅ Configuración de sonido notificada a Android');
     } catch (e) {
-      print('❌ Error al notificar configuración de sonido: $e');
+      // print('❌ Error al notificar configuración de sonido: $e');
     }
   }
 
@@ -134,9 +134,9 @@ class NotificationSoundHandler {
       await _soundEventSubscription?.cancel();
       _soundEventSubscription = null;
       _isInitialized = false;
-      print('✅ NotificationSoundHandler limpiado');
+      // print('✅ NotificationSoundHandler limpiado');
     } catch (e) {
-      print('❌ Error al limpiar NotificationSoundHandler: $e');
+      // print('❌ Error al limpiar NotificationSoundHandler: $e');
     }
   }
 
@@ -147,10 +147,10 @@ class NotificationSoundHandler {
   static Future<bool> testConnection() async {
     try {
       final result = await _channel.invokeMethod('ping');
-      print('🔊 Test de conexión con Android: $result');
+      // print('🔊 Test de conexión con Android: $result');
       return result == 'pong';
     } catch (e) {
-      print('❌ Error en test de conexión: $e');
+      // print('❌ Error en test de conexión: $e');
       return false;
     }
   }

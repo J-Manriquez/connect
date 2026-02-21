@@ -95,7 +95,7 @@ class CustomSoundService {
       
       return sounds;
     } catch (e) {
-      print('Error al obtener sonidos personalizados: $e');
+      // print('Error al obtener sonidos personalizados: $e');
       return [defaultSound];
     }
   }
@@ -107,13 +107,13 @@ class CustomSoundService {
       
       // Verificar que no sea el sonido predeterminado
       if (sound.isDefault) {
-        print('No se puede guardar el sonido predeterminado');
+        // print('No se puede guardar el sonido predeterminado');
         return false;
       }
       
       // Verificar que el archivo existe
       if (!File(sound.filePath).existsSync()) {
-        print('El archivo de sonido no existe: ${sound.filePath}');
+        // print('El archivo de sonido no existe: ${sound.filePath}');
         return false;
       }
       
@@ -127,10 +127,10 @@ class CustomSoundService {
       final soundsJson = json.encode(customSounds.map((s) => s.toJson()).toList());
       
       await prefs.setString(_soundsKey, soundsJson);
-      print('✅ Sonido personalizado guardado: ${sound.name}');
+      // print('✅ Sonido personalizado guardado: ${sound.name}');
       return true;
     } catch (e) {
-      print('❌ Error al guardar sonido personalizado: $e');
+      // print('❌ Error al guardar sonido personalizado: $e');
       return false;
     }
   }
@@ -139,7 +139,7 @@ class CustomSoundService {
   static Future<bool> deleteSound(String soundId) async {
     try {
       if (soundId == 'default') {
-        print('No se puede eliminar el sonido predeterminado');
+        // print('No se puede eliminar el sonido predeterminado');
         return false;
       }
       
@@ -159,10 +159,10 @@ class CustomSoundService {
         await setSelectedSound('default');
       }
       
-      print('✅ Sonido personalizado eliminado: $soundId');
+      // print('✅ Sonido personalizado eliminado: $soundId');
       return true;
     } catch (e) {
-      print('❌ Error al eliminar sonido personalizado: $e');
+      // print('❌ Error al eliminar sonido personalizado: $e');
       return false;
     }
   }
@@ -179,7 +179,7 @@ class CustomSoundService {
         orElse: () => defaultSound,
       );
     } catch (e) {
-      print('Error al obtener sonido seleccionado: $e');
+      // print('Error al obtener sonido seleccionado: $e');
       return defaultSound;
     }
   }
@@ -189,10 +189,10 @@ class CustomSoundService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_selectedSoundKey, soundId);
-      print('✅ Sonido personalizado seleccionado: $soundId');
+      // print('✅ Sonido personalizado seleccionado: $soundId');
       return true;
     } catch (e) {
-      print('❌ Error al seleccionar sonido personalizado: $e');
+      // print('❌ Error al seleccionar sonido personalizado: $e');
       return false;
     }
   }
@@ -203,13 +203,13 @@ class CustomSoundService {
   // Reproducir un sonido personalizado
   static Future<void> playSound(CustomSound sound) async {
     try {
-      print('🔍 Iniciando reproducción de sonido: ${sound.name}');
+      // print('🔍 Iniciando reproducción de sonido: ${sound.name}');
       
       // Verificar si el sonido personalizado está habilitado
       final isEnabled = await isSoundEnabled();
-      print('🔍 Sonido personalizado habilitado: $isEnabled');
+      // print('🔍 Sonido personalizado habilitado: $isEnabled');
       if (!isEnabled) {
-        print('❌ El sonido personalizado está deshabilitado');
+        // print('❌ El sonido personalizado está deshabilitado');
         return;
       }
       
@@ -218,33 +218,33 @@ class CustomSoundService {
       
       if (sound.isDefault) {
         // Usar el sonido del sistema a través del SoundNotificationService
-        print('🔊 Reproduciendo sonido del sistema');
+        // print('🔊 Reproduciendo sonido del sistema');
         await _channel.invokeMethod('playNotificationSound');
       } else {
         // Verificar que el archivo existe
         if (!File(sound.filePath).existsSync()) {
-          print('❌ El archivo de sonido no existe: ${sound.filePath}');
+          // print('❌ El archivo de sonido no existe: ${sound.filePath}');
           // Fallback al sonido del sistema
           await _channel.invokeMethod('playNotificationSound');
           return;
         }
         
         // Reproducir archivo personalizado usando audioplayers
-        print('🔊 Reproduciendo sonido personalizado: ${sound.filePath}');
+        // print('🔊 Reproduciendo sonido personalizado: ${sound.filePath}');
         await _audioPlayer.play(DeviceFileSource(sound.filePath));
       }
       
-      print('✅ Sonido reproducido exitosamente');
+      // print('✅ Sonido reproducido exitosamente');
     } catch (e) {
-      print('❌ Error al reproducir sonido: $e');
+      // print('❌ Error al reproducir sonido: $e');
       
       // Fallback al sonido del sistema
       try {
-        print('🔄 Intentando sonido del sistema como fallback...');
+        // print('🔄 Intentando sonido del sistema como fallback...');
         await _channel.invokeMethod('playNotificationSound');
-        print('✅ Sonido del sistema de fallback exitoso');
+        // print('✅ Sonido del sistema de fallback exitoso');
       } catch (fallbackError) {
-        print('❌ Error en sonido de fallback: $fallbackError');
+        // print('❌ Error en sonido de fallback: $fallbackError');
       }
     }
   }
@@ -263,7 +263,7 @@ class CustomSoundService {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool(_soundEnabledKey) ?? true; // Por defecto habilitado
     } catch (e) {
-      print('Error al verificar estado de sonido: $e');
+      // print('Error al verificar estado de sonido: $e');
       return true;
     }
   }
@@ -273,10 +273,10 @@ class CustomSoundService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_soundEnabledKey, enabled);
-      print('✅ Sonido personalizado ${enabled ? "habilitado" : "deshabilitado"}');
+      // print('✅ Sonido personalizado ${enabled ? "habilitado" : "deshabilitado"}');
       return true;
     } catch (e) {
-      print('❌ Error al cambiar estado de sonido: $e');
+      // print('❌ Error al cambiar estado de sonido: $e');
       return false;
     }
   }
@@ -322,7 +322,7 @@ class CustomSoundService {
       final result = await Permission.storage.request();
       return result.isGranted;
     } catch (e) {
-      print('Error al verificar permisos de almacenamiento: $e');
+      // print('Error al verificar permisos de almacenamiento: $e');
       return false;
     }
   }
@@ -352,7 +352,7 @@ class CustomSoundService {
         'modified': stat.modified,
       };
     } catch (e) {
-      print('Error al obtener información del archivo: $e');
+      // print('Error al obtener información del archivo: $e');
       return null;
     }
   }
@@ -363,10 +363,10 @@ class CustomSoundService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_soundsKey);
       await setSelectedSound('default');
-      print('✅ Todos los sonidos personalizados eliminados');
+      // print('✅ Todos los sonidos personalizados eliminados');
       return true;
     } catch (e) {
-      print('❌ Error al limpiar sonidos: $e');
+      // print('❌ Error al limpiar sonidos: $e');
       return false;
     }
   }
@@ -391,14 +391,14 @@ class CustomSoundService {
     try {
       // Validar el archivo
       if (!isValidAudioFile(filePath)) {
-        print('❌ Archivo de audio inválido: $filePath');
+        // print('❌ Archivo de audio inválido: $filePath');
         return false;
       }
 
       // Obtener información del archivo
       final fileInfo = await getAudioFileInfo(filePath);
       if (fileInfo == null) {
-        print('❌ No se pudo obtener información del archivo');
+        // print('❌ No se pudo obtener información del archivo');
         return false;
       }
 
@@ -416,7 +416,7 @@ class CustomSoundService {
       // Guardar el sonido
       return await saveSound(sound);
     } catch (e) {
-      print('❌ Error al agregar sonido: $e');
+      // print('❌ Error al agregar sonido: $e');
       return false;
     }
   }
@@ -430,7 +430,7 @@ class CustomSoundService {
         orElse: () => defaultSound,
       );
     } catch (e) {
-      print('Error al obtener sonido por ID: $e');
+      // print('Error al obtener sonido por ID: $e');
       return null;
     }
   }
