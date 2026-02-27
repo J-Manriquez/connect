@@ -60,6 +60,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
   int _lastBtStatusPrintMs = 0;
   String? _lastBtStatusSig;
   int _lastBtStatusPollMs = 0;
+  int _btConnectedCount = 0;
 
   @override
   void initState() {
@@ -230,6 +231,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
           final running = status['running'] == true;
           final connectedCount =
               (status['connectedCount'] as num?)?.toInt() ?? 0;
+          _btConnectedCount = connectedCount;
           final peerName = status['lastPeerName']?.toString() ?? '';
           final sig = 'running=$running peers=$connectedCount peer=$peerName';
           if (sig != _lastBtStatusSig && nowMs - _lastBtStatusPrintMs > 1500) {
@@ -238,7 +240,9 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
             print('[conexion][bt] status $sig');
             await _relayDebugToEmisor('receptor_ui', 'bt_status $sig');
           }
-        } catch (_) {}
+        } catch (_) {
+          _btConnectedCount = 0;
+        }
       }
 
       Map<String, dynamic>? hiveState;
@@ -287,14 +291,86 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         serviceState = null;
       }
 
+      Map<String, dynamic>? localServiceState;
+      int localServiceUpdatedAtMs = 0;
+      try {
+        final cached = await BleService.getLastLocalMediaState();
+        final cachedJson = (cached?['json'] ?? '').toString();
+        localServiceUpdatedAtMs = _toInt(cached?['updatedAtMs']);
+        if (cachedJson.trim().isNotEmpty) {
+          final decoded = jsonDecode(cachedJson);
+          if (decoded is Map) {
+            final decodedMap = Map<String, dynamic>.from(decoded);
+            if ((decodedMap['type'] ?? '').toString() == 'media_state') {
+              localServiceState = decodedMap;
+            }
+          }
+        }
+      } catch (_) {
+        localServiceState = null;
+      }
+
       if (!mounted) return;
       if (_isSeeking) return;
 
-      Map<String, dynamic>? state = hiveState;
       final hiveUpdatedAtMs = _toInt(hiveState?['updatedAtMs']);
-      if (serviceState != null) {
-        if (state == null || (serviceUpdatedAtMs > 0 && serviceUpdatedAtMs > hiveUpdatedAtMs + 250)) {
-          state = serviceState;
+      final prioritizeLocal = await PreferencesService.getPrioritizeLocalMedia();
+
+      Map<String, dynamic>? remoteCandidate = hiveState;
+      int remoteCandidateUpdatedAtMs = hiveUpdatedAtMs;
+      if (serviceState != null &&
+          serviceUpdatedAtMs > 0 &&
+          (remoteCandidate == null ||
+              serviceUpdatedAtMs > remoteCandidateUpdatedAtMs + 250)) {
+        remoteCandidate = serviceState;
+        remoteCandidateUpdatedAtMs = serviceUpdatedAtMs;
+      }
+
+      final remoteFresh = remoteCandidate != null &&
+          _btConnectedCount > 0 &&
+          remoteCandidateUpdatedAtMs > 0 &&
+          nowMs - remoteCandidateUpdatedAtMs <= 15000 &&
+          (remoteCandidate['title'] ?? '').toString().trim().isNotEmpty;
+      if (!remoteFresh) {
+        remoteCandidate = null;
+        remoteCandidateUpdatedAtMs = 0;
+      }
+
+      final localFresh = localServiceState != null &&
+          localServiceUpdatedAtMs > 0 &&
+          nowMs - localServiceUpdatedAtMs <= 15000 &&
+          (localServiceState['title'] ?? '').toString().trim().isNotEmpty;
+      final localCandidate = localFresh ? localServiceState : null;
+
+      Map<String, dynamic>? state;
+      bool useLocal = false;
+      if (prioritizeLocal) {
+        if (localCandidate != null) {
+          state = localCandidate;
+          useLocal = true;
+        } else {
+          state = remoteCandidate;
+        }
+      } else {
+        if (remoteCandidate != null) {
+          state = remoteCandidate;
+        } else if (localCandidate != null) {
+          state = localCandidate;
+          useLocal = true;
+        } else {
+          state = null;
+        }
+      }
+
+      if (useLocal) {
+        final rawLocalPct = (localServiceState?['volumePct'] as num?)?.toInt() ?? -1;
+        if (rawLocalPct >= 0 && rawLocalPct <= 100) {
+          final currentPct = _toInt(_volumeState?['pct']).clamp(0, 100);
+          if (mounted && !_isAdjustingVolume && rawLocalPct != currentPct) {
+            setState(() {
+              _volumeState = {'pct': rawLocalPct};
+            });
+          }
         }
       }
 
@@ -343,7 +419,8 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       final sig = '$title|$appName|${(positionMs / 1000).floor()}|$isPlaying';
       if (sig != _lastMediaDebugSig) {
         _lastMediaDebugSig = sig;
-        print('[conexion][media] hive_state title="$title" app="$appName" posMs=$positionMs playing=$isPlaying');
+        final sourceLabel = useLocal ? 'local' : 'emisor';
+        print('[conexion][media] $sourceLabel title="$title" app="$appName" posMs=$positionMs playing=$isPlaying');
       }
       setState(() {
         _mediaState = state;
@@ -392,6 +469,55 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         'time': DateTime.now().millisecondsSinceEpoch,
       };
 
+      bool useLocal = false;
+      try {
+        int connectedCount = 0;
+        try {
+          final status = await BleService.getBtServerStatus();
+          connectedCount = (status['connectedCount'] as num?)?.toInt() ?? 0;
+        } catch (_) {}
+
+        final prioritizeLocal = await PreferencesService.getPrioritizeLocalMedia();
+        Map<String, dynamic>? remote;
+        int remoteAt = 0;
+        try {
+          final cached = await BleService.getLastBtMediaState();
+          remoteAt = _toInt(cached?['updatedAtMs']);
+          final raw = (cached?['json'] ?? '').toString();
+          if (raw.trim().isNotEmpty) {
+            final decoded = jsonDecode(raw);
+            if (decoded is Map) remote = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {}
+
+        Map<String, dynamic>? local;
+        int localAt = 0;
+        try {
+          final cached = await BleService.getLastLocalMediaState();
+          localAt = _toInt(cached?['updatedAtMs']);
+          final raw = (cached?['json'] ?? '').toString();
+          if (raw.trim().isNotEmpty) {
+            final decoded = jsonDecode(raw);
+            if (decoded is Map) local = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {}
+
+        final remoteFresh = remoteAt > 0 &&
+            connectedCount > 0 &&
+            nowMs - remoteAt <= 15000 &&
+            (remote?['title'] ?? '').toString().trim().isNotEmpty;
+        final localFresh = localAt > 0 &&
+            nowMs - localAt <= 15000 &&
+            (local?['title'] ?? '').toString().trim().isNotEmpty;
+        useLocal = prioritizeLocal ? (localFresh || !remoteFresh) : (!remoteFresh && localFresh);
+      } catch (_) {}
+
+      if (useLocal) {
+        print('[conexion][media][cmd] send via bt_server local');
+        await BleService.sendBtServerMessage(payload);
+        return;
+      }
+
       try {
         final status = await BleService.getBtServerStatus();
         final running = status['running'] == true;
@@ -412,6 +538,25 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     try {
       final enabled = await PreferencesService.getBleEnabled();
       if (!enabled) return;
+
+      try {
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        final prioritizeLocal = await PreferencesService.getPrioritizeLocalMedia();
+        int connectedCount = 0;
+        try {
+          final status = await BleService.getBtServerStatus();
+          connectedCount = (status['connectedCount'] as num?)?.toInt() ?? 0;
+        } catch (_) {}
+        final remote = await BleService.getLastBtMediaState();
+        final local = await BleService.getLastLocalMediaState();
+        final remoteAt = _toInt(remote?['updatedAtMs']);
+        final localAt = _toInt(local?['updatedAtMs']);
+        final remoteFresh =
+            remoteAt > 0 && connectedCount > 0 && nowMs - remoteAt <= 15000;
+        final localFresh = localAt > 0 && nowMs - localAt <= 15000;
+        final useLocal = prioritizeLocal ? (localFresh || !remoteFresh) : (!remoteFresh && localFresh);
+        if (useLocal) return;
+      } catch (_) {}
 
       final payload = <String, dynamic>{
         'type': 'volume_request',
@@ -443,6 +588,30 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
         'pct': clamped,
         'time': DateTime.now().millisecondsSinceEpoch,
       };
+
+      bool useLocal = false;
+      try {
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        final prioritizeLocal = await PreferencesService.getPrioritizeLocalMedia();
+        int connectedCount = 0;
+        try {
+          final status = await BleService.getBtServerStatus();
+          connectedCount = (status['connectedCount'] as num?)?.toInt() ?? 0;
+        } catch (_) {}
+        final remote = await BleService.getLastBtMediaState();
+        final local = await BleService.getLastLocalMediaState();
+        final remoteAt = _toInt(remote?['updatedAtMs']);
+        final localAt = _toInt(local?['updatedAtMs']);
+        final remoteFresh =
+            remoteAt > 0 && connectedCount > 0 && nowMs - remoteAt <= 15000;
+        final localFresh = localAt > 0 && nowMs - localAt <= 15000;
+        useLocal = prioritizeLocal ? (localFresh || !remoteFresh) : (!remoteFresh && localFresh);
+      } catch (_) {}
+
+      if (useLocal) {
+        await BleService.sendBtServerMessage(payload);
+        return;
+      }
 
       try {
         final status = await BleService.getBtServerStatus();

@@ -8,11 +8,13 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:connect/services/preferences_service.dart';
-import 'package:connect/services/ble_service.dart';
 import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
 import 'package:connect/screens/receptor/custom_sound_selection_screen.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
+import 'package:connect/screens/emisor/floating_ball_settings_screen.dart';
+import 'package:connect/screens/emisor/media_reproduction_screen.dart';
 import 'package:restart_app/restart_app.dart';
+import 'package:flutter/services.dart';
 
 class ReceptorSettingsScreen extends StatefulWidget {
   const ReceptorSettingsScreen({super.key});
@@ -23,6 +25,9 @@ class ReceptorSettingsScreen extends StatefulWidget {
 
 class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     with WidgetsBindingObserver {
+  static const MethodChannel _emisorChannel =
+      MethodChannel('com.example.connect/notifications');
+
   bool _notificationsEnabled = false;
   // ✅ SEPARAR EN DOS VARIABLES
   bool _screenWakeEnabled = false;
@@ -37,6 +42,12 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
       NotificationListenerService.instance;
 
   final ReceptorService _receptorService = ReceptorService();
+
+  Future<void> _openNotificationListenerPermission() async {
+    try {
+      await _emisorChannel.invokeMethod('openNotificationSettings');
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -547,6 +558,74 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             ),
                           ),
                         ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const MediaReproductionScreen(
+                                    useLinkedDevice: true,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.play_circle_outline),
+                            label: const Text(
+                              'Reproducción multimedia',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              backgroundColor: customColor[600],
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const FloatingBallSettingsScreen(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.radio_button_checked),
+                            label: const Text(
+                              'Configurar bola flotante',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              backgroundColor: customColor[600],
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
                         // Container(
                         //   margin: const EdgeInsets.symmetric(
                         //     vertical: 8,
@@ -576,6 +655,42 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                         // ),
                         
                         _buildLocalNotificationsToggleCard(),
+                        Card(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          child: ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: customColor[100],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.notifications_active,
+                                color: customColor[600],
+                                size: 24,
+                              ),
+                            ),
+                            title: const Text(
+                              'Permiso: acceso a notificaciones',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            subtitle: const Text(
+                              'Abre el ajuste del sistema para habilitar el acceso a notificaciones',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                            trailing: const Icon(Icons.arrow_forward_ios),
+                            onTap: _openNotificationListenerPermission,
+                          ),
+                        ),
                       ],
                     ),
                   ),

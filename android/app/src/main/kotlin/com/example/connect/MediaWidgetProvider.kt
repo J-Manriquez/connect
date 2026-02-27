@@ -119,6 +119,10 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
         private const val KEY_ART_BASE64 = "artBase64"
         private const val KEY_ART_KEY = "artKey"
 
+        private const val PREFS_LOCAL_MEDIA_CACHE = "local_media_cache_v1"
+        private const val PREFS_FLUTTER_SHARED = "FlutterSharedPreferences"
+        private const val KEY_FLUTTER_PRIORITIZE_LOCAL_MEDIA = "flutter.prioritize_local_media"
+
         private const val PREFS_VOLUME_CACHE = "bt_volume_cache_v1"
         private const val KEY_VOLUME_PCT = "pct"
         private const val KEY_VOLUME_UPDATED_AT_MS = "updatedAtMs"
@@ -157,7 +161,35 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
         private fun safeResName(context: Context, resId: Int): String {
             return try { context.resources.getResourceName(resId) } catch (_: Exception) { resId.toString() }
         }
- 
+
+        private fun readFlutterBool(prefs: android.content.SharedPreferences, key: String, defaultValue: Boolean): Boolean {
+            return try {
+                val v = prefs.all[key]
+                when (v) {
+                    is Boolean -> v
+                    is String -> v.equals("true", ignoreCase = true)
+                    is Int -> v != 0
+                    is Long -> v != 0L
+                    else -> defaultValue
+                }
+            } catch (_: Exception) {
+                defaultValue
+            }
+        }
+
+        private fun readLocalVolumePct(context: Context): Int {
+            return try {
+                val audio = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager ?: return 0
+                val stream = android.media.AudioManager.STREAM_MUSIC
+                val level = audio.getStreamVolume(stream)
+                val max = audio.getStreamMaxVolume(stream)
+                if (max <= 0) return 0
+                ((level.toDouble() / max.toDouble()) * 100.0).toInt().coerceIn(0, 100)
+            } catch (_: Exception) {
+                0
+            }
+        }
+
         fun updateAll(context: Context, providerClass: Class<out AppWidgetProvider>, layoutResId: Int) {
             val mgr = AppWidgetManager.getInstance(context)
             val component = ComponentName(context, providerClass)
@@ -324,23 +356,43 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             bindVolumeSegment(R.id.widget_vol_90, 90)
             bindVolumeSegment(R.id.widget_vol_100, 100)
 
-            val prefsMedia = context.getSharedPreferences(PREFS_MEDIA_CACHE, Context.MODE_PRIVATE)
-            val json = prefsMedia.getString(KEY_MEDIA_JSON, null)
-            val updatedAtMs = prefsMedia.getLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
             val now = System.currentTimeMillis()
-            val stale = updatedAtMs <= 0L || now - updatedAtMs > 15_000L
+
+            val flutterPrefs = context.getSharedPreferences(PREFS_FLUTTER_SHARED, Context.MODE_PRIVATE)
+            val prioritizeLocal = readFlutterBool(flutterPrefs, KEY_FLUTTER_PRIORITIZE_LOCAL_MEDIA, false)
+
+            val remotePrefs = context.getSharedPreferences(PREFS_MEDIA_CACHE, Context.MODE_PRIVATE)
+            val remoteJson = remotePrefs.getString(KEY_MEDIA_JSON, null)
+            val remoteUpdatedAtMs = remotePrefs.getLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
+            val remoteConnected = try { BtClassicServerService.connectedPeers > 0 } catch (_: Exception) { false }
+            val remoteFresh = remoteConnected && !remoteJson.isNullOrBlank() && remoteUpdatedAtMs > 0L && now - remoteUpdatedAtMs <= 15_000L
+
+            val localPrefs = context.getSharedPreferences(PREFS_LOCAL_MEDIA_CACHE, Context.MODE_PRIVATE)
+            val localJson = localPrefs.getString(KEY_MEDIA_JSON, null)
+            val localUpdatedAtMs = localPrefs.getLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
+            val localFresh = !localJson.isNullOrBlank() && localUpdatedAtMs > 0L && now - localUpdatedAtMs <= 15_000L
+
+            val useLocal = if (prioritizeLocal) localFresh || !remoteFresh else !remoteFresh && localFresh
+            val prefsMedia = if (useLocal) localPrefs else remotePrefs
+            val json = if (useLocal) localJson else remoteJson
+            val updatedAtMs = if (useLocal) localUpdatedAtMs else remoteUpdatedAtMs
+            val stale = json.isNullOrBlank() || updatedAtMs <= 0L || now - updatedAtMs > 15_000L
 
             val volumePrefs = context.getSharedPreferences(PREFS_VOLUME_CACHE, Context.MODE_PRIVATE)
             val volumeUpdatedAtMs = volumePrefs.getLong(KEY_VOLUME_UPDATED_AT_MS, 0L)
             val volumeStale = volumeUpdatedAtMs <= 0L || now - volumeUpdatedAtMs > 15_000L
-            val volumePct = if (volumeStale) 0 else volumePrefs.getInt(KEY_VOLUME_PCT, 0).coerceIn(0, 100)
+            val volumePct = if (useLocal) {
+                readLocalVolumePct(context)
+            } else {
+                if (volumeStale) 0 else volumePrefs.getInt(KEY_VOLUME_PCT, 0).coerceIn(0, 100)
+            }
             views.setProgressBar(R.id.widget_volume_progress, 100, volumePct, false)
 
-            if (json.isNullOrBlank() || stale) {
+            if (stale) {
                 applyMedia(
                     views,
                     title = "Sin reproducción",
-                    subtitle = "Conecta el emisor para controlar",
+                    subtitle = "Conecta el emisor o reproduce local",
                     timeText = "0:00 / 0:00",
                     progress = 0,
                     isPlaying = false
@@ -370,14 +422,15 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             val album = obj.optString("album", "").trim()
             val appName = obj.optString("appName", "").trim()
             val packageName = obj.optString("packageName", "").trim()
+            val sourceLabel = if (useLocal) "Local" else "Emisor"
             val subtitle = when (layoutResId) {
-                R.layout.widget_media_style2 -> artist.ifBlank { "Emisor" }
+                R.layout.widget_media_style2 -> artist.ifBlank { sourceLabel }
                 R.layout.widget_media_style3 -> artist
                 else -> when {
                     artist.isNotBlank() && appName.isNotBlank() -> "$artist • $appName"
                     artist.isNotBlank() -> artist
                     appName.isNotBlank() -> appName
-                    else -> "Emisor"
+                    else -> sourceLabel
                 }
             }
 
@@ -405,7 +458,7 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             }
             if (layoutResId == R.layout.widget_media_style3) {
                 try { views.setTextViewText(R.id.widget_time_current, formatMs(positionMs)) } catch (_: Exception) {}
-                try { views.setTextViewText(R.id.widget_time_app, appName.ifBlank { "Emisor" }) } catch (_: Exception) {}
+                try { views.setTextViewText(R.id.widget_time_app, appName.ifBlank { sourceLabel }) } catch (_: Exception) {}
                 try { views.setTextViewText(R.id.widget_time_total, formatMs(durationMs)) } catch (_: Exception) {}
             }
 

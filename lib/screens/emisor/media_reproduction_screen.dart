@@ -1,12 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/models/device_data.dart';
 import 'package:connect/services/firebase_service.dart';
+import 'package:connect/services/preferences_service.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class MediaReproductionScreen extends StatefulWidget {
-  const MediaReproductionScreen({super.key});
+  final bool useLinkedDevice;
+
+  const MediaReproductionScreen({
+    super.key,
+    this.useLinkedDevice = false,
+  });
 
   @override
   State<MediaReproductionScreen> createState() =>
@@ -15,6 +21,7 @@ class MediaReproductionScreen extends StatefulWidget {
 
 class _MediaReproductionScreenState extends State<MediaReproductionScreen> {
   final FirebaseService _firebaseService = FirebaseService();
+  final ReceptorService _receptorService = ReceptorService();
   final String _prefsKey = 'media_default_app_package';
 
   bool _isLoading = true;
@@ -22,6 +29,7 @@ class _MediaReproductionScreenState extends State<MediaReproductionScreen> {
   List<AppData> _apps = [];
   String? _selectedPackage;
   final Map<String, Map<String, dynamic>> _metaByPkg = {};
+  bool _prioritizeLocalMedia = false;
 
   @override
   void initState() {
@@ -36,18 +44,33 @@ class _MediaReproductionScreenState extends State<MediaReproductionScreen> {
     });
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final storedPackage = prefs.getString(_prefsKey);
-
       await BtHiveStorageService.ensureInitialized();
-      final hivePackage = await BtHiveStorageService.getDefaultMediaAppPackage();
+      _prioritizeLocalMedia = await PreferencesService.getPrioritizeLocalMedia();
+      String? storedPackage;
+      String? hivePackage;
+      if (!widget.useLinkedDevice) {
+        final prefs = await SharedPreferences.getInstance();
+        storedPackage = prefs.getString(_prefsKey);
+        hivePackage = await BtHiveStorageService.getDefaultMediaAppPackage();
+      }
 
-      final deviceId = await _firebaseService.getDeviceId();
+      final deviceId = widget.useLinkedDevice
+          ? await _receptorService.getLinkedDeviceId()
+          : await _firebaseService.getDeviceId();
+      final targetDeviceId = deviceId?.trim() ?? '';
+      if (targetDeviceId.isEmpty) {
+        setState(() {
+          _error = 'No hay un emisor vinculado.';
+          _isLoading = false;
+        });
+        return;
+      }
+
       String? firebasePackage;
       try {
         final doc = await FirebaseFirestore.instance
             .collection('dispositivos')
-            .doc(deviceId)
+            .doc(targetDeviceId)
             .get();
         final raw = (doc.data()?['media_default_app_package'] ?? '')
             .toString()
@@ -55,7 +78,9 @@ class _MediaReproductionScreenState extends State<MediaReproductionScreen> {
         firebasePackage = raw.isEmpty ? null : raw;
       } catch (_) {}
 
-      final List<AppData> apps = await _firebaseService.getAppList();
+      final List<AppData> apps = widget.useLinkedDevice
+          ? await _firebaseService.getAppListForDeviceId(targetDeviceId)
+          : await _firebaseService.getAppList();
       final Map<String, Map<String, dynamic>> meta = {};
       for (final app in apps) {
         final m = await BtHiveStorageService.getAppMeta(app.packageName);
@@ -67,11 +92,15 @@ class _MediaReproductionScreenState extends State<MediaReproductionScreen> {
         _metaByPkg
           ..clear()
           ..addAll(meta);
-        _selectedPackage = storedPackage?.trim().isNotEmpty == true
-            ? storedPackage!.trim()
-            : hivePackage?.trim().isNotEmpty == true
-                ? hivePackage!.trim()
-                : firebasePackage;
+        if (widget.useLinkedDevice) {
+          _selectedPackage = firebasePackage;
+        } else {
+          _selectedPackage = storedPackage?.trim().isNotEmpty == true
+              ? storedPackage!.trim()
+              : hivePackage?.trim().isNotEmpty == true
+                  ? hivePackage!.trim()
+                  : firebasePackage;
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -88,19 +117,24 @@ class _MediaReproductionScreenState extends State<MediaReproductionScreen> {
     });
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      if (packageName == null || packageName.isEmpty) {
-        await prefs.remove(_prefsKey);
-      } else {
-        await prefs.setString(_prefsKey, packageName);
+      final targetDeviceId = widget.useLinkedDevice
+          ? (await _receptorService.getLinkedDeviceId())?.trim() ?? ''
+          : await _firebaseService.getDeviceId();
+      if (targetDeviceId.isEmpty) return;
+
+      if (!widget.useLinkedDevice) {
+        final prefs = await SharedPreferences.getInstance();
+        if (packageName == null || packageName.isEmpty) {
+          await prefs.remove(_prefsKey);
+        } else {
+          await prefs.setString(_prefsKey, packageName);
+        }
+        await BtHiveStorageService.setDefaultMediaAppPackage(packageName ?? '');
       }
 
-      await BtHiveStorageService.setDefaultMediaAppPackage(packageName ?? '');
-
-      final deviceId = await _firebaseService.getDeviceId();
       final docRef = FirebaseFirestore.instance
           .collection('dispositivos')
-          .doc(deviceId);
+          .doc(targetDeviceId);
 
       await docRef.set({
         'media_default_app_package': packageName ?? '',
@@ -143,11 +177,25 @@ class _MediaReproductionScreenState extends State<MediaReproductionScreen> {
                       ),
                     )
                   : ListView.separated(
-                      itemCount: _apps.length,
+                      itemCount: _apps.length + 1,
                       separatorBuilder: (_, __) =>
                           const Divider(height: 1, thickness: 1),
                       itemBuilder: (context, index) {
-                        final app = _apps[index];
+                        if (index == 0) {
+                          return CheckboxListTile(
+                            title: const Text('Priorizar multimedia local'),
+                            subtitle: const Text(
+                              'Si está activado, los controles también se aplican al contenido multimedia del dispositivo receptor cuando esté reproduciendo.',
+                            ),
+                            value: _prioritizeLocalMedia,
+                            onChanged: (v) async {
+                              final next = v == true;
+                              setState(() => _prioritizeLocalMedia = next);
+                              await PreferencesService.savePrioritizeLocalMedia(next);
+                            },
+                          );
+                        }
+                        final app = _apps[index - 1];
                         final isSelected = app.packageName == _selectedPackage;
                         final meta = _metaByPkg[app.packageName];
                         final iconBase64 =

@@ -11,6 +11,7 @@ class PreferencesService {
   static const String KEY_WIDGET_STYLE = 'widget_style';
   static const String KEY_WIDGET_TEXT_SP = 'widget_text_sp';
   static const String KEY_WIDGET_ICON_SP = 'widget_icon_sp';
+  static const String KEY_PRIORITIZE_LOCAL_MEDIA = 'prioritize_local_media';
   
   // Guardar preferencia de usar como receptor
   static Future<bool> saveUseAsReceptor(bool useAsReceptor) async {
@@ -199,6 +200,25 @@ class PreferencesService {
       return (prefs.getInt(KEY_WIDGET_ICON_SP) ?? 28).clamp(18, 48);
     } catch (e) {
       return 28;
+    }
+  }
+
+  static Future<bool> savePrioritizeLocalMedia(bool prioritize) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(KEY_PRIORITIZE_LOCAL_MEDIA, prioritize);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> getPrioritizeLocalMedia() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(KEY_PRIORITIZE_LOCAL_MEDIA) ?? false;
+    } catch (e) {
+      return false;
     }
   }
 }

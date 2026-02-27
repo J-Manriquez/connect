@@ -18,8 +18,10 @@ import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
+import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
@@ -327,23 +329,64 @@ object BtClassicClient {
 
     private fun handleMediaCommand(ctx: Context, command: String, positionMs: Long) {
         try {
+            if (command == "request_state") {
+                sendMediaStateSnapshot(ctx)
+                return
+            }
             val msm = ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager ?: return
             val component = ComponentName(ctx, NotificationListener::class.java)
             val controllers = try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList<MediaController>() }
-            val controller = selectBestController(controllers) ?: return
-            val controls = controller.transportControls
+            val controller = selectControllerForCommand(controllers, command)
+            val controllerState = controller?.playbackState
+            val actions = controllerState?.actions ?: 0L
+            val pkg = controller?.packageName.orEmpty()
+            val isYouTube =
+                pkg == "com.google.android.youtube" || pkg == "com.google.android.apps.youtube.music"
 
-            when (command) {
-                "play" -> controls.play()
-                "pause" -> controls.pause()
-                "toggle" -> {
-                    val state = controller.playbackState?.state ?: PlaybackState.STATE_NONE
-                    val isPlaying = state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
-                    if (isPlaying) controls.pause() else controls.play()
+            val main = Handler(Looper.getMainLooper())
+            main.post {
+                try {
+                    if (controller != null) {
+                        val controls = controller.transportControls
+                        when (command) {
+                            "play" -> controls.play()
+                            "pause" -> controls.pause()
+                            "toggle" -> {
+                                val st = controller.playbackState?.state ?: PlaybackState.STATE_NONE
+                                val playing = st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
+                                if (playing) controls.pause() else controls.play()
+                            }
+                            "next" -> controls.skipToNext()
+                            "previous" -> controls.skipToPrevious()
+                            "seekTo" -> if (positionMs >= 0) controls.seekTo(positionMs)
+                        }
+                    }
+
+                    val shouldFallbackToMediaKey = when (command) {
+                        "play" -> controller == null || (isYouTube &&
+                                (actions and PlaybackState.ACTION_PLAY) == 0L &&
+                                (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L)
+                        "pause" -> controller == null || (isYouTube &&
+                                (actions and PlaybackState.ACTION_PAUSE) == 0L &&
+                                (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L)
+                        "toggle" -> controller == null || (isYouTube && (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L)
+                        "next" -> controller == null || (isYouTube && (actions and PlaybackState.ACTION_SKIP_TO_NEXT) == 0L)
+                        "previous" -> controller == null || (isYouTube && (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) == 0L)
+                        else -> false
+                    }
+                    if (shouldFallbackToMediaKey) {
+                        val key = when (command) {
+                            "play" -> KeyEvent.KEYCODE_MEDIA_PLAY
+                            "pause" -> KeyEvent.KEYCODE_MEDIA_PAUSE
+                            "toggle" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                            "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
+                            "previous" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                            else -> null
+                        }
+                        if (key != null) dispatchMediaKey(ctx, key)
+                    }
+                } catch (_: Exception) {
                 }
-                "next" -> controls.skipToNext()
-                "previous" -> controls.skipToPrevious()
-                "seekTo" -> if (positionMs >= 0) controls.seekTo(positionMs)
             }
 
             val delayMs = if (command == "seekTo") 700L else 450L
@@ -353,6 +396,49 @@ object BtClassicClient {
                 } catch (_: Exception) {
                 }
             }, delayMs)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun selectControllerForCommand(
+        controllers: List<MediaController>,
+        command: String
+    ): MediaController? {
+        if (controllers.isEmpty()) return null
+
+        fun isActive(c: MediaController): Boolean {
+            val st = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            return st == PlaybackState.STATE_PLAYING ||
+                    st == PlaybackState.STATE_BUFFERING ||
+                    st == PlaybackState.STATE_PAUSED
+        }
+
+        fun supports(c: MediaController): Boolean {
+            val st = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            val actions = c.playbackState?.actions ?: 0L
+            return when (command) {
+                "seekTo" -> (actions and PlaybackState.ACTION_SEEK_TO) != 0L
+                "next" -> (actions and PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
+                "previous" -> (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
+                "pause" -> (actions and PlaybackState.ACTION_PAUSE) != 0L || (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L
+                "play" -> (actions and PlaybackState.ACTION_PLAY) != 0L || (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L
+                "toggle" -> (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L || st != PlaybackState.STATE_NONE
+                else -> true
+            }
+        }
+
+        val active = controllers.filter(::isActive)
+        val pool = if (active.isNotEmpty()) active else controllers
+        val supporting = pool.firstOrNull(::supports)
+        return supporting ?: selectBestController(pool)
+    }
+
+    private fun dispatchMediaKey(ctx: Context, keyCode: Int) {
+        try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+            val now = SystemClock.uptimeMillis()
+            am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+            am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, keyCode, 0))
         } catch (_: Exception) {
         }
     }
@@ -508,11 +594,11 @@ object BtClassicClient {
                 playbackState == PlaybackState.STATE_BUFFERING
 
         val actions = state?.actions ?: 0L
-        val canPlayPause = (actions and PlaybackState.ACTION_PLAY) != 0L ||
+        val baseCanPlayPause = (actions and PlaybackState.ACTION_PLAY) != 0L ||
                 (actions and PlaybackState.ACTION_PAUSE) != 0L ||
                 (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L
-        val canSkipNext = (actions and PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
-        val canSkipPrev = (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
+        val baseCanSkipNext = (actions and PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
+        val baseCanSkipPrev = (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
         val canSeek = (actions and PlaybackState.ACTION_SEEK_TO) != 0L
 
         val title = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
@@ -525,6 +611,16 @@ object BtClassicClient {
         val packageName = controller.packageName ?: ""
 
         if (packageName.isBlank() || title.isNullOrBlank()) return
+
+        val isYouTube =
+            packageName == "com.google.android.youtube" || packageName == "com.google.android.apps.youtube.music"
+
+        val canPlayPause = baseCanPlayPause || playbackState == PlaybackState.STATE_PLAYING ||
+                playbackState == PlaybackState.STATE_BUFFERING ||
+                playbackState == PlaybackState.STATE_PAUSED ||
+                isYouTube
+        val canSkipNext = baseCanSkipNext || isYouTube
+        val canSkipPrev = baseCanSkipPrev || isYouTube
 
         val appName = try {
             val appInfo = ctx.packageManager.getApplicationInfo(packageName, 0)

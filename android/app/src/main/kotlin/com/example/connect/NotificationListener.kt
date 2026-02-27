@@ -6,9 +6,12 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.media.AudioManager
 import android.media.session.MediaController
 import android.net.Uri
@@ -26,15 +29,232 @@ import android.util.Log
 import android.content.pm.ServiceInfo
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.ConcurrentHashMap
 
 class NotificationListener : NotificationListenerService() {
 
     // Usamos un MethodChannel estático para que MainActivity pueda asignarlo
+    data class ActiveNotificationEntry(
+        val key: String,
+        val packageName: String,
+        val appName: String,
+        val appIcon: String,
+        val title: String,
+        val text: String,
+        val subText: String?,
+        val postTime: Long
+    )
+
     companion object {
         var methodChannel: MethodChannel? = null
         var isRunning: Boolean = false
+        @Volatile var serviceInstance: NotificationListener? = null
+        private val activeNotificationsMap = ConcurrentHashMap<String, ActiveNotificationEntry>()
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "notification_listener_channel"
+        private const val PREFS_LOCAL_MEDIA_CACHE = "local_media_cache_v1"
+        private const val KEY_MEDIA_JSON = "media_json"
+        private const val KEY_MEDIA_UPDATED_AT_MS = "updatedAtMs"
+        private const val ACTION_ACTIVE_NOTIFICATIONS_CHANGED = "com.example.connect.ACTIVE_NOTIFICATIONS_CHANGED"
+
+        fun getActiveNotificationsSnapshot(): List<ActiveNotificationEntry> {
+            return activeNotificationsMap.values
+                .toList()
+                .sortedByDescending { it.postTime }
+        }
+
+        fun cancelNotificationByKey(key: String): Boolean {
+            val inst = serviceInstance ?: return false
+            return try {
+                inst.cancelNotification(key)
+                try { activeNotificationsMap.remove(key) } catch (_: Exception) {}
+                try { inst.sendBroadcast(Intent(ACTION_ACTIVE_NOTIFICATIONS_CHANGED)) } catch (_: Exception) {}
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        fun cancelAllActiveNotifications(): Int {
+            val inst = serviceInstance ?: return 0
+            val keys = try { activeNotificationsMap.keys.toList() } catch (_: Exception) { emptyList() }
+            var canceled = 0
+            for (k in keys) {
+                try {
+                    inst.cancelNotification(k)
+                    canceled++
+                } catch (_: Exception) {
+                }
+                try {
+                    activeNotificationsMap.remove(k)
+                } catch (_: Exception) {
+                }
+            }
+            return canceled
+        }
+
+        fun cancelAllSystemNotifications(): Boolean {
+            val inst = serviceInstance ?: return false
+            return try {
+                inst.cancelAllNotifications()
+                try { activeNotificationsMap.clear() } catch (_: Exception) {}
+                try { inst.sendBroadcast(Intent(ACTION_ACTIVE_NOTIFICATIONS_CHANGED)) } catch (_: Exception) {}
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        fun forceRebind(ctx: Context): Boolean {
+            return try {
+                val pm = ctx.packageManager ?: return false
+                val cn = ComponentName(ctx, NotificationListener::class.java)
+                pm.setComponentEnabledSetting(
+                    cn,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+                pm.setComponentEnabledSetting(
+                    cn,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    private fun buildActiveEntryOrNull(sbn: StatusBarNotification): ActiveNotificationEntry? {
+        val packageName = sbn.packageName ?: return null
+        val excludedPackages = setOf(
+            "android",
+            "com.android.systemui",
+            "com.android.settings"
+        )
+        if (excludedPackages.contains(packageName)) return null
+
+        val notification = sbn.notification ?: return null
+        if (packageName == "com.example.connect") {
+            val chId =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) notification.channelId else null
+            if (chId == CHANNEL_ID || sbn.id == NOTIFICATION_ID) return null
+        }
+        val extras = notification.extras
+
+        val category = notification.category ?: ""
+        val hasMediaSession =
+            try { extras.containsKey(Notification.EXTRA_MEDIA_SESSION) } catch (_: Exception) { false }
+        val template =
+            try { extras.getString("android.template") ?: "" } catch (_: Exception) { "" }
+        val isMediaNotification = category == Notification.CATEGORY_TRANSPORT ||
+                hasMediaSession ||
+                template.contains("MediaStyle", ignoreCase = true)
+        if (isMediaNotification) return null
+
+        val title = try {
+            extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+
+        val text = try {
+            val direct = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
+            if (direct.isNotBlank()) direct else {
+                val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+                if (lines != null && lines.isNotEmpty()) {
+                    lines.joinToString("\n") { it?.toString().orEmpty() }.trim()
+                } else {
+                    ""
+                }
+            }
+        } catch (_: Exception) {
+            ""
+        }
+
+        val subText = try {
+            extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+        } catch (_: Exception) {
+            null
+        }
+
+        var appName = packageName
+        var appIcon = ""
+        try {
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            appName = packageManager.getApplicationLabel(appInfo).toString()
+            try {
+                val drawable = packageManager.getApplicationIcon(appInfo)
+                appIcon = drawableToBase64(drawable)
+            } catch (_: Exception) {
+            }
+        } catch (_: Exception) {
+        }
+
+        val key = sbn.key ?: return null
+        return ActiveNotificationEntry(
+            key = key,
+            packageName = packageName,
+            appName = appName,
+            appIcon = appIcon,
+            title = title,
+            text = text,
+            subText = subText,
+            postTime = sbn.postTime
+        )
+    }
+
+    private fun drawableToBase64(drawable: Drawable): String {
+        return try {
+            val maxSize = 96
+            val w = drawable.intrinsicWidth.coerceAtLeast(1).coerceAtMost(maxSize)
+            val h = drawable.intrinsicHeight.coerceAtLeast(1).coerceAtMost(maxSize)
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 80, out)
+            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun updateActiveCache(sbn: StatusBarNotification) {
+        val entry = buildActiveEntryOrNull(sbn) ?: return
+        activeNotificationsMap[entry.key] = entry
+    }
+
+    private fun removeActiveCache(sbn: StatusBarNotification) {
+        val key = sbn.key ?: return
+        activeNotificationsMap.remove(key)
+    }
+
+    private fun rebuildActiveCacheFromSystem() {
+        try {
+            val list = try { activeNotifications?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
+            val keys = HashSet<String>()
+            for (sbn in list) {
+                val k = sbn.key ?: continue
+                keys.add(k)
+                updateActiveCache(sbn)
+            }
+            val iterator = activeNotificationsMap.keys.iterator()
+            while (iterator.hasNext()) {
+                val k = iterator.next()
+                if (!keys.contains(k)) iterator.remove()
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun emitActiveNotificationsChangedBroadcast() {
+        try {
+            sendBroadcast(Intent(ACTION_ACTIVE_NOTIFICATIONS_CHANGED))
+        } catch (_: Exception) {
+        }
     }
 
     override fun onCreate() {
@@ -91,15 +311,19 @@ class NotificationListener : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         isRunning = true
+        serviceInstance = this
         Log.d("NotificationListener", "Servicio de escucha de notificaciones conectado")
         // Notificar a Flutter que el servicio está conectado
         methodChannel?.invokeMethod("serviceConnected", null)
+        rebuildActiveCacheFromSystem()
+        emitActiveNotificationsChangedBroadcast()
         startMediaMonitoring()
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         isRunning = false
+        serviceInstance = null
         Log.d("NotificationListener", "Servicio de escucha de notificaciones desconectado")
         try {
             requestRebind(ComponentName(this, NotificationListener::class.java))
@@ -223,6 +447,52 @@ class NotificationListener : NotificationListenerService() {
         mediaHandler.postDelayed(runnable, nextDelayMs)
     }
 
+    private fun saveLocalMediaCache(json: String) {
+        try {
+            val now = System.currentTimeMillis()
+            val prefs = applicationContext.getSharedPreferences(PREFS_LOCAL_MEDIA_CACHE, Context.MODE_PRIVATE)
+
+            val mergedJson = try {
+                val obj = JSONObject(json)
+                val art = obj.optString("artBase64", "").trim()
+                if (art.isBlank()) {
+                    val prevJson = prefs.getString(KEY_MEDIA_JSON, null)
+                    if (!prevJson.isNullOrBlank()) {
+                        val prevObj = JSONObject(prevJson)
+                        val prevArt = prevObj.optString("artBase64", "").trim()
+                        if (prevArt.isNotBlank()) {
+                            obj.put("artBase64", prevArt)
+                            val prevMime = prevObj.optString("artMime", "").trim()
+                            if (prevMime.isNotBlank() && obj.optString("artMime", "").trim().isBlank()) {
+                                obj.put("artMime", prevMime)
+                            }
+                        }
+                    }
+                }
+                obj.toString()
+            } catch (_: Exception) {
+                json
+            }
+
+            prefs.edit()
+                .putString(KEY_MEDIA_JSON, mergedJson)
+                .putLong(KEY_MEDIA_UPDATED_AT_MS, now)
+                .apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun clearLocalMediaCache() {
+        try {
+            val prefs = applicationContext.getSharedPreferences(PREFS_LOCAL_MEDIA_CACHE, Context.MODE_PRIVATE)
+            prefs.edit()
+                .remove(KEY_MEDIA_JSON)
+                .putLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
+                .apply()
+        } catch (_: Exception) {
+        }
+    }
+
     private fun encodeArtBase64(metadata: android.media.MediaMetadata?): String? {
         if (metadata == null) return null
 
@@ -328,11 +598,11 @@ class NotificationListener : NotificationListenerService() {
                 playbackState == PlaybackState.STATE_BUFFERING
 
         val actions = state?.actions ?: 0L
-        val canPlayPause = (actions and PlaybackState.ACTION_PLAY) != 0L ||
+        val baseCanPlayPause = (actions and PlaybackState.ACTION_PLAY) != 0L ||
                 (actions and PlaybackState.ACTION_PAUSE) != 0L ||
                 (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L
-        val canSkipNext = (actions and PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
-        val canSkipPrev = (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
+        val baseCanSkipNext = (actions and PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
+        val baseCanSkipPrev = (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
         val canSeek = (actions and PlaybackState.ACTION_SEEK_TO) != 0L
 
         val title = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
@@ -343,6 +613,16 @@ class NotificationListener : NotificationListenerService() {
         val durationMs = metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         val positionMs = state?.position ?: 0L
         val packageName = controller?.packageName ?: ""
+
+        val isYouTube =
+            packageName == "com.google.android.youtube" || packageName == "com.google.android.apps.youtube.music"
+
+        val canPlayPause = baseCanPlayPause || playbackState == PlaybackState.STATE_PLAYING ||
+                playbackState == PlaybackState.STATE_BUFFERING ||
+                playbackState == PlaybackState.STATE_PAUSED ||
+                isYouTube
+        val canSkipNext = baseCanSkipNext || isYouTube
+        val canSkipPrev = baseCanSkipPrev || isYouTube
 
         val appName = if (packageName.isNotBlank()) {
             try {
@@ -372,6 +652,7 @@ class NotificationListener : NotificationListenerService() {
         if (controller == null || packageName.isBlank() || title.isNullOrBlank()) {
             lastStaticSignature = null
             lastPositionSecond = -1L
+            clearLocalMediaCache()
             println("[media] skip_send controller_null=${controller == null} pkg='$packageName' title='${title ?: ""}'")
             scheduleMediaTick(4000)
             return
@@ -426,6 +707,7 @@ class NotificationListener : NotificationListenerService() {
         try {
             val connectedOk = ensureBtClientConnectedFromPrefs("sendMediaState")
             val json = JSONObject(payload as Map<*, *>).toString()
+            saveLocalMediaCache(json)
             println("[media][tx] sendStatic=$sendStatic sendPosition=$sendPosition bytes=${json.toByteArray(Charsets.UTF_8).size} title='${title ?: ""}' app='$appName'")
             if (connectedOk) {
                 val accepted = BtClassicClient.send(json)
@@ -445,17 +727,43 @@ class NotificationListener : NotificationListenerService() {
 
         if (sbn == null) return
 
+        updateActiveCache(sbn)
+        emitActiveNotificationsChangedBroadcast()
+        try {
+            val k = sbn.key
+            val entry = if (k != null) activeNotificationsMap[k] else null
+            if (entry == null) return
+            val entryMap =
+                mapOf(
+                    "key" to entry.key,
+                    "packageName" to entry.packageName,
+                    "appName" to entry.appName,
+                    "appIcon" to entry.appIcon,
+                    "title" to entry.title,
+                    "text" to entry.text,
+                    "subText" to (entry.subText ?: ""),
+                    "postTime" to entry.postTime
+                )
+            MainActivity.instance?.emitActiveNotificationsChanged("posted", k, entryMap)
+        } catch (_: Exception) {
+        }
+
         val packageName = sbn.packageName
         val notification = sbn.notification
         val extras = notification.extras
 
         // Lista de paquetes a excluir para evitar bucles infinitos y notificaciones no deseadas
         val excludedPackages = setOf(
-            "com.example.connect", // Nuestra propia aplicación
             "android", // Sistema Android
             "com.android.systemui", // UI del sistema
             "com.android.settings" // Configuraciones del sistema
         )
+
+        if (packageName == "com.example.connect") {
+            val chId =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) notification.channelId else null
+            if (chId == CHANNEL_ID || sbn.id == NOTIFICATION_ID) return
+        }
 
         // Filtrar las notificaciones de paquetes excluidos
         if (excludedPackages.contains(packageName)) {
@@ -520,6 +828,14 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
+        if (sbn != null) {
+            removeActiveCache(sbn)
+            emitActiveNotificationsChangedBroadcast()
+            try {
+                MainActivity.instance?.emitActiveNotificationsChanged("removed", sbn.key, null)
+            } catch (_: Exception) {
+            }
+        }
         sbn?.let {
             val packageName = it.packageName
             Log.d("NotificationListener", "Notification Removed: Package: $packageName")
@@ -529,6 +845,7 @@ class NotificationListener : NotificationListenerService() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        serviceInstance = null
         try {
             val component = ComponentName(this, NotificationListener::class.java)
             mediaSessionManager?.removeOnActiveSessionsChangedListener(activeSessionsListener)

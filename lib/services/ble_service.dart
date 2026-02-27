@@ -155,6 +155,14 @@ class BleService {
     return map;
   }
 
+  static Future<Map<String, dynamic>?> getLastLocalMediaState() async {
+    final res = await _channel.invokeMethod('getLastLocalMediaState');
+    final map = Map<String, dynamic>.from(res as Map);
+    final json = (map['json'] ?? '').toString();
+    if (json.trim().isEmpty) return null;
+    return map;
+  }
+
   static Future<bool> sendBtServerMessage(Map<String, dynamic> data) async {
     final res = await _channel.invokeMethod('sendBtServerMessage', data);
     return res == true;

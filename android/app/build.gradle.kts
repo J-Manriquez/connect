@@ -47,6 +47,7 @@ android {
 // Añadir la dependencia de desugaring
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4") // Actualizado a la versión requerida
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 }
 
 flutter {

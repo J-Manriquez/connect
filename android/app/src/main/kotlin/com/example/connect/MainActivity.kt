@@ -22,6 +22,13 @@ import android.net.Uri
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
+import android.location.LocationManager
+import android.os.BatteryManager
+import io.flutter.embedding.android.FlutterActivityLaunchConfigs
+import io.flutter.embedding.android.RenderMode
 
 
 
@@ -33,8 +40,10 @@ class MainActivity: FlutterActivity() {
     private val DEVICE_FINDER_CHANNEL = "com.example.connect/device_finder" // ✅ NUEVO CANAL
     private val SOUND_CHANNEL = "com.example.connect/notification_sound" // ✅ CANAL PARA SONIDOS PERSONALIZADOS
     private val SOUND_EVENTS_CHANNEL = "com.example.connect/sound_events"
+    private val ACTIVE_NOTIFICATIONS_EVENTS_CHANNEL = "com.example.connect/active_notifications_events"
     private val BATTERY_CHANNEL = "com.example.connect/battery" // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
     private val BLE_CHANNEL = "com.example.connect/ble"
+    private val FLOATING_BALL_CHANNEL = "com.example.connect/floating_ball"
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
@@ -44,6 +53,9 @@ class MainActivity: FlutterActivity() {
     private var soundEventsSink: EventChannel.EventSink? = null
     private lateinit var batteryChannel: MethodChannel // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
     private lateinit var bleChannel: MethodChannel
+    private lateinit var floatingBallChannel: MethodChannel
+    private lateinit var activeNotificationsEventsChannel: EventChannel
+    private var activeNotificationsEventsSink: EventChannel.EventSink? = null
     private lateinit var appListService: AppListService
     private lateinit var localNotificationManager: LocalNotificationManager
     private lateinit var vibrationManager: VibrationManager
@@ -57,6 +69,32 @@ class MainActivity: FlutterActivity() {
 
     companion object {
         var instance: MainActivity? = null
+    }
+
+    override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
+        return FlutterActivityLaunchConfigs.BackgroundMode.transparent
+    }
+
+    override fun getRenderMode(): RenderMode {
+        return RenderMode.texture
+    }
+
+    fun emitActiveNotificationsChanged(
+        reason: String,
+        key: String?,
+        entry: Map<String, Any?>?
+    ) {
+        try {
+            activeNotificationsEventsSink?.success(
+                mapOf(
+                    "reason" to reason,
+                    "key" to (key ?: ""),
+                    "entry" to entry,
+                    "ts" to System.currentTimeMillis()
+                )
+            )
+        } catch (_: Exception) {
+        }
     }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
@@ -95,10 +133,23 @@ class MainActivity: FlutterActivity() {
                 soundEventsSink = null
             }
         })
+
+        activeNotificationsEventsChannel =
+            EventChannel(flutterEngine.dartExecutor.binaryMessenger, ACTIVE_NOTIFICATIONS_EVENTS_CHANNEL)
+        activeNotificationsEventsChannel.setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                activeNotificationsEventsSink = events
+            }
+
+            override fun onCancel(arguments: Any?) {
+                activeNotificationsEventsSink = null
+            }
+        })
         
         // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
         batteryChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_CHANNEL)
         bleChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BLE_CHANNEL)
+        floatingBallChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FLOATING_BALL_CHANNEL)
         btAdapter = BluetoothAdapter.getDefaultAdapter()
         
         // Iniciar automáticamente el servicio si el permiso está concedido
@@ -121,6 +172,12 @@ class MainActivity: FlutterActivity() {
                         result.success(false)
                         Log.d("MainActivity", "Servicio EMISOR no habilitado, abriendo configuración.")
                     } else {
+                        try {
+                            if (!NotificationListener.isRunning) {
+                                NotificationListener.forceRebind(applicationContext)
+                            }
+                        } catch (_: Exception) {
+                        }
                         val serviceIntent = Intent(this, NotificationListener::class.java)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(serviceIntent)
@@ -147,6 +204,59 @@ class MainActivity: FlutterActivity() {
                 "openNotificationSettings" -> {
                     openNotificationListenerSettings()
                     result.success(null)
+                }
+                "rebindNotificationListener" -> {
+                    try {
+                        if (!isNotificationServiceEnabled()) {
+                            openNotificationListenerSettings()
+                            result.success(false)
+                        } else {
+                            val ok = NotificationListener.forceRebind(applicationContext)
+                            result.success(ok)
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Error al rebind de notificaciones: ${e.message}", null)
+                    }
+                }
+                "getActiveNotifications" -> {
+                    try {
+                        val list = NotificationListener.getActiveNotificationsSnapshot().map { e ->
+                            mapOf(
+                                "key" to e.key,
+                                "packageName" to e.packageName,
+                                "appName" to e.appName,
+                                "appIcon" to e.appIcon,
+                                "title" to e.title,
+                                "text" to e.text,
+                                "subText" to e.subText,
+                                "postTime" to e.postTime
+                            )
+                        }
+                        result.success(list)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Error al obtener notificaciones activas: ${e.message}", null)
+                    }
+                }
+                "cancelActiveNotification" -> {
+                    try {
+                        val key = call.argument<String>("key")?.trim().orEmpty()
+                        val ok = if (key.isNotBlank()) {
+                            NotificationListener.cancelNotificationByKey(key)
+                        } else {
+                            false
+                        }
+                        result.success(ok)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Error al cancelar notificación: ${e.message}", null)
+                    }
+                }
+                "cancelAllActiveNotifications" -> {
+                    try {
+                        val canceled = NotificationListener.cancelAllActiveNotifications()
+                        result.success(canceled)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Error al cancelar todas las notificaciones: ${e.message}", null)
+                    }
                 }
                 else -> {
                     result.notImplemented()
@@ -477,6 +587,173 @@ class MainActivity: FlutterActivity() {
                 }
             }
         }
+
+        floatingBallChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getFsBarSystemState" -> {
+                    try {
+                        val wifiEnabled = try {
+                            val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                            wifi?.isWifiEnabled == true
+                        } catch (_: Exception) {
+                            false
+                        }
+                        val btEnabled = try {
+                            BluetoothAdapter.getDefaultAdapter()?.isEnabled == true
+                        } catch (_: Exception) {
+                            false
+                        }
+                        val dataEnabled = try {
+                            val v = try { Settings.Global.getInt(contentResolver, "mobile_data", 0) } catch (_: Exception) { -1 }
+                            if (v == 1) {
+                                true
+                            } else if (v == 0) {
+                                false
+                            } else {
+                            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                            val net = cm?.activeNetwork
+                            val caps = if (net != null) cm.getNetworkCapabilities(net) else null
+                            caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true &&
+                                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            }
+                        } catch (_: Exception) {
+                            false
+                        }
+                        val locationEnabled = try {
+                            val lm = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                            lm?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true ||
+                                lm?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
+                        } catch (_: Exception) {
+                            false
+                        }
+                        val batteryPct = try {
+                            val i = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                            val level = i?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                            val scale = i?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+                            if (level < 0 || scale <= 0) null else {
+                                ((level.toDouble() / scale.toDouble()) * 100.0).toInt().coerceIn(0, 100)
+                            }
+                        } catch (_: Exception) {
+                            null
+                        }
+                        val showMediaRestore = try {
+                            val flutterPrefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                            val useAsReceptor = flutterPrefs.getBoolean("flutter.use_as_receptor", false)
+                            if (!useAsReceptor) {
+                                false
+                            } else {
+                                fun isMediaFresh(prefsName: String): Boolean {
+                                    return try {
+                                        val now = System.currentTimeMillis()
+                                        val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+                                        val json = prefs.getString("media_json", null)
+                                        val updatedAtMs = prefs.getLong("updatedAtMs", 0L)
+                                        !json.isNullOrBlank() && updatedAtMs > 0L && now - updatedAtMs <= 15_000L
+                                    } catch (_: Exception) {
+                                        false
+                                    }
+                                }
+                                isMediaFresh("bt_media_cache_v1") || isMediaFresh("local_media_cache_v1")
+                            }
+                        } catch (_: Exception) {
+                            false
+                        }
+                        result.success(
+                            mapOf(
+                                "wifiEnabled" to wifiEnabled,
+                                "btEnabled" to btEnabled,
+                                "dataEnabled" to dataEnabled,
+                                "locationEnabled" to locationEnabled,
+                                "batteryPct" to batteryPct,
+                                "showMediaRestore" to showMediaRestore
+                            )
+                        )
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "isOverlayPermissionGranted" -> {
+                    try {
+                        result.success(isOverlayPermissionGranted())
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "openOverlayPermissionSettings" -> {
+                    try {
+                        openOverlayPermissionSettings()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "isAccessibilityEnabled" -> {
+                    try {
+                        result.success(isFloatingBallAccessibilityEnabled())
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "openAccessibilitySettings" -> {
+                    try {
+                        openAccessibilitySettings()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "isBatteryOptimizationIgnored" -> {
+                    try {
+                        result.success(isBatteryOptimizationIgnored())
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "requestBatteryOptimizationPermission" -> {
+                    try {
+                        requestBatteryOptimizationPermission()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "enableAndStart" -> {
+                    try {
+                        setFloatingBallEnabledTrue()
+                        startFloatingBallService(FloatingBallService.ACTION_START)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "start" -> {
+                    try {
+                        startFloatingBallService(FloatingBallService.ACTION_START)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "updateConfig" -> {
+                    try {
+                        startFloatingBallService(FloatingBallService.ACTION_UPDATE_CONFIG)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "disable" -> {
+                    try {
+                        setFloatingBallEnabledFalse()
+                        stopFloatingBallService()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
         bleChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "requestBlePermissions" -> {
@@ -546,6 +823,16 @@ class MainActivity: FlutterActivity() {
                 "getLastBtMediaState" -> {
                     try {
                         val prefs = applicationContext.getSharedPreferences("bt_media_cache_v1", Context.MODE_PRIVATE)
+                        val json = prefs.getString("media_json", null)
+                        val updatedAtMs = prefs.getLong("updatedAtMs", 0L)
+                        result.success(mapOf("json" to json, "updatedAtMs" to updatedAtMs))
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "getLastLocalMediaState" -> {
+                    try {
+                        val prefs = applicationContext.getSharedPreferences("local_media_cache_v1", Context.MODE_PRIVATE)
                         val json = prefs.getString("media_json", null)
                         val updatedAtMs = prefs.getLong("updatedAtMs", 0L)
                         result.success(mapOf("json" to json, "updatedAtMs" to updatedAtMs))
@@ -796,6 +1083,15 @@ class MainActivity: FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val enabled = prefs.getBoolean("flutter.floating_ball_enabled", false)
+            if (enabled && isOverlayPermissionGranted()) {
+                startFloatingBallService(FloatingBallService.ACTION_START)
+            }
+        } catch (_: Exception) {
+        }
         
         // Verificar si se debe navegar a una pantalla específica
         handleNavigationIntent(intent)
@@ -912,6 +1208,8 @@ class MainActivity: FlutterActivity() {
             handleNavigationIntent(intent)
             return
         }
+
+        handleNavigationIntent(intent)
         
         // ✅ MANEJO ESPECÍFICO PARA ANDROID 8: Intent de activación de pantalla
         if (intent.action == "WAKE_SCREEN_ACTION" && intent.getBooleanExtra("wakeScreenOnly", false)) {
@@ -1197,6 +1495,64 @@ class MainActivity: FlutterActivity() {
         } else {
             Log.d("MainActivity", "Optimización de batería no disponible en esta versión de Android")
             true // En versiones anteriores, consideramos que no hay optimización
+        }
+    }
+
+    private fun isOverlayPermissionGranted(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(this)
+        } else {
+            true
+        }
+    }
+
+    private fun openOverlayPermissionSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+            intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
+        }
+    }
+
+    private fun openAccessibilitySettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun isFloatingBallAccessibilityEnabled(): Boolean {
+        val flat = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        val cn = ComponentName(packageName, FloatingBallAccessibilityService::class.java.name)
+        val id = cn.flattenToString()
+        return flat != null && flat.contains(id)
+    }
+
+    private fun setFloatingBallEnabledTrue() {
+        try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("flutter.floating_ball_enabled", true).apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun setFloatingBallEnabledFalse() {
+        try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            prefs.edit().putBoolean("flutter.floating_ball_enabled", false).apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun startFloatingBallService(action: String) {
+        val i = Intent(this, FloatingBallService::class.java).setAction(action)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+    }
+
+    private fun stopFloatingBallService() {
+        try {
+            stopService(Intent(this, FloatingBallService::class.java))
+        } catch (_: Exception) {
         }
     }
     

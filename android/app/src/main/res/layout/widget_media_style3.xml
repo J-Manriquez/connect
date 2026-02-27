@@ -30,6 +30,7 @@
                 android:layout_weight="1">
 
                 <LinearLayout
+                    android:id="@+id/widget_text_area"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:orientation="vertical"
@@ -119,7 +120,7 @@
                 android:id="@+id/widget_progress"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="8dp"
+                android:layout_height="24dp"
                 android:progressDrawable="@drawable/widget_progress_with_thumb"
                 android:max="1000"
                 android:progress="0" />

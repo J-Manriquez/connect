@@ -390,10 +390,10 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                                             ),
                                         ],
                                       ),
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
+                                );
                             },
                           ),
                   ),

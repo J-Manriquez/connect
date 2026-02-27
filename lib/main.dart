@@ -26,6 +26,9 @@ import 'screens/emisor/emisor_screen.dart';
 import 'screens/emisor/settings_screen.dart';
 import 'screens/emisor/app_list_screen.dart';
 import 'screens/emisor/media_reproduction_screen.dart';
+import 'screens/emisor/floating_ball_settings_screen.dart';
+import 'screens/emisor/floating_ball_style_screen.dart';
+import 'screens/emisor/floating_ball_custom_notifications_screen.dart';
 import 'screens/receptor/receptor_settings_screen.dart';
 
 // Añadir este import al inicio del archivo
@@ -696,6 +699,10 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         ),
         '/app_list': (context) => const AppListScreen(),
         '/media_reproduction': (context) => const MediaReproductionScreen(),
+        '/floating_ball_settings': (context) => const FloatingBallSettingsScreen(),
+        '/floating_ball_style': (context) => const FloatingBallStyleScreen(),
+        '/floating_ball_custom_notifications': (context) =>
+            const FloatingBallCustomNotificationsScreen(),
         '/receptor': (context) => const ReceptorScreen(),
         '/notificaciones': (context) => const NotificacionesScreen(),
         '/receptor_settings': (context) => const ReceptorSettingsScreen(),

@@ -210,6 +210,29 @@ class FirebaseService {
     }
   }
 
+  Future<List<AppData>> getAppListForDeviceId(String deviceId) async {
+    final id = deviceId.trim();
+    if (id.isEmpty) return [];
+    final docRef = _firestore.collection('dispositivos').doc(id);
+
+    try {
+      final docSnapshot = await docRef.get();
+      if (!docSnapshot.exists) {
+        return [];
+      }
+
+      final data = docSnapshot.data();
+      if (data == null || !data.containsKey('lista-apps')) {
+        return [];
+      }
+
+      final List<dynamic> appsList = data['lista-apps'];
+      return appsList.map((appData) => AppData.fromMap(appData)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   // Obtiene el estado de guardado
   Future<bool> getSaveStatus() async {
     final deviceId = await getDeviceId();

@@ -532,6 +532,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onTap: () =>
                                 Navigator.pushNamed(context, '/media_reproduction'),
                           ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Bola flotante'),
+                            subtitle: const Text(
+                              'Actívala y selecciona apps para acceso rápido',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.pushNamed(
+                              context,
+                              '/floating_ball_settings',
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           Row(
                             children: [

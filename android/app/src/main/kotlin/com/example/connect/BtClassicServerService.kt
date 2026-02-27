@@ -4,11 +4,16 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.ComponentName
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.media.session.MediaController
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -47,9 +52,16 @@ class BtClassicServerService : Service() {
         private const val KEY_AUTO_OPEN_ENABLED = "flutter.autoOpenEnabled"
         private const val KEY_SOUND_ENABLED = "flutter.soundEnabled"
 
+        private const val PREFS_FLUTTER = "FlutterSharedPreferences"
+        private const val KEY_PRIORITIZE_LOCAL_MEDIA = "flutter.prioritize_local_media"
+
         private const val PREFS_MEDIA_CACHE = "bt_media_cache_v1"
         private const val KEY_MEDIA_JSON = "media_json"
         private const val KEY_MEDIA_UPDATED_AT_MS = "updatedAtMs"
+
+        private const val PREFS_LOCAL_MEDIA_CACHE = "local_media_cache_v1"
+        private const val KEY_LOCAL_MEDIA_JSON = "media_json"
+        private const val KEY_LOCAL_MEDIA_UPDATED_AT_MS = "updatedAtMs"
 
         private const val PREFS_VOLUME_CACHE = "bt_volume_cache_v1"
         private const val KEY_VOLUME_LEVEL = "level"
@@ -108,10 +120,13 @@ class BtClassicServerService : Service() {
         when (intent?.action) {
             ACTION_STOP -> stopSelfSafely()
             ACTION_SEND_TO_PEERS -> {
-                startServerIfNeeded()
                 val json = intent.getStringExtra(EXTRA_JSON)
                 if (!json.isNullOrBlank()) {
-                    sendToPeers(json)
+                    val handled = tryHandleOutgoingLocalCommand(json)
+                    if (!handled) {
+                        startServerIfNeeded()
+                        sendToPeers(json)
+                    }
                 }
             }
             else -> startServerIfNeeded()
@@ -289,8 +304,29 @@ class BtClassicServerService : Service() {
                 sockets.remove(socket)
                 connectedPeers = sockets.size
                 sendDebugToPeers("receptor_server", "peer_disconnected peers=$connectedPeers")
+                if (connectedPeers <= 0) {
+                    clearMediaCache()
+                }
             }
         }.start()
+    }
+
+    private fun clearMediaCache() {
+        lastMediaJson = null
+        lastMediaUpdatedAtMs = 0L
+        try {
+            val prefs = applicationContext.getSharedPreferences(PREFS_MEDIA_CACHE, Context.MODE_PRIVATE)
+            prefs.edit()
+                .remove(KEY_MEDIA_JSON)
+                .putLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
+                .apply()
+        } catch (_: Exception) {
+        }
+        try { MediaWidgetProvider.updateAll(applicationContext) } catch (_: Exception) {}
+        try { MediaWidgetProviderStyle2.updateAll(applicationContext) } catch (_: Exception) {}
+        try { MediaWidgetProviderStyle3.updateAll(applicationContext) } catch (_: Exception) {}
+        try { MediaWidgetProviderStyle4.updateAll(applicationContext) } catch (_: Exception) {}
+        try { MediaWidgetProviderStyle5.updateAll(applicationContext) } catch (_: Exception) {}
     }
 
     private fun sendDebugToPeers(source: String, message: String) {
@@ -309,15 +345,170 @@ class BtClassicServerService : Service() {
 
     private fun saveMediaCache(json: String) {
         val now = System.currentTimeMillis()
-        lastMediaJson = json
+        val mergedJson = try {
+            val prefs = applicationContext.getSharedPreferences(PREFS_MEDIA_CACHE, Context.MODE_PRIVATE)
+            val obj = JSONObject(json)
+            val art = obj.optString("artBase64", "").trim()
+            if (art.isBlank()) {
+                val prevJson = lastMediaJson ?: prefs.getString(KEY_MEDIA_JSON, null)
+                if (!prevJson.isNullOrBlank()) {
+                    val prevObj = JSONObject(prevJson)
+                    val prevArt = prevObj.optString("artBase64", "").trim()
+                    if (prevArt.isNotBlank()) {
+                        obj.put("artBase64", prevArt)
+                        val prevMime = prevObj.optString("artMime", "").trim()
+                        if (prevMime.isNotBlank() && obj.optString("artMime", "").trim().isBlank()) {
+                            obj.put("artMime", prevMime)
+                        }
+                    }
+                }
+            }
+            obj.toString()
+        } catch (_: Exception) {
+            json
+        }
+
+        lastMediaJson = mergedJson
         lastMediaUpdatedAtMs = now
         try {
             val prefs = applicationContext.getSharedPreferences(PREFS_MEDIA_CACHE, Context.MODE_PRIVATE)
             prefs.edit()
-                .putString(KEY_MEDIA_JSON, json)
+                .putString(KEY_MEDIA_JSON, mergedJson)
                 .putLong(KEY_MEDIA_UPDATED_AT_MS, now)
                 .apply()
         } catch (_: Exception) {
+        }
+    }
+
+    private fun readFlutterBool(key: String, defaultValue: Boolean): Boolean {
+        return try {
+            val prefs = applicationContext.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
+            val v = prefs.all[key]
+            when (v) {
+                is Boolean -> v
+                is String -> v.equals("true", ignoreCase = true)
+                is Int -> v != 0
+                is Long -> v != 0L
+                else -> defaultValue
+            }
+        } catch (_: Exception) {
+            defaultValue
+        }
+    }
+
+    private fun isRemoteMediaFresh(nowMs: Long): Boolean {
+        if (connectedPeers <= 0) return false
+        return try {
+            val prefs = applicationContext.getSharedPreferences(PREFS_MEDIA_CACHE, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_MEDIA_JSON, null)
+            val updatedAtMs = prefs.getLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
+            if (json.isNullOrBlank()) return false
+            if (updatedAtMs <= 0L || nowMs - updatedAtMs > 15_000L) return false
+            val obj = JSONObject(json)
+            obj.optString("title", "").trim().isNotBlank()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun isLocalMediaFresh(nowMs: Long): Boolean {
+        return try {
+            val prefs = applicationContext.getSharedPreferences(PREFS_LOCAL_MEDIA_CACHE, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_LOCAL_MEDIA_JSON, null)
+            val updatedAtMs = prefs.getLong(KEY_LOCAL_MEDIA_UPDATED_AT_MS, 0L)
+            if (json.isNullOrBlank()) return false
+            if (updatedAtMs <= 0L || nowMs - updatedAtMs > 15_000L) return false
+            val obj = JSONObject(json)
+            obj.optString("title", "").trim().isNotBlank()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun shouldUseLocalMedia(nowMs: Long): Boolean {
+        val prioritizeLocal = readFlutterBool(KEY_PRIORITIZE_LOCAL_MEDIA, false)
+        val remoteActive = isRemoteMediaFresh(nowMs)
+        val localActive = isLocalMediaFresh(nowMs)
+        if (prioritizeLocal) return localActive || !remoteActive
+        return !remoteActive && localActive
+    }
+
+    private fun selectBestController(controllers: List<MediaController>): MediaController? {
+        if (controllers.isEmpty()) return null
+        val playing = controllers.firstOrNull { c ->
+            val state = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
+        }
+        if (playing != null) return playing
+        val paused = controllers.firstOrNull { c ->
+            val state = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            state == PlaybackState.STATE_PAUSED
+        }
+        return paused ?: controllers.first()
+    }
+
+    private fun performLocalMediaCommand(command: String, positionMs: Long?): Boolean {
+        return try {
+            val msm = getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager ?: return false
+            val component = ComponentName(this, NotificationListener::class.java)
+            val controllers = try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList() }
+            val controller = selectBestController(controllers) ?: return false
+            val controls = controller.transportControls
+            when (command) {
+                "next" -> controls.skipToNext()
+                "previous", "prev" -> controls.skipToPrevious()
+                "play" -> controls.play()
+                "pause" -> controls.pause()
+                "toggle" -> {
+                    val st = controller.playbackState?.state ?: PlaybackState.STATE_NONE
+                    val playing = st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
+                    if (playing) controls.pause() else controls.play()
+                }
+                "seekTo" -> {
+                    if (positionMs != null && positionMs >= 0L) controls.seekTo(positionMs)
+                }
+                else -> return false
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun performLocalVolumeCommand(pct: Int): Boolean {
+        return try {
+            val audio = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+            val stream = AudioManager.STREAM_MUSIC
+            val max = audio.getStreamMaxVolume(stream)
+            if (max <= 0) return false
+            val level = ((pct.coerceIn(0, 100) / 100.0) * max.toDouble()).toInt().coerceIn(0, max)
+            audio.setStreamVolume(stream, level, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun tryHandleOutgoingLocalCommand(json: String): Boolean {
+        val nowMs = System.currentTimeMillis()
+        val useLocal = shouldUseLocalMedia(nowMs)
+        if (!useLocal) return false
+        return try {
+            val obj = JSONObject(json)
+            val type = obj.optString("type", "")
+            if (type == "media_command") {
+                val command = obj.optString("command", "").trim()
+                val positionMs = try { obj.optLong("positionMs", -1L) } catch (_: Exception) { -1L }
+                return performLocalMediaCommand(command, if (positionMs >= 0L) positionMs else null)
+            }
+            if (type == "volume_command") {
+                val pct = try { obj.optInt("pct", -1) } catch (_: Exception) { -1 }
+                if (pct !in 0..100) return false
+                return performLocalVolumeCommand(pct)
+            }
+            false
+        } catch (_: Exception) {
+            false
         }
     }
 
