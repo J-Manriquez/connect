@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import 'dismissed_notifications_service.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
 import 'package:connect/services/notification_settings_service.dart';
@@ -16,6 +17,9 @@ class LocalNotificationService {
   // ✅ NUEVAS CLAVES SEPARADAS
   static const String KEY_SCREEN_WAKE_ENABLED = 'local_notifications_screen_wake';
   static const String KEY_AUTO_OPEN_ENABLED = 'local_notifications_auto_open';
+  static const String _recentWhatsAppContentKey = 'recent_whatsapp_notification_content_v1';
+  static const int _recentWhatsAppMaxEntries = 2000;
+  static const int _recentWhatsAppTtlMs = 24 * 60 * 60 * 1000;
   
   // Callback para manejar cuando se toca una notificación
   static Function(Map<String, dynamic>)? onNotificationTapped;
@@ -91,14 +95,45 @@ class LocalNotificationService {
       return;
     }
 
+    final String effectiveTitle = title.trim();
+    final String trimmedBody = body.trim();
+    final String effectiveBody =
+        (trimmedBody.toLowerCase() == 'null' ||
+                trimmedBody.toLowerCase() == 'undefined')
+            ? ''
+            : trimmedBody;
+    if (effectiveBody.isEmpty) return;
+
+    String? tryReadString(dynamic v) {
+      if (v is String && v.trim().isNotEmpty) return v;
+      return null;
+    }
+
+    String? extractAppIcon(Map<String, dynamic>? map) {
+      if (map == null) return null;
+      final nested = map['extras'];
+      if (nested is Map) {
+        final m = Map<String, dynamic>.from(nested);
+        return tryReadString(m['appIcon']) ?? tryReadString(m['icon']);
+      }
+      return tryReadString(map['appIcon']) ?? tryReadString(map['icon']);
+    }
+
+    final String? appIcon = extractAppIcon(extras);
+
     // Crear datos de la notificación para verificar configuraciones personalizadas
     final notificationData = {
-      'title': title,
-      'text': body,
+      'title': effectiveTitle,
+      'text': effectiveBody,
       'packageName': packageName,
       'appName': appName,
       'extras': extras ?? {},
     };
+
+    final prefs = await SharedPreferences.getInstance();
+    if (await _isDuplicateWhatsAppContent(prefs, notificationData)) {
+      return;
+    }
 
     // Verificar si la notificación debe ser bloqueada
     final notificationSettingsService = NotificationSettingsService();
@@ -109,7 +144,6 @@ class LocalNotificationService {
     }
     
     // Obtener configuración
-    final prefs = await SharedPreferences.getInstance();
     final soundEnabled = prefs.getBool(KEY_SOUND_ENABLED) ?? true;
     final vibrationEnabled = prefs.getBool(KEY_VIBRATION_ENABLED) ?? true;
     final screenWakeEnabled = prefs.getBool(KEY_SCREEN_WAKE_ENABLED) ?? false;
@@ -127,6 +161,19 @@ class LocalNotificationService {
     // ✅ PREPARAR CONFIGURACIÓN DE SONIDO
     final hasCustomSound = customSoundConfig != null;
     final effectiveSoundEnabled = hasCustomSound ? false : soundEnabled; // Deshabilitar sonido nativo si hay sonido personalizado
+
+    List<int>? customVibrationPattern;
+    if (shouldVibrate) {
+      if (hasCustomVibration) {
+        final pattern = customVibrationConfig!['pattern'] as List<dynamic>?;
+        if (pattern != null) {
+          customVibrationPattern = pattern.cast<int>();
+        }
+      } else {
+        final selectedPattern = await VibrationPatternService.getSelectedPattern();
+        customVibrationPattern = selectedPattern?.pattern;
+      }
+    }
     
     // print('🔍 Vibración habilitada en configuración: $isVibrationEnabledInSettings');
     // print('🔍 Vibración habilitada en notificación: $vibrationEnabled');
@@ -158,13 +205,15 @@ class LocalNotificationService {
     try {
       // ✅ PRIMERO: Enviar notificación al lado nativo (esto activará auto-open inmediatamente)
       await _channel.invokeMethod('showNotification', {
-        'title': title,
-        'body': body,
+        'title': effectiveTitle,
+        'body': effectiveBody,
         'packageName': packageName,
         'appName': appName,
+        'appIcon': appIcon ?? '',
         'notificationId': notificationId,
         'soundEnabled': effectiveSoundEnabled,
-        'vibrationEnabled': false, // Deshabilitamos vibración nativa ya que la manejamos directamente
+        'vibrationEnabled': shouldVibrate,
+        'customVibrationPattern': customVibrationPattern,
         'screenWakeEnabled': screenWakeEnabled,
         'autoOpenEnabled': effectiveAutoOpenEnabled, // ✅ Usar valor efectivo
       });
@@ -187,46 +236,84 @@ class LocalNotificationService {
         }
       }
       
-      // ✅ TERCERO: Ejecutar vibración DESPUÉS del auto-open
-      if (shouldVibrate) {
-        try {
-          if (hasCustomVibration) {
-            // Usar patrón personalizado de la configuración
-            final pattern = customVibrationConfig!['pattern'] as List<dynamic>?;
-            if (pattern != null) {
-              final vibrationPattern = pattern.cast<int>();
-              // print('🔊 Ejecutando patrón de vibración personalizado de configuración');
-              await VibrationPatternService.playPatternFromList(vibrationPattern);
-            }
-          } else {
-            // Usar patrón seleccionado globalmente
-            final selectedPattern = await VibrationPatternService.getSelectedPattern();
-            if (selectedPattern != null) {
-              // print('🔊 Ejecutando patrón de vibración global después del auto-open: ${selectedPattern.name}');
-              await VibrationPatternService.playPattern(selectedPattern);
-            } else {
-              // print('🔊 No hay patrón seleccionado, usando vibración simple después del auto-open');
-              await Vibration.vibrate(duration: 500);
-            }
-          }
-        } catch (e) {
-          // print('❌ Error al ejecutar vibración después del auto-open: $e');
-          // Fallback a vibración simple
-          try {
-            await Vibration.vibrate(duration: 500);
-          } catch (fallbackError) {
-            // print('❌ Error en vibración de fallback después del auto-open: $fallbackError');
-          }
-        }
-      } else if (!isVibrationEnabledInSettings && !hasCustomVibration) {
-        // print('⚠️ Vibración deshabilitada en configuración, saltando vibración');
-      } else {
-        // print('⚠️ Vibración deshabilitada para esta notificación, saltando vibración');
-      }
-      
     } catch (e) {
       // print('Error al mostrar notificación: $e');
     }
+  }
+
+  static Future<bool> _isDuplicateWhatsAppContent(
+    SharedPreferences prefs,
+    Map<String, dynamic> notificationData,
+  ) async {
+    final packageName = (notificationData['packageName'] ?? '').toString();
+    if (packageName != 'com.whatsapp' && packageName != 'com.whatsapp.w4b') {
+      return false;
+    }
+
+    final title = (notificationData['title'] ?? '').toString();
+    final text = (notificationData['text'] ?? '').toString();
+    final normalized = _normalizeForHash('$packageName|$title|$text');
+    if (normalized.isEmpty) return false;
+    final hash = normalized.hashCode.toString();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    final raw = prefs.getString(_recentWhatsAppContentKey);
+    Map<String, dynamic> map;
+    try {
+      map = raw == null || raw.isEmpty
+          ? <String, dynamic>{}
+          : (jsonDecode(raw) as Map).cast<String, dynamic>();
+    } catch (_) {
+      map = <String, dynamic>{};
+    }
+
+    final cutoffMs = nowMs - _recentWhatsAppTtlMs;
+    final keysToRemove = <String>[];
+    for (final entry in map.entries) {
+      final ts = entry.value;
+      final tsMs = ts is int ? ts : int.tryParse(ts.toString());
+      if (tsMs == null || tsMs < cutoffMs) {
+        keysToRemove.add(entry.key);
+      }
+    }
+    for (final k in keysToRemove) {
+      map.remove(k);
+    }
+
+    if (map.containsKey(hash)) {
+      return true;
+    }
+
+    map[hash] = nowMs;
+    if (map.length > _recentWhatsAppMaxEntries) {
+      final sorted = map.entries.toList()
+        ..sort((a, b) {
+          final ta = a.value is int ? a.value as int : int.tryParse(a.value.toString()) ?? 0;
+          final tb = b.value is int ? b.value as int : int.tryParse(b.value.toString()) ?? 0;
+          return ta.compareTo(tb);
+        });
+      final toDrop = sorted.length - _recentWhatsAppMaxEntries;
+      for (var i = 0; i < toDrop; i++) {
+        map.remove(sorted[i].key);
+      }
+    }
+
+    await prefs.setString(_recentWhatsAppContentKey, jsonEncode(map));
+    return false;
+  }
+
+  static String _normalizeForHash(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u')
+        .replaceAll(RegExp(r'[ñ]'), 'n')
+        .replaceAll(RegExp(r'[^a-z0-9\s\|]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
   
   // ✅ CAMBIO: Validación simplificada sin dependencia entre configuraciones

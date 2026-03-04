@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/screens/buscar_emisor_screen.dart';
 import 'package:connect/services/ble_service.dart';
+import 'package:connect/services/dismissed_notifications_service.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
 import 'package:connect/services/preferences_service.dart';
@@ -680,6 +681,8 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       if (notificationId == null || notificationId.isEmpty) return;
 
       await BtHiveStorageService.deleteOutboxEntry(notificationId);
+      await DismissedNotificationsService.markAsDismissed(notificationId);
+      await LocalNotificationService.cancelNotification(notificationId);
 
       if (timestamp == null) return;
       final date = timestamp.toDate();
@@ -690,6 +693,16 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     } catch (e) {
       // print('Error al eliminar notificación: \$e');
     }
+  }
+
+  Future<void> _deleteAllNotifications() async {
+    try {
+      final all = List<Map<String, dynamic>>.from(_notifications);
+      for (final n in all) {
+        await _deleteNotification(n);
+      }
+      await LocalNotificationService.syncCancelledNotificationsWithAndroid();
+    } catch (_) {}
   }
 
   Future<void> _toggleLinkDetails() async {
@@ -746,6 +759,19 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       appBar: AppBar(
         title: const Text('Conexión'),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_alt),
+            tooltip: 'Filtros de notificaciones',
+            onPressed: () {
+              Navigator.pushNamed(context, '/notification_filters');
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: _deleteAllNotifications,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -1215,16 +1241,7 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                                 bottom: 8,
                               ),
                               child: latestFive.isEmpty
-                                  ? const Center(
-                                      child: Padding(
-                                        padding: EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        child: Text(
-                                          'No hay notificaciones recibidas',
-                                        ),
-                                      ),
-                                    )
+                                  ? const SizedBox.shrink()
                                   : Column(
                                       children: latestFive.map((notification) {
                                         final notificationId =

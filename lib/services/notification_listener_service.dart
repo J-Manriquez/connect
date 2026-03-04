@@ -227,6 +227,10 @@ class NotificationListenerService {
           return;
         }
       }
+
+      if (_shouldFilterNotification(notification)) {
+        return;
+      }
       
       // Mostrar la notificación local
       await LocalNotificationService.showNotification(
@@ -271,6 +275,80 @@ class NotificationListenerService {
     } catch (e) {
       // print('NotificationListenerService: Error al actualizar visualización: $e');
     }
+  }
+
+  bool _shouldFilterNotification(Map<String, dynamic> notification) {
+    final String packageName = (notification['packageName'] ?? '').toString();
+    if (packageName != 'com.whatsapp' && packageName != 'com.whatsapp.w4b') {
+      return false;
+    }
+
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
+    final List<String> allTexts = [
+      clean(notification['title']),
+      clean(notification['text']),
+      clean(notification['bigText']),
+      clean(notification['subText']),
+      clean(notification['summaryText']),
+      clean(notification['infoText']),
+      clean(notification['contentInfo']),
+      clean(notification['body']),
+      clean(notification['mensaje']),
+      clean(notification['contenido']),
+      clean(notification['titulo']),
+    ];
+
+    final String allContent = allTexts.join(' ').toLowerCase();
+    final String normalizedContent = allContent
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u')
+        .replaceAll(RegExp(r'[ñ]'), 'n')
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (normalizedContent.contains('comprobando si hay mensajes nuevos') ||
+        normalizedContent.contains('checking for new messages')) {
+      return true;
+    }
+
+    final List<RegExp> messagePatterns = [
+      RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
+      RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chat\s*s?'),
+      RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
+      RegExp(r'\d+\s*nuevos?\s*mensajes?'),
+      RegExp(r'\d+\s*new\s*messages?'),
+      RegExp(r'\d+\s*mensajes?\s*nuevos?'),
+      RegExp(r'\d+\s*mensajes?\s*nuevos?\s*de\s*\d+\s*chats?'),
+      RegExp(r'\d+\s*mensajes?\s*nuevos?\s*\d+\s*chats?'),
+      RegExp(r'\d+\s*mensajes?\s*en\s*\d+\s*chats?'),
+      RegExp(r'\d+\s*messages?\s*in\s*\d+\s*chats?'),
+      RegExp(r'\d+\s*new\s*messages?\s*\d+\s*chats?'),
+    ];
+
+    for (final pattern in messagePatterns) {
+      if (pattern.hasMatch(normalizedContent)) {
+        return true;
+      }
+    }
+
+    if (normalizedContent.contains('mensajes') &&
+        normalizedContent.contains('chat') &&
+        RegExp(r'\b\d+\s*mensajes?\b').hasMatch(normalizedContent) &&
+        RegExp(r'\b\d+\s*chat').hasMatch(normalizedContent)) {
+      return true;
+    }
+
+    return false;
   }
 
   bool _shouldShowLocalNotification() {

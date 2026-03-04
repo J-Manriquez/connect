@@ -6,6 +6,7 @@ import 'package:connect/services/ble_service.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/services/notification_cache_service.dart';
+import 'package:connect/services/notification_filters_config_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,6 +17,10 @@ class ReceptorService {
   // Clave para almacenar el ID del dispositivo emisor vinculado
   static const String keyLinkedDeviceId = 'linked_device_id';
   static const String _lastNotificationKey = 'receptor_last_notification_hash';
+  static const String _recentNotificationHashesKey =
+      'receptor_recent_notification_hashes_v1';
+  static const int _recentNotificationMaxEntries = 2000;
+  static const int _recentNotificationTtlMs = 24 * 60 * 60 * 1000;
 
   // Verificar si un código de vinculación existe en Firestore
   Future<String?> verifyLinkCode(String code) async {
@@ -48,6 +53,7 @@ class ReceptorService {
       await prefs.setString(keyLinkedDeviceId, deviceId);
 
       await _firebaseService.updateLinkStatus(true, deviceId);
+      await NotificationFiltersConfigService.restartRemoteSync();
       
 
       // print('ID del dispositivo emisor guardado: $deviceId');
@@ -160,7 +166,7 @@ class ReceptorService {
   // Nuevo método para filtrar notificaciones visualizadas
   Stream<List<Map<String, dynamic>>> listenForSeenNotifications() async* {
     try {
-      final allNotificationsStream = listenForNotifications();
+      final allNotificationsStream = listenForAllNotificationsAcrossDays();
 
       yield* allNotificationsStream.map((notifications) {
         return notifications.where((notification) {
@@ -176,7 +182,7 @@ class ReceptorService {
   // Nuevo método para filtrar notificaciones no visualizadas
   Stream<List<Map<String, dynamic>>> listenForUnseenNotifications() async* {
     try {
-      final allNotificationsStream = listenForNotifications();
+      final allNotificationsStream = listenForAllNotificationsAcrossDays();
 
       yield* allNotificationsStream.map((notifications) {
         return notifications.where((notification) {
@@ -186,6 +192,197 @@ class ReceptorService {
     } catch (e) {
       // print('Error al filtrar notificaciones no visualizadas: $e');
       yield <Map<String, dynamic>>[];
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> listenForAllNotificationsAcrossDays() async* {
+    try {
+      final deviceId = await getLinkedDeviceId();
+      if (deviceId == null || deviceId.trim().isEmpty) {
+        yield <Map<String, dynamic>>[];
+        return;
+      }
+
+      final colRef = _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones');
+
+      yield* colRef.snapshots().asyncMap((snapshot) async {
+        final List<Map<String, dynamic>> notificationsList = [];
+
+        for (final dayDoc in snapshot.docs) {
+          final data = dayDoc.data();
+          final raw = data['notificaciones'];
+          if (raw is! Map) continue;
+
+          for (final entry in raw.entries) {
+            final notificationId = entry.key?.toString() ?? '';
+            if (notificationId.trim().isEmpty) continue;
+            final value = entry.value;
+            if (value is! Map) continue;
+
+            final notif = Map<String, dynamic>.from(value);
+            notif['notificationId'] = notificationId;
+            notif['dateId'] = dayDoc.id;
+            notificationsList.add(notif);
+          }
+        }
+
+        notificationsList.sort((a, b) {
+          final ta = (a['timestamp'] as Timestamp?)?.toDate() ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final tb = (b['timestamp'] as Timestamp?)?.toDate() ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          return tb.compareTo(ta);
+        });
+
+        try {
+          await BtHiveStorageService.cacheFirebaseNotifications(notificationsList);
+        } catch (_) {}
+
+        final filtered = <Map<String, dynamic>>[];
+        final seenStableKeys = <String>{};
+        final seenSignatureIds = <String>{};
+        for (final n in notificationsList) {
+          final ts = n['timestamp'];
+          if (ts is! Timestamp) continue;
+          if (await _shouldFilterNotification(n)) continue;
+          final stableKey = _extractStableSbnKey(n);
+          final signatureId = _extractStoredSignatureId(n).isNotEmpty
+              ? _extractStoredSignatureId(n)
+              : _generateStableSignatureId(n);
+          if (stableKey.isNotEmpty && seenStableKeys.contains(stableKey)) continue;
+          if (signatureId.isNotEmpty && seenSignatureIds.contains(signatureId)) continue;
+          if (stableKey.isNotEmpty) seenStableKeys.add(stableKey);
+          if (signatureId.isNotEmpty) seenSignatureIds.add(signatureId);
+          filtered.add(n);
+        }
+
+        try {
+          await BtHiveStorageService.cacheFirebaseNotifications(filtered);
+        } catch (_) {}
+        return filtered;
+      });
+    } catch (_) {
+      yield <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAllNotificationsAcrossDaysOnce() async {
+    final deviceId = await getLinkedDeviceId();
+    if (deviceId == null || deviceId.trim().isEmpty) return const [];
+
+    try {
+      final querySnapshot = await _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones')
+          .get();
+
+      final List<Map<String, dynamic>> notificationsList = [];
+      for (final dayDoc in querySnapshot.docs) {
+        final data = dayDoc.data();
+        final raw = data['notificaciones'];
+        if (raw is! Map) continue;
+
+        for (final entry in raw.entries) {
+          final notificationId = entry.key?.toString() ?? '';
+          if (notificationId.trim().isEmpty) continue;
+          final value = entry.value;
+          if (value is! Map) continue;
+
+          final notif = Map<String, dynamic>.from(value);
+          notif['notificationId'] = notificationId;
+          notif['dateId'] = dayDoc.id;
+          notificationsList.add(notif);
+        }
+      }
+
+      notificationsList.sort((a, b) {
+        final ta = (a['timestamp'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final tb = (b['timestamp'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return tb.compareTo(ta);
+      });
+
+      try {
+        await BtHiveStorageService.cacheFirebaseNotifications(notificationsList);
+      } catch (_) {}
+
+      final filtered = <Map<String, dynamic>>[];
+      final seenStableKeys = <String>{};
+      final seenSignatureIds = <String>{};
+      for (final n in notificationsList) {
+        final ts = n['timestamp'];
+        if (ts is! Timestamp) continue;
+        if (await _shouldFilterNotification(n)) continue;
+        final stableKey = _extractStableSbnKey(n);
+        final signatureId = _extractStoredSignatureId(n).isNotEmpty
+            ? _extractStoredSignatureId(n)
+            : _generateStableSignatureId(n);
+        if (stableKey.isNotEmpty && seenStableKeys.contains(stableKey)) continue;
+        if (signatureId.isNotEmpty && seenSignatureIds.contains(signatureId)) continue;
+        if (stableKey.isNotEmpty) seenStableKeys.add(stableKey);
+        if (signatureId.isNotEmpty) seenSignatureIds.add(signatureId);
+        filtered.add(n);
+      }
+
+      try {
+        await BtHiveStorageService.cacheFirebaseNotifications(filtered);
+      } catch (_) {}
+      return filtered;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAllNotificationsAcrossDaysRawOnce() async {
+    final deviceId = await getLinkedDeviceId();
+    if (deviceId == null || deviceId.trim().isEmpty) return const [];
+
+    try {
+      final querySnapshot = await _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones')
+          .get();
+
+      final List<Map<String, dynamic>> notificationsList = [];
+      for (final dayDoc in querySnapshot.docs) {
+        final data = dayDoc.data();
+        final raw = data['notificaciones'];
+        if (raw is! Map) continue;
+
+        for (final entry in raw.entries) {
+          final notificationId = entry.key?.toString() ?? '';
+          if (notificationId.trim().isEmpty) continue;
+          final value = entry.value;
+          if (value is! Map) continue;
+
+          final notif = Map<String, dynamic>.from(value);
+          notif['notificationId'] = notificationId;
+          notif['dateId'] = dayDoc.id;
+          notificationsList.add(notif);
+        }
+      }
+
+      notificationsList.sort((a, b) {
+        final ta = (a['timestamp'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final tb = (b['timestamp'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return tb.compareTo(ta);
+      });
+
+      try {
+        await BtHiveStorageService.cacheFirebaseNotifications(notificationsList);
+      } catch (_) {}
+
+      return notificationsList;
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -239,6 +436,44 @@ class ReceptorService {
     }
   }
 
+  Future<void> syncFirebaseNotificationsToHiveCache() async {
+    final deviceId = await getLinkedDeviceId();
+    if (deviceId == null || deviceId.trim().isEmpty) return;
+
+    try {
+      final querySnapshot = await _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection('notificaciones')
+          .get();
+
+      final List<Map<String, dynamic>> all = [];
+      for (final dayDoc in querySnapshot.docs) {
+        final data = dayDoc.data();
+        final raw = data['notificaciones'];
+        if (raw is! Map) continue;
+
+        for (final entry in raw.entries) {
+          final notificationId = entry.key?.toString() ?? '';
+          if (notificationId.trim().isEmpty) continue;
+
+          final value = entry.value;
+          if (value is! Map) continue;
+
+          final notif = Map<String, dynamic>.from(value);
+          notif['notificationId'] = notificationId;
+          final existingId = (notif['id'] ?? '').toString().trim();
+          if (existingId.isEmpty) {
+            notif['id'] = notificationId;
+          }
+          all.add(notif);
+        }
+      }
+
+      await BtHiveStorageService.cacheFirebaseNotifications(all);
+    } catch (_) {}
+  }
+
   // Variables para rastrear notificaciones conocidas y evitar mostrar históricas
   final Map<String, Set<String>> _lastKnownNotificationIds = {}; // dateId -> Set<notificationId>
   DateTime? _receptorStartTime;
@@ -275,7 +510,7 @@ class ReceptorService {
           .collection('notificaciones')
           .doc(dateId);
 
-      yield* dayDocRef.snapshots().map((snapshot) {
+      yield* dayDocRef.snapshots().asyncMap((snapshot) async {
         if (!snapshot.exists ||
             !snapshot.data()!.containsKey('notificaciones')) {
           return <Map<String, dynamic>>[];
@@ -283,9 +518,6 @@ class ReceptorService {
 
         final Map<String, dynamic> notificationsMap =
             snapshot.data()!['notificaciones'] as Map<String, dynamic>;
-
-        // Procesar solo notificaciones nuevas para mostrar localmente
-        _processNewNotificationsForLocalDisplay(notificationsMap, dateId);
 
         final List<Map<String, dynamic>> notificationsList = notificationsMap
             .entries
@@ -310,7 +542,25 @@ class ReceptorService {
           return timeB.compareTo(timeA);
         });
 
-        return notificationsList;
+        final filtered = <Map<String, dynamic>>[];
+        final seenStableKeys = <String>{};
+        final seenSignatureIds = <String>{};
+        for (final n in notificationsList) {
+          if (await _shouldFilterNotification(n)) continue;
+          final stableKey = _extractStableSbnKey(n);
+          final signatureId = _extractStoredSignatureId(n).isNotEmpty
+              ? _extractStoredSignatureId(n)
+              : _generateStableSignatureId(n);
+          if (stableKey.isNotEmpty && seenStableKeys.contains(stableKey)) continue;
+          if (signatureId.isNotEmpty && seenSignatureIds.contains(signatureId)) continue;
+          if (stableKey.isNotEmpty) seenStableKeys.add(stableKey);
+          if (signatureId.isNotEmpty) seenSignatureIds.add(signatureId);
+          filtered.add(n);
+        }
+        try {
+          await BtHiveStorageService.cacheFirebaseNotifications(filtered);
+        } catch (_) {}
+        return filtered;
       });
     } catch (e) {
       // print('Error al escuchar notificaciones: $e');
@@ -411,76 +661,75 @@ class ReceptorService {
 
   // Método para verificar si una notificación debe ser filtrada (mismo que en FirebaseService)
   // Método mejorado para verificar si una notificación debe ser filtrada
-  bool _shouldFilterNotification(Map<String, dynamic> notification) {
+  Future<bool> _shouldFilterNotification(Map<String, dynamic> notification) async {
+    final config = await NotificationFiltersConfigService.getConfig();
     final String packageName = notification['packageName'] ?? '';
 
     // Filtro universal: Notificaciones vacías (aplicar a todas las aplicaciones)
-    final String title = (notification['title'] ?? '').toString().trim();
-    final String text = (notification['text'] ?? '').toString().trim();
-    final String bigText = (notification['bigText'] ?? '').toString().trim();
-    final String body = (notification['body'] ?? '').toString().trim();
-    final String mensaje = (notification['mensaje'] ?? '').toString().trim();
-    final String contenido = (notification['contenido'] ?? '').toString().trim();
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
+    final String title = clean(notification['title']);
+    final String text = clean(notification['text']);
+    final String bigText = clean(notification['bigText']);
+    final String subText = clean(notification['subText']);
+    final String summaryText = clean(notification['summaryText']);
+    final String infoText = clean(notification['infoText']);
+    final String contentInfo = clean(notification['contentInfo']);
+    final String body = clean(notification['body']);
+    final String mensaje = clean(notification['mensaje']);
+    final String contenido = clean(notification['contenido']);
     
-    // Si todos los campos de contenido están vacíos, filtrar la notificación
-    if (title.isEmpty && text.isEmpty && bigText.isEmpty && 
-        body.isEmpty && mensaje.isEmpty && contenido.isEmpty) {
-      //// print('Notificación filtrada: Contenido vacío - Package: $packageName');
+    final bool hasAnyBody =
+        title.isNotEmpty ||
+        text.isNotEmpty ||
+        bigText.isNotEmpty ||
+        subText.isNotEmpty ||
+        summaryText.isNotEmpty ||
+        infoText.isNotEmpty ||
+        contentInfo.isNotEmpty ||
+        body.isNotEmpty ||
+        mensaje.isNotEmpty ||
+        contenido.isNotEmpty;
+    if (config.isEnabled('filter_empty', fallback: true) && !hasAnyBody) {
       return true;
     }
-    
-    // Solo aplicar filtros a WhatsApp e Instagram
-    if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b' || 
-        packageName == 'com.instagram.android') {
-      // Recopilar TODOS los textos posibles de la notificación
-      final List<String> allTexts = [
-        notification['title'] ?? '',
-        notification['text'] ?? '',
-        notification['bigText'] ?? '',
-        notification['subText'] ?? '',
-        notification['summaryText'] ?? '',
-        notification['infoText'] ?? '',
-        notification['contentInfo'] ?? '',
-        notification['body'] ?? '',
-        notification['mensaje'] ?? '',
-        notification['contenido'] ?? '',
-        notification['titulo'] ?? '',
+
+    final String normalizedContent =
+        NotificationFiltersConfigService.normalizedNotificationContent(notification);
+
+    if (config.isEnabled('filter_global_message_patterns', fallback: true)) {
+      final List<RegExp> globalMessagePatterns = [
+        RegExp(r'\b\d+\s*mensajes?\s*nuevos?\b'),
+        RegExp(r'\b\d+\s*new\s*messages?\b'),
       ];
-      
-      // Combinar todos los textos y normalizar
-      final String allContent = allTexts.join(' ').toLowerCase();
-      // Normalizar: remover acentos, caracteres especiales y espacios múltiples
-      final String normalizedContent = allContent
-          .replaceAll(RegExp(r'[áàäâ]'), 'a')
-          .replaceAll(RegExp(r'[éèëê]'), 'e')
-          .replaceAll(RegExp(r'[íìïî]'), 'i')
-          .replaceAll(RegExp(r'[óòöô]'), 'o')
-          .replaceAll(RegExp(r'[úùüû]'), 'u')
-          .replaceAll(RegExp(r'[ñ]'), 'n')
-          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-      
-      // print('Contenido normalizado para filtro: "$normalizedContent"');
-      
-      // Filtros específicos para Instagram
-      if (packageName == 'com.instagram.android') {
-        // Filtro 1: Subida de contenido multimedia
+      for (final pattern in globalMessagePatterns) {
+        if (pattern.hasMatch(normalizedContent)) {
+          return true;
+        }
+      }
+    }
+
+    if (packageName == 'com.instagram.android') {
+      if (config.isEnabled('instagram_filter_upload', fallback: true)) {
         final List<String> uploadKeywords = [
           'subiendo contenido multimedia',
           'uploading media content',
           'subiendo contenido',
           'uploading content',
         ];
-        
         for (final keyword in uploadKeywords) {
           if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Subida de contenido - "$normalizedContent"');
             return true;
           }
         }
-        
-        // Filtro 2: Historias
+      }
+
+      if (config.isEnabled('instagram_filter_story', fallback: true)) {
         final List<String> storyKeywords = [
           'subiendo historia',
           'uploading story',
@@ -489,15 +738,14 @@ class ReceptorService {
           'historia subida',
           'story posted',
         ];
-        
         for (final keyword in storyKeywords) {
           if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Historia - "$normalizedContent"');
             return true;
           }
         }
-        
-        // Filtro 3: Llamadas y videollamadas (similar a WhatsApp)
+      }
+
+      if (config.isEnabled('instagram_filter_calls', fallback: true)) {
         final List<String> callKeywords = [
           'llamando',
           'llamada en curso',
@@ -513,37 +761,61 @@ class ReceptorService {
           'video calling',
           'llamada de video',
         ];
-        
         for (final keyword in callKeywords) {
           if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Llamada Instagram - "$normalizedContent"');
             return true;
           }
         }
       }
-      
-      // Filtros existentes para WhatsApp (mantener como están)
-      if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
-        // Filtro 1: Resúmenes de mensajes
-        final List<RegExp> messagePatterns = [
-          RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
-          RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
-          RegExp(r'\d+\s*nuevos?\s*mensajes?'),
-          RegExp(r'\d+\s*new\s*messages?'),
-          RegExp(r'\d+\s*mensajes?\s*nuevos?'), // Nuevo filtro
+    }
+
+    if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
+      if (config.isEnabled('whatsapp_filter_sending', fallback: true)) {
+        final List<String> sendingKeywords = [
+          'enviando',
+          'sending',
         ];
-        
-        for (final pattern in messagePatterns) {
-          if (pattern.hasMatch(normalizedContent)) {
-            // print('Notificación filtrada: Resumen de mensajes - "$normalizedContent"');
+        for (final keyword in sendingKeywords) {
+          if (normalizedContent.contains(keyword)) {
             return true;
           }
         }
-        
-        // Filtro 2: Llamadas
+      }
+
+      if (config.isEnabled('whatsapp_filter_message_summary', fallback: true)) {
+        final List<RegExp> messagePatterns = [
+          RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
+          RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chat\s*s?'),
+          RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
+          RegExp(r'\d+\s*nuevos?\s*mensajes?'),
+          RegExp(r'\d+\s*new\s*messages?'),
+          RegExp(r'\d+\s*mensajes?\s*nuevos?'),
+          RegExp(r'\d+\s*mensajes?\s*nuevos?\s*de\s*\d+\s*chats?'),
+          RegExp(r'\d+\s*mensajes?\s*nuevos?\s*\d+\s*chats?'),
+          RegExp(r'\d+\s*mensajes?\s*en\s*\d+\s*chats?'),
+          RegExp(r'\d+\s*messages?\s*in\s*\d+\s*chats?'),
+          RegExp(r'\d+\s*new\s*messages?\s*\d+\s*chats?'),
+        ];
+
+        for (final pattern in messagePatterns) {
+          if (pattern.hasMatch(normalizedContent)) {
+            return true;
+          }
+        }
+
+        if (normalizedContent.contains('mensajes') &&
+            normalizedContent.contains('chat') &&
+            RegExp(r'\b\d+\s*mensajes?\b').hasMatch(normalizedContent) &&
+            RegExp(r'\b\d+\s*chat').hasMatch(normalizedContent)) {
+          return true;
+        }
+      }
+
+      if (config.isEnabled('whatsapp_filter_calls', fallback: true)) {
         final List<String> callKeywords = [
           'llamando',
-          'Llamada en curso'
+          'llamada',
+          'llamada en curso',
           'calling',
           'llamada entrante',
           'incoming call',
@@ -554,15 +826,15 @@ class ReceptorService {
           'videollamada',
           'video call',
         ];
-        
+
         for (final keyword in callKeywords) {
           if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Llamada - "$normalizedContent"');
             return true;
           }
         }
-        
-        // Filtro 3: Copias de seguridad
+      }
+
+      if (config.isEnabled('whatsapp_filter_backup', fallback: true)) {
         final List<String> backupKeywords = [
           'copia de seguridad',
           'backup',
@@ -571,15 +843,22 @@ class ReceptorService {
           'backing up',
           'guardando copia',
         ];
-        
+
         for (final keyword in backupKeywords) {
           if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Copia de seguridad - "$normalizedContent"');
             return true;
           }
         }
-        
-        // Filtro 4: Notificaciones genéricas y contenido no disponible (NUEVOS FILTROS)
+      }
+
+      if (config.isEnabled('whatsapp_filter_checking', fallback: true)) {
+        if (normalizedContent.contains('comprobando si hay mensajes nuevos') ||
+            normalizedContent.contains('checking for new messages')) {
+          return true;
+        }
+      }
+
+      if (config.isEnabled('whatsapp_filter_generic', fallback: true)) {
         final List<String> genericKeywords = [
           'nueva notificacion',
           'new notification',
@@ -590,18 +869,24 @@ class ReceptorService {
           'message not available',
           'sin contenido',
           'no content',
-          
         ];
-        
+
         for (final keyword in genericKeywords) {
           if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Contenido genérico - "$normalizedContent"');
             return true;
           }
         }
       }
     }
-    
+
+    if (NotificationFiltersConfigService.shouldFilterByCustomRules(
+      config: config,
+      packageName: packageName,
+      normalizedContent: normalizedContent,
+    )) {
+      return true;
+    }
+
     return false;
   }
 
@@ -620,20 +905,136 @@ class ReceptorService {
     return combinedContent.hashCode.toString();
   }
 
+  String _extractStableSbnKey(Map<String, dynamic> notification) {
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
+    final direct = clean(notification['sbnKey']);
+    if (direct.isNotEmpty) return direct;
+    final alt = clean(notification['key']);
+    if (alt.isNotEmpty) return alt;
+
+    final nested = notification['extras'];
+    if (nested is Map) {
+      final m = Map<String, dynamic>.from(nested);
+      final nestedKey = clean(m['sbnKey']);
+      if (nestedKey.isNotEmpty) return nestedKey;
+      final nestedAlt = clean(m['key']);
+      if (nestedAlt.isNotEmpty) return nestedAlt;
+    }
+
+    return '';
+  }
+
+  String _extractStoredSignatureId(Map<String, dynamic> notification) {
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
+    final direct = clean(notification['signatureId']);
+    if (direct.isNotEmpty) return direct;
+
+    final nested = notification['extras'];
+    if (nested is Map) {
+      final m = Map<String, dynamic>.from(nested);
+      final nestedSig = clean(m['signatureId']);
+      if (nestedSig.isNotEmpty) return nestedSig;
+    }
+
+    return '';
+  }
+
+  String _fnv1a32Hex(String input) {
+    final data = utf8.encode(input);
+    int hash = 0x811c9dc5;
+    for (final b in data) {
+      hash ^= b;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+
+  String _generateStableSignatureId(Map<String, dynamic> notification) {
+    final pkg = (notification['packageName'] ?? '').toString().trim();
+    final normalized =
+        NotificationFiltersConfigService.normalizedNotificationContent(notification);
+    final source = '$pkg|$normalized';
+    return _fnv1a32Hex(source);
+  }
+
   // Método para verificar si la notificación es duplicada en el receptor
   Future<bool> _isDuplicateNotification(Map<String, dynamic> notification) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String currentHash = _generateNotificationHash(notification);
-      final String? lastHash = prefs.getString(_lastNotificationKey);
-      
-      if (lastHash != null && lastHash == currentHash) {
-        // print('Notificación duplicada detectada en receptor: $currentHash');
+      final String stableKey = _extractStableSbnKey(notification);
+      final String signatureId = _extractStoredSignatureId(notification).isNotEmpty
+          ? _extractStoredSignatureId(notification)
+          : _generateStableSignatureId(notification);
+      final String stableKeyEntry = stableKey.isEmpty ? '' : 'k:$stableKey';
+      final String signatureEntry = signatureId.isEmpty ? '' : 's:$signatureId';
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+      final raw = prefs.getString(_recentNotificationHashesKey);
+      Map<String, dynamic> map;
+      try {
+        map = raw == null || raw.isEmpty
+            ? <String, dynamic>{}
+            : (jsonDecode(raw) as Map).cast<String, dynamic>();
+      } catch (_) {
+        map = <String, dynamic>{};
+      }
+
+      final cutoffMs = nowMs - _recentNotificationTtlMs;
+      final keysToRemove = <String>[];
+      for (final entry in map.entries) {
+        final ts = entry.value;
+        final tsMs = ts is int ? ts : int.tryParse(ts.toString());
+        if (tsMs == null || tsMs < cutoffMs) {
+          keysToRemove.add(entry.key);
+        }
+      }
+      for (final k in keysToRemove) {
+        map.remove(k);
+      }
+
+      if (map.containsKey(currentHash) ||
+          (stableKeyEntry.isNotEmpty && map.containsKey(stableKeyEntry)) ||
+          (signatureEntry.isNotEmpty && map.containsKey(signatureEntry))) {
+        await prefs.setString(_lastNotificationKey, currentHash);
+        await prefs.setString(_recentNotificationHashesKey, jsonEncode(map));
         return true;
       }
-      
-      // Guardar el hash de la notificación actual
+
+      map[currentHash] = nowMs;
+      if (stableKeyEntry.isNotEmpty) map[stableKeyEntry] = nowMs;
+      if (signatureEntry.isNotEmpty) map[signatureEntry] = nowMs;
+      if (map.length > _recentNotificationMaxEntries) {
+        final sorted = map.entries.toList()
+          ..sort((a, b) {
+            final ta = a.value is int
+                ? a.value as int
+                : int.tryParse(a.value.toString()) ?? 0;
+            final tb = b.value is int
+                ? b.value as int
+                : int.tryParse(b.value.toString()) ?? 0;
+            return ta.compareTo(tb);
+          });
+        final toDrop = sorted.length - _recentNotificationMaxEntries;
+        for (var i = 0; i < toDrop; i++) {
+          map.remove(sorted[i].key);
+        }
+      }
+
       await prefs.setString(_lastNotificationKey, currentHash);
+      await prefs.setString(_recentNotificationHashesKey, jsonEncode(map));
       return false;
     } catch (e) {
       // print('Error al verificar notificación duplicada en receptor: $e');
@@ -647,7 +1048,7 @@ class ReceptorService {
     String notificationId,
   ) async {
     // Verificar si la notificación debe ser filtrada
-    if (_shouldFilterNotification(notificationData)) {
+    if (await _shouldFilterNotification(notificationData)) {
       // print('Notificación filtrada en receptor: $notificationId');
       return;
     }
@@ -672,33 +1073,31 @@ class ReceptorService {
 
     // Solo mostrar si la notificación no ha sido visualizada
     if (notificationData['status-visualizacion'] == false) {
-      // Extraer el contenido dinámico de la notificación
-      String title = 'Nueva notificación';
-      String body = 'Contenido no disponible';
-
-      // Intentar obtener título de diferentes campos posibles
-      if (notificationData['title'] != null &&
-          notificationData['title'].toString().isNotEmpty) {
-        title = notificationData['title'].toString();
-      } else if (notificationData['titulo'] != null &&
-          notificationData['titulo'].toString().isNotEmpty) {
-        title = notificationData['titulo'].toString();
+      String clean(dynamic v) {
+        final raw = (v ?? '').toString().trim();
+        final lower = raw.toLowerCase();
+        if (lower == 'null' || lower == 'undefined') return '';
+        return raw;
       }
 
-      // Intentar obtener contenido de diferentes campos posibles
-      if (notificationData['text'] != null &&
-          notificationData['text'].toString().isNotEmpty) {
-        body = notificationData['text'].toString();
-      } else if (notificationData['contenido'] != null &&
-          notificationData['contenido'].toString().isNotEmpty) {
-        body = notificationData['contenido'].toString();
-      } else if (notificationData['body'] != null &&
-          notificationData['body'].toString().isNotEmpty) {
-        body = notificationData['body'].toString();
-      } else if (notificationData['bigText'] != null &&
-          notificationData['bigText'].toString().isNotEmpty) {
-        body = notificationData['bigText'].toString();
-      }
+      String title = clean(notificationData['title']);
+      if (title.isEmpty) title = clean(notificationData['titulo']);
+
+      String body = clean(notificationData['text']);
+      if (body.isEmpty) body = clean(notificationData['contenido']);
+      if (body.isEmpty) body = clean(notificationData['body']);
+      if (body.isEmpty) body = clean(notificationData['bigText']);
+
+      if (body.isEmpty) return;
+
+      if (title.isEmpty) title = 'Notificación';
+
+      final stableKey = _extractStableSbnKey(notificationData);
+      final signatureId = _extractStoredSignatureId(notificationData).isNotEmpty
+          ? _extractStoredSignatureId(notificationData)
+          : _generateStableSignatureId(notificationData);
+      final localNotificationId =
+          stableKey.isNotEmpty ? stableKey : (signatureId.isNotEmpty ? signatureId : notificationId);
 
       await LocalNotificationService.showNotification(
         title: title,
@@ -711,7 +1110,7 @@ class ReceptorService {
             notificationData['appName'] ??
             notificationData['aplicacion'] ??
             'Aplicación desconocida',
-        notificationId: notificationId,
+        notificationId: localNotificationId,
         extras: notificationData,
       );
       
@@ -802,6 +1201,7 @@ class ReceptorService {
 class BtHiveStorageService {
   static const String _outboxBoxName = 'bt_notification_outbox_v1';
   static const String _poisonBoxName = 'bt_notification_poison_v1';
+  static const String _firebaseCacheBoxName = 'bt_notification_firebase_cache_v1';
   static const String _appsBoxName = 'bt_apps_v1';
   static const String _mediaStateBoxName = 'bt_media_state_v1';
   static const String _volumeStateBoxName = 'bt_volume_state_v1';
@@ -814,6 +1214,7 @@ class BtHiveStorageService {
     await Hive.initFlutter();
     await Hive.openBox<Map>(_outboxBoxName);
     await Hive.openBox<Map>(_poisonBoxName);
+    await Hive.openBox<Map>(_firebaseCacheBoxName);
     await Hive.openBox<Map>(_appsBoxName);
     await Hive.openBox<Map>(_mediaStateBoxName);
     await Hive.openBox<Map>(_volumeStateBoxName);
@@ -931,9 +1332,19 @@ class BtHiveStorageService {
     await ensureInitialized();
     final Box<Map> outbox = Hive.box<Map>(_outboxBoxName);
     final existing = outbox.get(id);
-    if (existing == null) return;
-    outbox.put(id, {
-      ...Map<String, dynamic>.from(existing),
+    if (existing != null) {
+      outbox.put(id, {
+        ...Map<String, dynamic>.from(existing),
+        'visualizado': visualized,
+      });
+      return;
+    }
+
+    final Box<Map> cache = Hive.box<Map>(_firebaseCacheBoxName);
+    final cached = cache.get(id);
+    if (cached == null) return;
+    cache.put(id, {
+      ...Map<String, dynamic>.from(cached),
       'visualizado': visualized,
     });
   }
@@ -943,35 +1354,48 @@ class BtHiveStorageService {
   }) async {
     await ensureInitialized();
     final Box<Map> outbox = Hive.box<Map>(_outboxBoxName);
+    final Box<Map> cache = Hive.box<Map>(_firebaseCacheBoxName);
 
-    final List<Map<String, dynamic>> items = [];
-    for (final key in outbox.keys) {
-      final value = outbox.get(key);
-      if (value == null) continue;
+    final Map<String, Map<String, dynamic>> byId = {};
 
-      final map = Map<String, dynamic>.from(value);
-      final bool visualizado = map['visualizado'] == true;
-      if (!includeVisualized && visualizado) continue;
+    void collectFromBox(Box<Map> box) {
+      for (final key in box.keys) {
+        final value = box.get(key);
+        if (value == null) continue;
 
-      final payloadJson = (map['payloadJson'] ?? '').toString();
-      final payload = _safeDecodePayload(payloadJson);
-      final int timestampMs = (map['timestampMs'] as int?) ??
-          _extractTimestampMs(payload) ??
-          DateTime.now().millisecondsSinceEpoch;
+        final map = Map<String, dynamic>.from(value);
+        final String id = (map['id'] ?? '').toString().trim();
+        if (id.isEmpty) continue;
 
-      items.add({
-        'notificationId': map['id']?.toString() ?? '',
-        'id': map['id']?.toString() ?? '',
-        'title': payload['title'] ?? '',
-        'text': payload['text'] ?? '',
-        'packageName': payload['packageName'] ?? '',
-        'appName': payload['appName'] ?? '',
-        'timestamp': Timestamp.fromMillisecondsSinceEpoch(timestampMs),
-        'extras': Map<String, dynamic>.from(payload['extras'] ?? {}),
-        'status-visualizacion': visualizado,
-      });
+        final bool visualizado = map['visualizado'] == true;
+        if (!includeVisualized && visualizado) continue;
+
+        final payloadJson = (map['payloadJson'] ?? '').toString();
+        final payload = _safeDecodePayload(payloadJson);
+        final int timestampMs = (map['timestampMs'] as int?) ??
+            _extractTimestampMs(payload) ??
+            DateTime.now().millisecondsSinceEpoch;
+
+        byId.putIfAbsent(id, () {
+          return {
+            'notificationId': id,
+            'id': id,
+            'title': payload['title'] ?? '',
+            'text': payload['text'] ?? '',
+            'packageName': payload['packageName'] ?? '',
+            'appName': payload['appName'] ?? '',
+            'timestamp': Timestamp.fromMillisecondsSinceEpoch(timestampMs),
+            'extras': Map<String, dynamic>.from(payload['extras'] ?? {}),
+            'status-visualizacion': visualizado,
+          };
+        });
+      }
     }
 
+    collectFromBox(cache);
+    collectFromBox(outbox);
+
+    final items = byId.values.toList();
     items.sort((a, b) {
       final ta = (a['timestamp'] as Timestamp).toDate();
       final tb = (b['timestamp'] as Timestamp).toDate();
@@ -1003,6 +1427,64 @@ class BtHiveStorageService {
     await ensureInitialized();
     final Box<Map> outbox = Hive.box<Map>(_outboxBoxName);
     await outbox.delete(id);
+    final Box<Map> cache = Hive.box<Map>(_firebaseCacheBoxName);
+    await cache.delete(id);
+  }
+
+  static Future<void> cacheFirebaseNotifications(
+    List<Map<String, dynamic>> notifications,
+  ) async {
+    await ensureInitialized();
+    final Box<Map> cache = Hive.box<Map>(_firebaseCacheBoxName);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    for (final n in notifications) {
+      final String id =
+          (n['notificationId'] ?? n['id'] ?? '').toString().trim();
+      if (id.isEmpty) continue;
+
+      final dynamic ts = n['timestamp'];
+      final int? tsMs = ts is Timestamp
+          ? ts.millisecondsSinceEpoch
+          : (ts is int ? ts : int.tryParse(ts?.toString() ?? ''));
+      final int timestampMs = tsMs ?? nowMs;
+
+      final bool visualizado = n['status-visualizacion'] == true;
+
+      final Map<String, dynamic> payload = Map<String, dynamic>.from(n);
+      payload['id'] = id;
+      payload['time'] = timestampMs;
+      if ((payload['icon'] ?? '').toString().trim().isEmpty) {
+        final icon = (payload['appIcon'] ?? '').toString().trim();
+        if (icon.isNotEmpty) {
+          payload['icon'] = icon;
+        }
+      }
+      final normalized = _normalizePayload(payload);
+      final payloadJson = jsonEncode(normalized);
+
+      final existing = cache.get(id);
+      if (existing != null) {
+        final existingMap = Map<String, dynamic>.from(existing);
+        final int existingMs = (existingMap['timestampMs'] as int?) ?? 0;
+        final bool existingVisual = existingMap['visualizado'] == true;
+        final String existingPayload = (existingMap['payloadJson'] ?? '').toString();
+
+        final shouldUpdate = existingMs != timestampMs ||
+            existingVisual != visualizado ||
+            existingPayload != payloadJson;
+
+        if (!shouldUpdate) continue;
+      }
+
+      cache.put(id, {
+        'id': id,
+        'timestampMs': timestampMs,
+        'createdAtMs': nowMs,
+        'visualizado': visualizado,
+        'payloadJson': payloadJson,
+      });
+    }
   }
 
   static Future<void> moveToPoison(String id, Map<String, dynamic> entry) async {
@@ -1059,6 +1541,10 @@ class BtHiveStorageService {
 
 class BtHiveSyncService {
   static const int _maxAttemptsBeforePoison = 30;
+  static const String _recentWhatsAppPayloadKey =
+      'bt_hive_recent_whatsapp_payload_hashes_v1';
+  static const int _recentWhatsAppPayloadMaxEntries = 2000;
+  static const int _recentWhatsAppPayloadTtlMs = 24 * 60 * 60 * 1000;
 
   static Future<void> syncOutboxToFirebase() async {
     await BtHiveStorageService.ensureInitialized();
@@ -1103,6 +1589,12 @@ class BtHiveSyncService {
       final int attempts = (value['attempts'] as int?) ?? 0;
 
       try {
+        final bool duplicateContent = await _isDuplicateWhatsAppPayloadContent(payload);
+        if (duplicateContent) {
+          await BtHiveStorageService.deleteOutboxEntry(id);
+          continue;
+        }
+
         final bool alreadyInFirebase = await _isAlreadyInFirebase(
           linkedDeviceId,
           id,
@@ -1157,6 +1649,82 @@ class BtHiveSyncService {
         await BtHiveStorageService.updateOutboxEntry(id, updated);
       }
     }
+  }
+
+  static Future<bool> _isDuplicateWhatsAppPayloadContent(
+    Map<String, dynamic> payload,
+  ) async {
+    final packageName = (payload['packageName'] ?? '').toString();
+    if (packageName != 'com.whatsapp' && packageName != 'com.whatsapp.w4b') {
+      return false;
+    }
+
+    final title = (payload['title'] ?? '').toString();
+    final text = (payload['text'] ?? '').toString();
+    final normalized = _normalizeForHash('$packageName|$title|$text');
+    if (normalized.isEmpty) return false;
+    final hash = normalized.hashCode.toString();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_recentWhatsAppPayloadKey);
+    Map<String, dynamic> map;
+    try {
+      map = raw == null || raw.isEmpty
+          ? <String, dynamic>{}
+          : (jsonDecode(raw) as Map).cast<String, dynamic>();
+    } catch (_) {
+      map = <String, dynamic>{};
+    }
+
+    final cutoffMs = nowMs - _recentWhatsAppPayloadTtlMs;
+    final keysToRemove = <String>[];
+    for (final entry in map.entries) {
+      final ts = entry.value;
+      final tsMs = ts is int ? ts : int.tryParse(ts.toString());
+      if (tsMs == null || tsMs < cutoffMs) {
+        keysToRemove.add(entry.key);
+      }
+    }
+    for (final k in keysToRemove) {
+      map.remove(k);
+    }
+
+    if (map.containsKey(hash)) {
+      await prefs.setString(_recentWhatsAppPayloadKey, jsonEncode(map));
+      return true;
+    }
+
+    map[hash] = nowMs;
+    if (map.length > _recentWhatsAppPayloadMaxEntries) {
+      final sorted = map.entries.toList()
+        ..sort((a, b) {
+          final ta = a.value is int ? a.value as int : int.tryParse(a.value.toString()) ?? 0;
+          final tb = b.value is int ? b.value as int : int.tryParse(b.value.toString()) ?? 0;
+          return ta.compareTo(tb);
+        });
+      final toDrop = sorted.length - _recentWhatsAppPayloadMaxEntries;
+      for (var i = 0; i < toDrop; i++) {
+        map.remove(sorted[i].key);
+      }
+    }
+
+    await prefs.setString(_recentWhatsAppPayloadKey, jsonEncode(map));
+    return false;
+  }
+
+  static String _normalizeForHash(String input) {
+    return input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u')
+        .replaceAll(RegExp(r'[ñ]'), 'n')
+        .replaceAll(RegExp(r'[^a-z0-9\s\|]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   static int _computeBackoffMs(int attempts) {

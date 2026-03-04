@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/screens/receptor/notification_detail_screen.dart';
+import 'package:connect/services/ble_service.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/services/notification_cache_service.dart';
@@ -22,11 +23,12 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
   bool _isLoading = false;
   List<Map<String, dynamic>> _unreadNotifications = [];
   List<Map<String, dynamic>> _readNotifications = [];
-  StreamSubscription? _unreadSubscription;
-  StreamSubscription? _readSubscription;
+  StreamSubscription? _allSubscription;
   bool _notificationsEnabled = false;
   Timer? _hiveRefreshTimer;
   bool _showUnread = true;
+  final ScrollController _scrollController = ScrollController();
+  bool _isReloading = false;
 
   @override
   void initState() {
@@ -34,6 +36,7 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
     _loadNotifications();
     _loadNotificationSettings();
     _startHiveRefresh();
+    _scrollController.addListener(_onScroll);
   }
 
   Future<void> _loadNotificationSettings() async {
@@ -46,9 +49,9 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
 
   @override
   void dispose() {
-    _unreadSubscription?.cancel();
-    _readSubscription?.cancel();
+    _allSubscription?.cancel();
     _hiveRefreshTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -67,28 +70,108 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
   }
 
   void _startListening() {
-    _unreadSubscription = _receptorService
-        .listenForUnseenNotifications()
-        .listen(
-          (notifications) {
-            setState(() {
-              _unreadNotifications = notifications;
-            });
-            _mergeHiveUnreadIntoState();
-          },
-          onError: (error) {
-          },
+    _allSubscription?.cancel();
+    _allSubscription =
+        _receptorService.listenForAllNotificationsAcrossDays().listen(
+      (notifications) {
+        final unread = notifications
+            .where((n) => n['status-visualizacion'] == false)
+            .toList();
+        final read =
+            notifications.where((n) => n['status-visualizacion'] == true).toList();
+
+        setState(() {
+          _unreadNotifications = unread;
+          _readNotifications = read;
+        });
+
+        print(
+          '[notificaciones][firebase] total=${notifications.length} unread=${unread.length} read=${read.length}',
+        );
+        _relayDebugToEmisor(
+          'receptor_notificaciones',
+          'firebase_stream total=${notifications.length} unread=${unread.length} read=${read.length}',
         );
 
-    _readSubscription = _receptorService.listenForSeenNotifications().listen(
-      (notifications) {
-        setState(() {
-          _readNotifications = notifications;
-        });
+        _mergeHiveUnreadIntoState();
         _mergeHiveReadIntoState();
       },
-      onError: (_) {},
+      onError: (error) {
+        print('[notificaciones][firebase] stream_error $error');
+        _relayDebugToEmisor(
+          'receptor_notificaciones',
+          'firebase_stream_error $error',
+        );
+      },
     );
+  }
+
+  void _onScroll() {
+    if (_isReloading) return;
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.pixels < pos.maxScrollExtent - 120) return;
+    _reloadAllFromFirebase('scroll_bottom');
+  }
+
+  Future<void> _reloadAllFromFirebase(String reason) async {
+    if (_isReloading) return;
+    setState(() {
+      _isReloading = true;
+    });
+
+    try {
+      print('[notificaciones][reload] start reason=$reason');
+      await _relayDebugToEmisor(
+        'receptor_notificaciones',
+        'reload_start reason=$reason',
+      );
+
+      final list = await _receptorService.fetchAllNotificationsAcrossDaysOnce();
+      final unread =
+          list.where((n) => n['status-visualizacion'] == false).toList();
+      final read = list.where((n) => n['status-visualizacion'] == true).toList();
+
+      if (!mounted) return;
+      setState(() {
+        _unreadNotifications = unread;
+        _readNotifications = read;
+      });
+
+      print(
+        '[notificaciones][reload] done total=${list.length} unread=${unread.length} read=${read.length}',
+      );
+      await _relayDebugToEmisor(
+        'receptor_notificaciones',
+        'reload_done total=${list.length} unread=${unread.length} read=${read.length}',
+      );
+
+      await _mergeHiveUnreadIntoState();
+      await _mergeHiveReadIntoState();
+    } catch (e) {
+      print('[notificaciones][reload] error $e');
+      await _relayDebugToEmisor('receptor_notificaciones', 'reload_error $e');
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isReloading = false;
+      });
+    }
+  }
+
+  Future<void> _relayDebugToEmisor(String source, String message) async {
+    try {
+      final status = await BleService.getBtServerStatus();
+      final running = status['running'] == true;
+      final peers = (status['connectedCount'] as num?)?.toInt() ?? 0;
+      if (!running || peers <= 0) return;
+      await BleService.sendBtServerMessage({
+        'type': 'debug_log',
+        'source': source,
+        'message': message,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+    } catch (_) {}
   }
 
   void _startHiveRefresh() {
@@ -228,6 +311,15 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
       appBar: AppBar(
         title: const Text('notificaciones'),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_alt),
+            tooltip: 'Filtros de notificaciones',
+            onPressed: () {
+              Navigator.pushNamed(context, '/notification_filters');
+            },
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -268,18 +360,45 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                     ),
                   ),
                   Expanded(
-                    child: notifications.isEmpty
-                        ? Center(
-                            child: Text(
-                              _showUnread
-                                  ? 'No hay notificaciones no leídas'
-                                  : 'No hay notificaciones leídas',
-                            ),
-                          )
-                        : ListView.builder(
-                            itemCount: notifications.length,
-                            itemBuilder: (context, index) {
-                              final notification = notifications[index];
+                    child: RefreshIndicator(
+                      onRefresh: () => _reloadAllFromFirebase('pull_to_refresh'),
+                      child: notifications.isEmpty
+                          ? ListView(
+                              controller: _scrollController,
+                              children: [
+                                const SizedBox(height: 80),
+                                Center(
+                                  child: Text(
+                                    _showUnread
+                                        ? 'No hay notificaciones no leídas'
+                                        : 'No hay notificaciones leídas',
+                                  ),
+                                ),
+                                const SizedBox(height: 80),
+                              ],
+                            )
+                          : ListView.builder(
+                              controller: _scrollController,
+                              itemCount:
+                                  notifications.length + (_isReloading ? 1 : 0),
+                              itemBuilder: (context, index) {
+                                if (_isReloading &&
+                                    index == notifications.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 16),
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                final notification = notifications[index];
                               final notificationId = (notification['notificationId'] ??
                                       notification['id'] ??
                                       '')
@@ -395,7 +514,8 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
                                   ),
                                 );
                             },
-                          ),
+                            ),
+                    ),
                   ),
                 ],
               ),

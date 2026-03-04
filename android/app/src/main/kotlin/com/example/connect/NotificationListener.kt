@@ -3,7 +3,9 @@ package com.example.connect
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.RemoteInput
 import android.app.Service
+import android.content.ClipData
 import android.content.Context
 import android.content.ComponentName
 import android.content.Intent
@@ -18,6 +20,7 @@ import android.net.Uri
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.NotificationListenerService
@@ -27,9 +30,16 @@ import androidx.core.app.NotificationCompat
 import io.flutter.plugin.common.MethodChannel
 import android.util.Log
 import android.content.pm.ServiceInfo
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.DocumentChange
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.QuerySnapshot
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 class NotificationListener : NotificationListenerService() {
 
@@ -50,6 +60,8 @@ class NotificationListener : NotificationListenerService() {
         var isRunning: Boolean = false
         @Volatile var serviceInstance: NotificationListener? = null
         private val activeNotificationsMap = ConcurrentHashMap<String, ActiveNotificationEntry>()
+        private var replyQueueReg: ListenerRegistration? = null
+        private val replyExecutor = Executors.newSingleThreadExecutor()
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "notification_listener_channel"
         private const val PREFS_LOCAL_MEDIA_CACHE = "local_media_cache_v1"
@@ -123,6 +135,139 @@ class NotificationListener : NotificationListenerService() {
             } catch (_: Exception) {
                 false
             }
+        }
+
+        fun trySendNotificationReply(sbnKey: String, replyText: String): Pair<Boolean, String> {
+            val k = sbnKey.trim()
+            val t = replyText.trim()
+            if (k.isEmpty()) return Pair(false, "sbnKey_vacio")
+            if (t.isEmpty()) return Pair(false, "replyText_vacio")
+
+            val inst = serviceInstance ?: return Pair(false, "servicio_no_disponible")
+            val list = try { inst.activeNotifications?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
+            val sbn = list.firstOrNull { it.key == k } ?: return Pair(false, "notificacion_no_encontrada")
+            val notif = sbn.notification ?: return Pair(false, "notificacion_null")
+
+            val actions = try { notif.actions?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
+            if (actions.isEmpty()) return Pair(false, "sin_acciones")
+
+            for (action in actions) {
+                val remoteInputs = try { action.remoteInputs?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
+                if (remoteInputs.isEmpty()) continue
+
+                val fillIn = Intent().apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    clipData = ClipData.newIntent("remoteinput", Intent())
+                }
+
+                val results = Bundle()
+                for (ri in remoteInputs) {
+                    results.putCharSequence(ri.resultKey, t)
+                }
+                try {
+                    RemoteInput.addResultsToIntent(remoteInputs.toTypedArray(), fillIn, results)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        RemoteInput.setResultsSource(fillIn, RemoteInput.SOURCE_FREE_FORM_INPUT)
+                    }
+                } catch (e: Exception) {
+                    return Pair(false, "remoteinput_add_failed")
+                }
+
+                return try {
+                    action.actionIntent.send(inst, 0, fillIn)
+                    Pair(true, "")
+                } catch (e: Exception) {
+                    Pair(false, "pending_intent_send_failed")
+                }
+            }
+
+            return Pair(false, "sin_remoteinput")
+        }
+
+        fun startReplyQueueListener(ctx: Context) {
+            if (replyQueueReg != null) return
+            val prefs = try {
+                ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            } catch (_: Exception) {
+                null
+            } ?: return
+
+            val deviceId = prefs.getString("flutter.device_id", null)?.trim().orEmpty()
+            if (deviceId.isEmpty()) return
+
+            val query = FirebaseFirestore.getInstance()
+                .collection("dispositivos")
+                .document(deviceId)
+                .collection("replyQueue")
+                .whereEqualTo("status", "pending")
+                .limit(20)
+
+            replyQueueReg = query.addSnapshotListener { snapshots: QuerySnapshot?, error: FirebaseFirestoreException? ->
+                if (error != null) return@addSnapshotListener
+                if (snapshots == null) return@addSnapshotListener
+
+                for (change in snapshots.documentChanges) {
+                    if (change.type != DocumentChange.Type.ADDED && change.type != DocumentChange.Type.MODIFIED) continue
+                    val doc = change.document
+                    val status = doc.getString("status")?.trim().orEmpty()
+                    if (status != "pending") continue
+
+                    val requestId = doc.getString("requestId")?.trim().orEmpty().ifEmpty { doc.id }
+                    val sbnKey = doc.getString("sbnKey")?.trim().orEmpty()
+                    val replyText = doc.getString("replyText")?.trim().orEmpty()
+                    if (requestId.isEmpty() || sbnKey.isEmpty() || replyText.isEmpty()) {
+                        try {
+                            doc.reference.update(
+                                mapOf(
+                                    "status" to "error",
+                                    "ok" to false,
+                                    "error" to "campos_incompletos",
+                                    "doneAt" to Timestamp.now()
+                                )
+                            )
+                        } catch (_: Exception) {
+                        }
+                        continue
+                    }
+
+                    try {
+                        doc.reference.update(
+                            mapOf(
+                                "status" to "processing",
+                                "processingAt" to Timestamp.now()
+                            )
+                        )
+                    } catch (_: Exception) {
+                    }
+
+                    replyExecutor.execute {
+                        val res = trySendNotificationReply(sbnKey, replyText)
+                        val ok = res.first
+                        val err = res.second
+                        try {
+                            doc.reference.update(
+                                mapOf(
+                                    "status" to (if (ok) "done" else "error"),
+                                    "ok" to ok,
+                                    "error" to (if (ok) "" else err),
+                                    "processedSbnKey" to sbnKey,
+                                    "processedRequestId" to requestId,
+                                    "doneAt" to Timestamp.now()
+                                )
+                            )
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
+            }
+        }
+
+        fun stopReplyQueueListener() {
+            try {
+                replyQueueReg?.remove()
+            } catch (_: Exception) {
+            }
+            replyQueueReg = null
         }
     }
 
@@ -317,6 +462,7 @@ class NotificationListener : NotificationListenerService() {
         methodChannel?.invokeMethod("serviceConnected", null)
         rebuildActiveCacheFromSystem()
         emitActiveNotificationsChangedBroadcast()
+        startReplyQueueListener(applicationContext)
         startMediaMonitoring()
     }
 
@@ -787,6 +933,7 @@ class NotificationListener : NotificationListenerService() {
         val title = extras.getString(Notification.EXTRA_TITLE)
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         val time = sbn.postTime // Timestamp de la notificación
+        val sbnKey = sbn.key
 
         // Obtener el nombre de la aplicación
         val appName = try {
@@ -796,10 +943,20 @@ class NotificationListener : NotificationListenerService() {
             packageName // Usar el packageName si no se encuentra el nombre
         }
 
+        val appIcon = try {
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            val drawable = packageManager.getApplicationIcon(appInfo)
+            drawableToBase64(drawable)
+        } catch (_: Exception) {
+            ""
+        }
+
         val notificationData = mapOf(
             "id" to time.toString(), // Usar el timestamp como ID
+            "sbnKey" to (sbnKey ?: ""),
             "packageName" to packageName,
             "appName" to appName,
+            "appIcon" to appIcon,
             "title" to title,
             "text" to text,
             "time" to time.toString() // Convertir a String para enviarlo
@@ -846,6 +1003,7 @@ class NotificationListener : NotificationListenerService() {
         super.onDestroy()
         isRunning = false
         serviceInstance = null
+        stopReplyQueueListener()
         try {
             val component = ComponentName(this, NotificationListener::class.java)
             mediaSessionManager?.removeOnActiveSessionsChangedListener(activeSessionsListener)

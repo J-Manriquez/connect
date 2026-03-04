@@ -86,6 +86,16 @@ class BtClassicServerService : Service() {
 
         @Volatile
         var lastMediaUpdatedAtMs: Long = 0L
+
+        @Volatile
+        private var instance: BtClassicServerService? = null
+
+        fun sendDebugLogToPeers(source: String, message: String) {
+            try {
+                instance?.sendDebugToPeers(source, message)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private var serverSocket: BluetoothServerSocket? = null
@@ -109,6 +119,7 @@ class BtClassicServerService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         localNotificationManager = LocalNotificationManager(applicationContext)
         deviceFinderManager = DeviceFinderManager.getInstance(applicationContext)
         appListService = AppListService(applicationContext)
@@ -141,6 +152,7 @@ class BtClassicServerService : Service() {
         btHiveChannel = null
         appListChannel = null
         appListService = null
+        if (instance === this) instance = null
         super.onDestroy()
     }
 
@@ -516,6 +528,9 @@ class BtClassicServerService : Service() {
         try {
             val obj = JSONObject(json)
             val type = obj.optString("type", "")
+            if (type == "notif_reply_ack") {
+                return
+            }
             if (type == "device_search") {
                 val action = obj.optString("action", "start")
                 if (action == "stop") {
@@ -651,26 +666,66 @@ class BtClassicServerService : Service() {
                 }
                 return
             }
+            if (type == "debug_log") {
+                val source = obj.optString("source", "peer")
+                val message = obj.optString("message", "")
+                val ts = try { obj.optLong("timestamp", 0L) } catch (_: Exception) { 0L }
+                println("[btclassic][server][peer_debug][$source][$ts] $message")
+                return
+            }
             val title = obj.optString("title", "Nueva notificación")
             val text = obj.optString("text", "")
             val packageName = obj.optString("packageName", "")
             val appName = obj.optString("appName", "Desconocida")
             val notificationId = obj.optString("id", System.currentTimeMillis().toString())
+            val sbnKey = obj.optString("sbnKey", obj.optString("key", "")).trim()
             val timeMs = try { obj.optLong("time", System.currentTimeMillis()) } catch (_: Exception) { System.currentTimeMillis() }
 
             val app = if (packageName.isNotEmpty()) {
                 try { appListService?.searchAppByPackage(packageName) } catch (_: Exception) { null }
             } else null
-            val iconBase64 = (app?.get("icon") as? String) ?: obj.optString("icon", "")
+            val iconBase64 =
+                (app?.get("icon") as? String)
+                    ?: obj.optString("appIcon", obj.optString("icon", ""))
 
             val prefs = applicationContext.getSharedPreferences(PREFS_NOTIFICATION_SETTINGS, Context.MODE_PRIVATE)
             val screenWakeEnabled = prefs.getBoolean(KEY_SCREEN_WAKE_ENABLED, false)
             val autoOpenEnabled = prefs.getBoolean(KEY_AUTO_OPEN_ENABLED, false)
             val soundEnabled = prefs.getBoolean(KEY_SOUND_ENABLED, true)
 
-            if (isNewMessagesSummary(title) || isNewMessagesSummary(text)) {
+            val trimmedText = text.trim()
+            val effectiveText =
+                if (trimmedText.equals("null", ignoreCase = true) ||
+                    trimmedText.equals("undefined", ignoreCase = true)) {
+                    ""
+                } else {
+                    trimmedText
+                }
+            if (effectiveText.isBlank()) {
+                sendDebugToPeers(
+                    "notif_rx",
+                    "drop_blank_text id='$notificationId' pkg='$packageName' title='${title.take(50)}'"
+                )
                 return
             }
+
+            if (isNewMessagesSummary(title) || isNewMessagesSummary(text)) {
+                sendDebugToPeers(
+                    "notif_rx",
+                    "drop_summary id='$notificationId' pkg='$packageName' title='${title.take(50)}' text='${effectiveText.take(50)}'"
+                )
+                return
+            }
+
+            val signatureSource =
+                (packageName.trim() + "|" + title.trim() + "|" + effectiveText.trim()).lowercase()
+            val signatureId = fnv1a32Hex(signatureSource)
+            val stableLocalId = notificationId
+
+            sendDebugToPeers(
+                "notif_rx",
+                "rx_ok id='$notificationId' localId='$stableLocalId' sbnKey='${sbnKey.take(60)}' sig='$signatureId' pkg='$packageName' autoOpen=$autoOpenEnabled wake=$screenWakeEnabled"
+            )
 
             try {
                 ensureFlutterEngine()
@@ -692,33 +747,76 @@ class BtClassicServerService : Service() {
                 payload["appName"] = appName
                 payload["time"] = timeMs
                 payload["icon"] = iconBase64
+                payload["appIcon"] = iconBase64
+                payload["signatureId"] = signatureId
 
                 val channel = btHiveChannel
                 if (channel != null) {
                     mainHandler.post {
                         try {
                             channel.invokeMethod("onBtNotification", payload)
+                            sendDebugToPeers("notif_invoke", "invoke onBtNotification ok stableId='$stableLocalId'")
                         } catch (_: Exception) {
+                            sendDebugToPeers("notif_invoke", "invoke onBtNotification failed stableId='$stableLocalId'")
                         }
                     }
+                } else {
+                    sendDebugToPeers("notif_invoke", "btHiveChannel=null stableId='$stableLocalId'")
                 }
             } catch (_: Exception) {
+                sendDebugToPeers("notif_invoke", "exception building onBtNotification stableId='$stableLocalId'")
             }
 
-            localNotificationManager?.showNotification(
-                title = title,
-                body = text,
-                packageName = packageName,
-                appName = appName,
-                notificationId = notificationId,
-                soundEnabled = soundEnabled,
-                vibrationEnabled = true,
-                customVibrationPattern = null,
-                screenWakeEnabled = screenWakeEnabled,
-                autoOpenEnabled = autoOpenEnabled
+            sendDebugToPeers(
+                "notif_show",
+                "showNotification start stableId='$stableLocalId' autoOpen=$autoOpenEnabled wake=$screenWakeEnabled sound=$soundEnabled"
             )
-        } catch (_: Exception) {
+            println(
+                "[btclassic][notif_show] call localNotificationManager.showNotification stableId='$stableLocalId' pkg='$packageName' autoOpen=$autoOpenEnabled wake=$screenWakeEnabled sound=$soundEnabled"
+            )
+            try {
+                localNotificationManager?.showNotification(
+                    title = title,
+                    body = effectiveText,
+                    packageName = packageName,
+                    appName = appName,
+                    appIcon = iconBase64,
+                    notificationId = stableLocalId,
+                    soundEnabled = soundEnabled,
+                    vibrationEnabled = true,
+                    customVibrationPattern = null,
+                    screenWakeEnabled = screenWakeEnabled,
+                    autoOpenEnabled = autoOpenEnabled
+                )
+                println("[btclassic][notif_show] localNotificationManager.showNotification ok stableId='$stableLocalId'")
+            } catch (t: Throwable) {
+                println("[btclassic][notif_show] localNotificationManager.showNotification FAILED stableId='$stableLocalId' t=${t::class.java.simpleName} msg=${t.message}")
+                try {
+                    sendDebugToPeers(
+                        "notif_show",
+                        "showNotification FAILED stableId='$stableLocalId' err='${t::class.java.simpleName}:${t.message ?: ""}'"
+                    )
+                } catch (_: Exception) {
+                }
+            }
+            sendDebugToPeers("notif_show", "showNotification end stableId='$stableLocalId'")
+        } catch (t: Throwable) {
+            println("[btclassic][notif_rx] handleIncomingNotification FAILED t=${t::class.java.simpleName} msg=${t.message}")
+            try {
+                sendDebugToPeers("notif_rx", "exception err='${t::class.java.simpleName}:${t.message ?: ""}'")
+            } catch (_: Exception) {
+            }
         }
+    }
+
+    private fun fnv1a32Hex(input: String): String {
+        val bytes = input.toByteArray(Charsets.UTF_8)
+        var hash = 0x811c9dc5L
+        for (b in bytes) {
+            hash = hash xor (b.toLong() and 0xffL)
+            hash = (hash * 0x01000193L) and 0xffffffffL
+        }
+        return java.lang.Long.toHexString(hash).padStart(8, '0')
     }
 
     private fun sendToPeers(json: String) {
@@ -747,6 +845,22 @@ class BtClassicServerService : Service() {
     private fun isNewMessagesSummary(raw: String?): Boolean {
         val value = raw?.trim().orEmpty()
         if (value.isEmpty()) return false
+        val prefs = try {
+            applicationContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        } catch (_: Exception) {
+            null
+        }
+        val filterSummaries = try {
+            prefs?.getBoolean("flutter.filter_whatsapp_message_summaries", true) ?: true
+        } catch (_: Exception) {
+            true
+        }
+        val filterChecking = try {
+            prefs?.getBoolean("flutter.filter_whatsapp_checking_new_messages", true) ?: true
+        } catch (_: Exception) {
+            true
+        }
+        if (!filterSummaries && !filterChecking) return false
         val s = value.lowercase()
             .replace(Regex("[áàäâ]"), "a")
             .replace(Regex("[éèëê]"), "e")
@@ -758,9 +872,29 @@ class BtClassicServerService : Service() {
             .replace(Regex("\\s+"), " ")
             .trim()
 
-        val es = Regex("^\\d+\\s+mensajes?\\s+nuevos?\$")
-        val en = Regex("^\\d+\\s+new\\s+messages?\$")
-        return es.matches(s) || en.matches(s)
+        if (filterSummaries) {
+            val es = Regex("^\\d+\\s+mensajes?\\s+nuevos?\$")
+            val esChats = Regex("^\\d+\\s+mensajes?\\s+de\\s+\\d+\\s+chats?\$")
+            val esEnChats = Regex("^\\d+\\s+mensajes?\\s+en\\s+\\d+\\s+chats?\$")
+            val en = Regex("^\\d+\\s+new\\s+messages?\$")
+            val enChats = Regex("^\\d+\\s+messages?\\s+from\\s+\\d+\\s+chats?\$")
+            val enInChats = Regex("^\\d+\\s+messages?\\s+in\\s+\\d+\\s+chats?\$")
+            if (es.matches(s) ||
+                esChats.matches(s) ||
+                esEnChats.matches(s) ||
+                en.matches(s) ||
+                enChats.matches(s) ||
+                enInChats.matches(s)
+            ) {
+                return true
+            }
+        }
+        if (filterChecking) {
+            val checkingEs = Regex("^comprobando\\s+si\\s+hay\\s+mensajes\\s+nuevos\$")
+            val checkingEn = Regex("^checking\\s+for\\s+new\\s+messages\$")
+            return checkingEs.matches(s) || checkingEn.matches(s)
+        }
+        return false
     }
 
     private fun stopSelfSafely() {

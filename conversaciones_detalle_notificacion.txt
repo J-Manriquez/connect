@@ -1,0 +1,79 @@
+CONVERSACIONES EN DETALLE DE NOTIFICACIÓN (RECEPTOR)
+
+Objetivo
+Al abrir la pantalla de detalle de una notificación, permitir visualizar los mensajes como una conversación (estilo chat) para determinadas aplicaciones seleccionadas por el usuario. Para las apps no seleccionadas, la pantalla mantiene el comportamiento y estructura actuales.
+
+Alcance
+- Pantalla afectada: Detalle de notificación (receptor).
+- Activación: por aplicación (packageName) desde la configuración del receptor.
+- Persistencia: SOLO local (SharedPreferences). No se sincroniza a Firebase.
+- Filtrado: se mantienen activos los filtros existentes del receptor. La conversación muestra únicamente mensajes que ya pasaron por los filtros del sistema.
+
+Definiciones
+- App habilitada (para notificaciones): apps activadas por el usuario en el emisor (lista sincronizada a Firebase y utilizada por el receptor para decidir qué mostrar).
+- App con conversación activada: subconjunto de las apps habilitadas, seleccionado por el usuario desde una pantalla en configuración del receptor.
+- Conversación: conjunto de notificaciones/mensajes pertenecientes a la MISMA app (packageName) y al MISMO remitente/contacto, identificado por el campo title de la notificación.
+
+Reglas de activación en detalle
+1) Si la app (packageName) está activada para conversaciones (SharedPreferences) Y el title es válido (no vacío), el detalle entra en modo conversación.
+2) Si el title es vacío o no confiable (caso inesperado), se utiliza la vista normal actual (no conversación).
+3) Si la app no está activada para conversaciones, se utiliza la vista normal actual.
+
+Estructura UI en modo conversación (detalle)
+- AppBar:
+  - Muestra el icono real de la aplicación (en base64) a la izquierda.
+  - Muestra el title (remitente/contacto) como título en el AppBar.
+- Contenido:
+  - La conversación ocupa toda la pantalla (se ocultan secciones: información de la aplicación, marcado manual como leído, y configuración personalizada).
+  - La lista de mensajes se ordena como chat: mensajes más recientes abajo.
+  - Se permite scroll hacia arriba (mensajes anteriores) y hacia abajo (mensajes más recientes), incluso si se entra desde una notificación antigua.
+- Agrupación por fecha:
+  - Se insertan separadores de fecha tipo “pill” centrada.
+  - Formato: “Hoy”, “Ayer” o “dd/MM/yyyy”.
+  - El separador aparece únicamente cuando cambia el día entre mensajes consecutivos.
+- Metadata por mensaje:
+  - Debajo de cada mensaje se muestra la hora (HH:mm). Si no hay timestamp válido, se muestra “--:--”.
+  - A la derecha de la hora se muestra un icono de estado:
+    - Leído: check (p.ej. done).
+    - No leído: check outline (p.ej. done_outline).
+
+Interacciones en mensajes (long press)
+- Long press (estándar de Flutter) sobre un mensaje abre un AlertDialog dismissible (se cierra tocando fuera).
+- Opciones del modal:
+  1) “Marcar como leído”
+     - Si el mensaje ya está leído, la opción aparece deshabilitada.
+     - Si no está leído, al tocarla se marca como leído usando la secuencia existente (local + Firebase).
+  2) “Configuración personalizada”
+     - Navega a la pantalla existente de configuración personalizada de notificación.
+     - Se pasa como argumento el Map de la notificación/mensaje seleccionado.
+
+Marcado como leído (automático)
+- Requisito: todo mensaje que se vuelva visible en pantalla debe marcarse como leído.
+- Aplica al:
+  - Mensaje inicial (al abrir).
+  - Mensajes que aparecen al cargar más hacia arriba (histórico).
+  - Mensajes que aparecen al cargar más hacia abajo (más recientes).
+- Persistencia y sincronización (mismo flujo existente):
+  1) Guardar en caché local (NotificationCacheService).
+  2) Guardar en Hive local (BtHiveStorageService.markVisualized).
+  3) Actualizar en Firebase a través del ReceptorService.updateNotificationVisualizationStatus.
+
+Origen de datos para conversación
+- Fuente principal: almacenamiento local en Hive (notificaciones guardadas localmente).
+- Se filtran mensajes por:
+  - packageName == el de la notificación abierta
+  - title == el title (remitente/contacto) de la notificación abierta
+- Paginación:
+  - Se muestran 5 mensajes iniciales.
+  - Se cargan 5 mensajes por lote al llegar a extremos (arriba para antiguos, abajo para recientes).
+  - Si hay menos de 5 disponibles, se muestran los que existan.
+  - Si se entra desde una notificación antigua, el listado inicial se centra en ese mensaje, permitiendo cargar hacia arriba y hacia abajo.
+
+Pantalla de configuración (receptor) para activar conversaciones por app
+- Se agrega una pantalla nueva accesible desde la configuración del receptor.
+- La pantalla lista únicamente las apps habilitadas por el usuario en el emisor.
+- Por cada app se muestra:
+  - Icono real (base64). Si la lista de emisor no lo incluye, se obtiene desde la lista local de apps instaladas/caché.
+  - Nombre y packageName.
+  - Switch para activar/desactivar conversaciones para esa app.
+- La selección se guarda localmente en SharedPreferences como lista de packageName.

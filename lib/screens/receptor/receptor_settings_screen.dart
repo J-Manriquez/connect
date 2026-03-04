@@ -871,6 +871,39 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                             ),
                           ],
                         ),
+                        const SizedBox(height: 8),
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: customColor[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.chat_bubble_outline,
+                              color: customColor[600],
+                              size: 24,
+                            ),
+                          ),
+                          title: const Text(
+                            'Conversaciones',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'Activar vista tipo chat por aplicación',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios),
+                          onTap: () {
+                            Navigator.pushNamed(context, '/conversation_apps');
+                          },
+                        ),
                         // ✅ TERCER SWITCH: VIBRACIÓN
                         const SizedBox(height: 8),
                         Row(

@@ -2,11 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connect/models/device_data.dart';
 import 'package:connect/models/notification_data.dart';
+import 'package:connect/services/notification_filters_config_service.dart';
+import 'dart:convert';
 import 'dart:math';
 
 class FirebaseService {
   static const String _deviceIdKey = 'device_id';
   static const String _lastNotificationKey = 'last_notification_hash';
+  static const String _recentNotificationHashesKey = 'recent_notification_hashes_v1';
+  static const int _recentNotificationMaxEntries = 2000;
+  static const int _recentNotificationTtlMs = 24 * 60 * 60 * 1000;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Método para obtener o generar el ID del dispositivo
@@ -274,36 +279,56 @@ class FirebaseService {
   }
 
   // Método mejorado para verificar si una notificación debe ser filtrada
-  bool _shouldFilterNotification(Map<String, dynamic> notification) {
+  Future<bool> _shouldFilterNotification(Map<String, dynamic> notification) async {
+    final config = await NotificationFiltersConfigService.getConfig();
     final String packageName = notification['packageName'] ?? '';
 
     // Filtro universal: Notificaciones vacías (aplicar a todas las aplicaciones)
-    final String title = (notification['title'] ?? '').toString().trim();
-    final String text = (notification['text'] ?? '').toString().trim();
-    final String bigText = (notification['bigText'] ?? '').toString().trim();
-    final String body = (notification['body'] ?? '').toString().trim();
-    final String mensaje = (notification['mensaje'] ?? '').toString().trim();
-    final String contenido = (notification['contenido'] ?? '').toString().trim();
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
+    final String title = clean(notification['title']);
+    final String text = clean(notification['text']);
+    final String bigText = clean(notification['bigText']);
+    final String subText = clean(notification['subText']);
+    final String summaryText = clean(notification['summaryText']);
+    final String infoText = clean(notification['infoText']);
+    final String contentInfo = clean(notification['contentInfo']);
+    final String body = clean(notification['body']);
+    final String mensaje = clean(notification['mensaje']);
+    final String contenido = clean(notification['contenido']);
     
-    // Si todos los campos de contenido están vacíos, filtrar la notificación
-    if (title.isEmpty && text.isEmpty && bigText.isEmpty && 
-        body.isEmpty && mensaje.isEmpty && contenido.isEmpty) {
-      //// print('Notificación filtrada: Contenido vacío - Package: $packageName');
+    final bool hasAnyBody =
+        title.isNotEmpty ||
+        text.isNotEmpty ||
+        bigText.isNotEmpty ||
+        subText.isNotEmpty ||
+        summaryText.isNotEmpty ||
+        infoText.isNotEmpty ||
+        contentInfo.isNotEmpty ||
+        body.isNotEmpty ||
+        mensaje.isNotEmpty ||
+        contenido.isNotEmpty;
+    if (config.isEnabled('filter_empty', fallback: true) && !hasAnyBody) {
       return true;
     }
 
     final List<String> allTexts = [
-      notification['title'] ?? '',
-      notification['text'] ?? '',
-      notification['bigText'] ?? '',
-      notification['subText'] ?? '',
-      notification['summaryText'] ?? '',
-      notification['infoText'] ?? '',
-      notification['contentInfo'] ?? '',
-      notification['body'] ?? '',
-      notification['mensaje'] ?? '',
-      notification['contenido'] ?? '',
-      notification['titulo'] ?? '',
+      clean(notification['title']),
+      clean(notification['text']),
+      clean(notification['bigText']),
+      clean(notification['subText']),
+      clean(notification['summaryText']),
+      clean(notification['infoText']),
+      clean(notification['contentInfo']),
+      clean(notification['body']),
+      clean(notification['mensaje']),
+      clean(notification['contenido']),
+      clean(notification['titulo']),
     ];
     
     final String allContent = allTexts.join(' ').toLowerCase();
@@ -318,13 +343,15 @@ class FirebaseService {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     
-    final List<RegExp> globalMessagePatterns = [
-      RegExp(r'\b\d+\s*mensajes?\s*nuevos?\b'),
-      RegExp(r'\b\d+\s*new\s*messages?\b'),
-    ];
-    for (final pattern in globalMessagePatterns) {
-      if (pattern.hasMatch(normalizedContent)) {
-        return true;
+    if (config.isEnabled('filter_global_message_patterns', fallback: true)) {
+      final List<RegExp> globalMessagePatterns = [
+        RegExp(r'\b\d+\s*mensajes?\s*nuevos?\b'),
+        RegExp(r'\b\d+\s*new\s*messages?\b'),
+      ];
+      for (final pattern in globalMessagePatterns) {
+        if (pattern.hasMatch(normalizedContent)) {
+          return true;
+        }
       }
     }
     
@@ -336,140 +363,194 @@ class FirebaseService {
       // Filtros específicos para Instagram
       if (packageName == 'com.instagram.android') {
         // Filtro 1: Subida de contenido multimedia
-        final List<String> uploadKeywords = [
-          'subiendo contenido multimedia',
-          'uploading media content',
-          'subiendo contenido',
-          'uploading content',
-        ];
-        
-        for (final keyword in uploadKeywords) {
-          if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Subida de contenido - "$normalizedContent"');
-            return true;
+        if (config.isEnabled('instagram_filter_upload', fallback: true)) {
+          final List<String> uploadKeywords = [
+            'subiendo contenido multimedia',
+            'uploading media content',
+            'subiendo contenido',
+            'uploading content',
+          ];
+          
+          for (final keyword in uploadKeywords) {
+            if (normalizedContent.contains(keyword)) {
+              // print('Notificación filtrada: Subida de contenido - "$normalizedContent"');
+              return true;
+            }
           }
         }
         
         // Filtro 2: Historias
-        final List<String> storyKeywords = [
-          'subiendo historia',
-          'uploading story',
-          'se subio la historia',
-          'story uploaded',
-          'historia subida',
-          'story posted',
-        ];
-        
-        for (final keyword in storyKeywords) {
-          if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Historia - "$normalizedContent"');
-            return true;
+        if (config.isEnabled('instagram_filter_story', fallback: true)) {
+          final List<String> storyKeywords = [
+            'subiendo historia',
+            'uploading story',
+            'se subio la historia',
+            'story uploaded',
+            'historia subida',
+            'story posted',
+          ];
+          
+          for (final keyword in storyKeywords) {
+            if (normalizedContent.contains(keyword)) {
+              // print('Notificación filtrada: Historia - "$normalizedContent"');
+              return true;
+            }
           }
         }
         
         // Filtro 3: Llamadas y videollamadas (similar a WhatsApp)
-        final List<String> callKeywords = [
-          'llamando',
-          'llamada en curso',
-          'calling',
-          'llamada entrante',
-          'incoming call',
-          'llamada perdida',
-          'missed call',
-          'llamada de',
-          'call from',
-          'videollamada',
-          'video call',
-          'video calling',
-          'llamada de video',
-        ];
-        
-        for (final keyword in callKeywords) {
-          if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Llamada Instagram - "$normalizedContent"');
-            return true;
+        if (config.isEnabled('instagram_filter_calls', fallback: true)) {
+          final List<String> callKeywords = [
+            'llamando',
+            'llamada en curso',
+            'calling',
+            'llamada entrante',
+            'incoming call',
+            'llamada perdida',
+            'missed call',
+            'llamada de',
+            'call from',
+            'videollamada',
+            'video call',
+            'video calling',
+            'llamada de video',
+          ];
+          
+          for (final keyword in callKeywords) {
+            if (normalizedContent.contains(keyword)) {
+              // print('Notificación filtrada: Llamada Instagram - "$normalizedContent"');
+              return true;
+            }
           }
         }
       }
       
       // Filtros existentes para WhatsApp (mantener como están)
       if (packageName == 'com.whatsapp' || packageName == 'com.whatsapp.w4b') {
+        if (config.isEnabled('whatsapp_filter_sending', fallback: true)) {
+          final List<String> sendingKeywords = [
+            'enviando',
+            'sending',
+          ];
+          for (final keyword in sendingKeywords) {
+            if (normalizedContent.contains(keyword)) {
+              return true;
+            }
+          }
+        }
+
         // Filtro 1: Resúmenes de mensajes
-        final List<RegExp> messagePatterns = [
-          RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
-          RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
-          RegExp(r'\d+\s*nuevos?\s*mensajes?'),
-          RegExp(r'\d+\s*new\s*messages?'),
-          RegExp(r'\d+\s*mensajes?\s*nuevos?'), // Nuevo filtro
-        ];
-        
-        for (final pattern in messagePatterns) {
-          if (pattern.hasMatch(normalizedContent)) {
-            // print('Notificación filtrada: Resumen de mensajes - "$normalizedContent"');
+        if (config.isEnabled('whatsapp_filter_message_summary', fallback: true)) {
+          final List<RegExp> messagePatterns = [
+            RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chats?'),
+            RegExp(r'\d+\s*mensajes?\s*de\s*\d+\s*chat\s*s?'),
+            RegExp(r'\d+\s*messages?\s*from\s*\d+\s*chats?'),
+            RegExp(r'\d+\s*nuevos?\s*mensajes?'),
+            RegExp(r'\d+\s*new\s*messages?'),
+            RegExp(r'\d+\s*mensajes?\s*nuevos?'), // Nuevo filtro
+            RegExp(r'\d+\s*mensajes?\s*nuevos?\s*de\s*\d+\s*chats?'),
+            RegExp(r'\d+\s*mensajes?\s*nuevos?\s*\d+\s*chats?'),
+            RegExp(r'\d+\s*mensajes?\s*en\s*\d+\s*chats?'),
+            RegExp(r'\d+\s*messages?\s*in\s*\d+\s*chats?'),
+            RegExp(r'\d+\s*new\s*messages?\s*\d+\s*chats?'),
+          ];
+          
+          for (final pattern in messagePatterns) {
+            if (pattern.hasMatch(normalizedContent)) {
+              // print('Notificación filtrada: Resumen de mensajes - "$normalizedContent"');
+              return true;
+            }
+          }
+
+          if (normalizedContent.contains('mensajes') &&
+              normalizedContent.contains('chat') &&
+              RegExp(r'\b\d+\s*mensajes?\b').hasMatch(normalizedContent) &&
+              RegExp(r'\b\d+\s*chat').hasMatch(normalizedContent)) {
             return true;
           }
         }
         
         // Filtro 2: Llamadas
-        final List<String> callKeywords = [
-          'llamando',
-          'Llamada en curso',
-          'calling',
-          'llamada entrante',
-          'incoming call',
-          'llamada perdida',
-          'missed call',
-          'llamada de',
-          'call from',
-          'videollamada',
-          'video call',
-        ];
-        
-        for (final keyword in callKeywords) {
-          if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Llamada - "$normalizedContent"');
-            return true;
+        if (config.isEnabled('whatsapp_filter_calls', fallback: true)) {
+          final List<String> callKeywords = [
+            'llamando',
+            'llamada',
+            'llamada en curso',
+            'calling',
+            'llamada entrante',
+            'incoming call',
+            'llamada perdida',
+            'missed call',
+            'llamada de',
+            'call from',
+            'videollamada',
+            'video call',
+          ];
+          
+          for (final keyword in callKeywords) {
+            if (normalizedContent.contains(keyword)) {
+              // print('Notificación filtrada: Llamada - "$normalizedContent"');
+              return true;
+            }
           }
         }
         
         // Filtro 3: Copias de seguridad
-        final List<String> backupKeywords = [
-          'copia de seguridad',
-          'backup',
-          'respaldo',
-          'copia de seg',
-          'backing up',
-          'guardando copia',
-        ];
-        
-        for (final keyword in backupKeywords) {
-          if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Copia de seguridad - "$normalizedContent"');
+        if (config.isEnabled('whatsapp_filter_backup', fallback: true)) {
+          final List<String> backupKeywords = [
+            'copia de seguridad',
+            'backup',
+            'respaldo',
+            'copia de seg',
+            'backing up',
+            'guardando copia',
+          ];
+          
+          for (final keyword in backupKeywords) {
+            if (normalizedContent.contains(keyword)) {
+              // print('Notificación filtrada: Copia de seguridad - "$normalizedContent"');
+              return true;
+            }
+          }
+        }
+
+        if (config.isEnabled('whatsapp_filter_checking', fallback: true)) {
+          if (normalizedContent.contains('comprobando si hay mensajes nuevos') ||
+              normalizedContent.contains('checking for new messages')) {
             return true;
           }
         }
         
         // Filtro 4: Notificaciones genéricas y contenido no disponible (NUEVOS FILTROS)
-        final List<String> genericKeywords = [
-          'nueva notificacion',
-          'new notification',
-          'contenido no disponible',
-          'content not available',
-          'content unavailable',
-          'mensaje no disponible',
-          'message not available',
-          'sin contenido',
-          'no content',
-
-        ];
-        
-        for (final keyword in genericKeywords) {
-          if (normalizedContent.contains(keyword)) {
-            // print('Notificación filtrada: Contenido genérico - "$normalizedContent"');
-            return true;
+        if (config.isEnabled('whatsapp_filter_generic', fallback: true)) {
+          final List<String> genericKeywords = [
+            'nueva notificacion',
+            'new notification',
+            'contenido no disponible',
+            'content not available',
+            'content unavailable',
+            'mensaje no disponible',
+            'message not available',
+            'sin contenido',
+            'no content',
+          ];
+          
+          for (final keyword in genericKeywords) {
+            if (normalizedContent.contains(keyword)) {
+              // print('Notificación filtrada: Contenido genérico - "$normalizedContent"');
+              return true;
+            }
           }
         }
       }
+    }
+
+    if (NotificationFiltersConfigService.shouldFilterByCustomRules(
+      config: config,
+      packageName: packageName,
+      normalizedContent: normalizedContent,
+    )) {
+      return true;
     }
     
     return false;
@@ -493,20 +574,109 @@ class FirebaseService {
     return combinedContent.hashCode.toString();
   }
 
+  String _extractStableSbnKey(Map<String, dynamic> notification) {
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
+    final direct = clean(notification['sbnKey']);
+    if (direct.isNotEmpty) return direct;
+    final alt = clean(notification['key']);
+    if (alt.isNotEmpty) return alt;
+
+    final nested = notification['extras'];
+    if (nested is Map) {
+      final m = Map<String, dynamic>.from(nested);
+      final nestedKey = clean(m['sbnKey']);
+      if (nestedKey.isNotEmpty) return nestedKey;
+      final nestedAlt = clean(m['key']);
+      if (nestedAlt.isNotEmpty) return nestedAlt;
+    }
+
+    return '';
+  }
+
+  String _fnv1a32Hex(String input) {
+    final data = utf8.encode(input);
+    int hash = 0x811c9dc5;
+    for (final b in data) {
+      hash ^= b;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+
+  String _generateStableSignatureId(Map<String, dynamic> notification) {
+    final pkg = (notification['packageName'] ?? '').toString().trim();
+    final normalized =
+        NotificationFiltersConfigService.normalizedNotificationContent(notification);
+    final source = '$pkg|$normalized';
+    return _fnv1a32Hex(source);
+  }
+
   // Método para verificar si la notificación es duplicada
   Future<bool> _isDuplicateNotification(Map<String, dynamic> notification) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String currentHash = _generateNotificationHash(notification);
-      final String? lastHash = prefs.getString(_lastNotificationKey);
-      
-      if (lastHash != null && lastHash == currentHash) {
-        // print('Notificación duplicada detectada: $currentHash');
+      final String stableKey = _extractStableSbnKey(notification);
+      final String signatureId = _generateStableSignatureId(notification);
+      final String stableKeyEntry = stableKey.isEmpty ? '' : 'k:$stableKey';
+      final String signatureEntry = signatureId.isEmpty ? '' : 's:$signatureId';
+
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final raw = prefs.getString(_recentNotificationHashesKey);
+      Map<String, dynamic> map;
+      try {
+        map = raw == null || raw.isEmpty
+            ? <String, dynamic>{}
+            : (jsonDecode(raw) as Map).cast<String, dynamic>();
+      } catch (_) {
+        map = <String, dynamic>{};
+      }
+
+      final cutoffMs = nowMs - _recentNotificationTtlMs;
+      final keysToRemove = <String>[];
+      for (final entry in map.entries) {
+        final ts = entry.value;
+        final tsMs = ts is int ? ts : int.tryParse(ts.toString());
+        if (tsMs == null || tsMs < cutoffMs) {
+          keysToRemove.add(entry.key);
+        }
+      }
+      for (final k in keysToRemove) {
+        map.remove(k);
+      }
+
+      if (map.containsKey(currentHash) ||
+          (stableKeyEntry.isNotEmpty && map.containsKey(stableKeyEntry)) ||
+          (signatureEntry.isNotEmpty && map.containsKey(signatureEntry))) {
+        await prefs.setString(_lastNotificationKey, currentHash);
+        await prefs.setString(_recentNotificationHashesKey, jsonEncode(map));
         return true;
       }
-      
-      // Guardar el hash de la notificación actual
+
+      map[currentHash] = nowMs;
+      if (stableKeyEntry.isNotEmpty) map[stableKeyEntry] = nowMs;
+      if (signatureEntry.isNotEmpty) map[signatureEntry] = nowMs;
+      if (map.length > _recentNotificationMaxEntries) {
+        final sorted = map.entries.toList()
+          ..sort((a, b) {
+            final ta = a.value is int ? a.value as int : int.tryParse(a.value.toString()) ?? 0;
+            final tb = b.value is int ? b.value as int : int.tryParse(b.value.toString()) ?? 0;
+            return ta.compareTo(tb);
+          });
+        final toDrop = sorted.length - _recentNotificationMaxEntries;
+        for (var i = 0; i < toDrop; i++) {
+          map.remove(sorted[i].key);
+        }
+      }
+
       await prefs.setString(_lastNotificationKey, currentHash);
+      await prefs.setString(_recentNotificationHashesKey, jsonEncode(map));
       return false;
     } catch (e) {
       // print('Error al verificar notificación duplicada: $e');
@@ -517,7 +687,7 @@ class FirebaseService {
   // Guarda una notificación en Firebase
   Future<void> saveNotification(Map<String, dynamic> notification) async {
     // Verificar si la notificación debe ser filtrada
-    if (_shouldFilterNotification(notification)) {
+    if (await _shouldFilterNotification(notification)) {
       // print('Notificación filtrada, no se guardará en Firebase');
       return;
     }
@@ -529,6 +699,15 @@ class FirebaseService {
     }
 
     final deviceId = await getDeviceId();
+    final stableKey = _extractStableSbnKey(notification);
+    final signatureId = _generateStableSignatureId(notification);
+    if (stableKey.isNotEmpty && (notification['sbnKey'] ?? '').toString().trim().isEmpty) {
+      notification['sbnKey'] = stableKey;
+    }
+    if (signatureId.isNotEmpty &&
+        (notification['signatureId'] ?? '').toString().trim().isEmpty) {
+      notification['signatureId'] = signatureId;
+    }
     final notificationData = NotificationData.fromNotificationMap(notification);
 
     // Obtener la fecha actual en formato YYYY-MM-DD para usar como ID del documento
@@ -549,6 +728,42 @@ class FirebaseService {
       await dayDocRef.set({
         'fecha': Timestamp.fromDate(DateTime(now.year, now.month, now.day)),
       });
+    } else {
+      try {
+        final data = dayDoc.data();
+        if (data != null && data.containsKey('notificaciones')) {
+          final existing = Map<String, dynamic>.from(data['notificaciones'] as Map);
+
+          String clean(dynamic v) {
+            final raw = (v ?? '').toString().trim();
+            final lower = raw.toLowerCase();
+            if (lower == 'null' || lower == 'undefined') return '';
+            return raw;
+          }
+
+          for (final entry in existing.values) {
+            if (entry is! Map) continue;
+            final m = Map<String, dynamic>.from(entry);
+            final extras = m['extras'];
+            Map<String, dynamic>? em;
+            if (extras is Map) em = Map<String, dynamic>.from(extras);
+
+            final existingKey = clean(m['sbnKey']);
+            final nestedKey = em == null ? '' : clean(em['sbnKey']);
+            final keyToCompare = existingKey.isNotEmpty ? existingKey : nestedKey;
+            if (stableKey.isNotEmpty && keyToCompare == stableKey) {
+              return;
+            }
+
+            final existingSig = clean(m['signatureId']);
+            final nestedSig = em == null ? '' : clean(em['signatureId']);
+            final sigToCompare = existingSig.isNotEmpty ? existingSig : nestedSig;
+            if (signatureId.isNotEmpty && sigToCompare == signatureId) {
+              return;
+            }
+          }
+        }
+      } catch (_) {}
     }
 
     // Guardar la notificación como un campo en el documento del día

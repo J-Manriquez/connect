@@ -12,6 +12,8 @@ class PreferencesService {
   static const String KEY_WIDGET_TEXT_SP = 'widget_text_sp';
   static const String KEY_WIDGET_ICON_SP = 'widget_icon_sp';
   static const String KEY_PRIORITIZE_LOCAL_MEDIA = 'prioritize_local_media';
+  static const String KEY_CONVERSATION_ENABLED_PACKAGES =
+      'conversation_enabled_packages_v1';
   
   // Guardar preferencia de usar como receptor
   static Future<bool> saveUseAsReceptor(bool useAsReceptor) async {
@@ -217,6 +219,38 @@ class PreferencesService {
     try {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool(KEY_PRIORITIZE_LOCAL_MEDIA) ?? false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<List<String>> getConversationEnabledPackages() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw =
+          prefs.getStringList(KEY_CONVERSATION_ENABLED_PACKAGES) ?? const [];
+      return raw
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList();
+    } catch (e) {
+      return const [];
+    }
+  }
+
+  static Future<bool> saveConversationEnabledPackages(
+    List<String> packageNames,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final normalized = packageNames
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList();
+      await prefs.setStringList(KEY_CONVERSATION_ENABLED_PACKAGES, normalized);
+      return true;
     } catch (e) {
       return false;
     }

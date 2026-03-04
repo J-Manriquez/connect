@@ -48,6 +48,9 @@ android {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4") // Actualizado a la versión requerida
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    val firebaseBomVersion = (project.findProperty("FirebaseSDKVersion") as String?) ?: "33.8.0"
+    implementation(platform("com.google.firebase:firebase-bom:$firebaseBomVersion"))
+    implementation("com.google.firebase:firebase-firestore-ktx")
 }
 
 flutter {

@@ -430,6 +430,13 @@ class _EmisorScreenState extends State<EmisorScreen>
       appBar: AppBar(
         title: const Text('Emisor de Notificaciones'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.filter_alt, size: 30),
+            tooltip: 'Filtros de notificaciones',
+            onPressed: () {
+              Navigator.pushNamed(context, '/notification_filters');
+            },
+          ),
           // Icono para activar/desactivar guardado en Firebase
           IconButton(
             icon: Icon(

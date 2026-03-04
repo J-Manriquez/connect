@@ -63,6 +63,9 @@ class MainActivity: FlutterActivity() {
     private var bleGattServerManager: BleGattServerManager? = null
     private var bleGattClientManager: BleGattClientManager? = null
 
+    private var lastHandledNotificationIntentId: String? = null
+    private var lastHandledNotificationIntentAtMs: Long = 0L
+
     private var btAdapter: BluetoothAdapter? = null
     private var btDiscoveryReceiver: BroadcastReceiver? = null
     private var btDiscoveryRegistered: Boolean = false
@@ -370,10 +373,16 @@ class MainActivity: FlutterActivity() {
                         val body = call.argument<String>("body") ?: ""
                         val packageName = call.argument<String>("packageName") ?: ""
                         val appName = call.argument<String>("appName") ?: ""
+                        val appIcon = call.argument<String>("appIcon") ?: ""
                         val notificationId = call.argument<String>("notificationId") ?: ""
                         val soundEnabled = call.argument<Boolean>("soundEnabled") ?: true
                         val vibrationEnabled = call.argument<Boolean>("vibrationEnabled") ?: true
-                        val customVibrationPattern = call.argument<List<Long>>("customVibrationPattern")
+                        val customVibrationPattern = try {
+                            val raw = call.argument<List<Any>>("customVibrationPattern")
+                            raw?.mapNotNull { (it as? Number)?.toLong() }?.takeIf { it.isNotEmpty() }
+                        } catch (_: Exception) {
+                            null
+                        }
                         // ✅ OBTENER LOS NUEVOS PARÁMETROS SEPARADOS
                         val screenWakeEnabled = call.argument<Boolean>("screenWakeEnabled") ?: false
                         val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
@@ -382,7 +391,7 @@ class MainActivity: FlutterActivity() {
                         localNotificationManager.updateSettings(screenWakeEnabled, autoOpenEnabled, soundEnabled)
                         
                         localNotificationManager.showNotification(
-                            title, body, packageName, appName, notificationId,
+                            title, body, packageName, appName, appIcon, notificationId,
                             soundEnabled, vibrationEnabled, customVibrationPattern, screenWakeEnabled, autoOpenEnabled
                         )
                         result.success(true)
@@ -394,19 +403,66 @@ class MainActivity: FlutterActivity() {
                 }
                 "updateNotificationSettings" -> {
                     try {
-                        val screenWakeEnabled = call.argument<Boolean>("screenWakeEnabled") ?: false
-                        val autoOpenEnabled = call.argument<Boolean>("autoOpenEnabled") ?: false
-                        val soundEnabled = call.argument<Boolean>("soundEnabled") ?: true
-                        
-                        // ✅ ACTUALIZAR CONFIGURACIÓN EN TIEMPO REAL SIN MOSTRAR NOTIFICACIÓN
-                        localNotificationManager.updateSettings(
-                            screenWakeEnabled = screenWakeEnabled,
-                            autoOpenEnabled = autoOpenEnabled,
-                            soundEnabled = soundEnabled
-                        )
-                        
+                        val screenWakeEnabledArg = call.argument<Boolean>("screenWakeEnabled")
+                        val autoOpenEnabledArg = call.argument<Boolean>("autoOpenEnabled")
+                        val soundEnabledArg = call.argument<Boolean>("soundEnabled")
+
+                        val filterWhatsappMessageSummariesArg =
+                            call.argument<Boolean>("filterWhatsappMessageSummaries")
+                        val filterWhatsappCheckingNewMessagesArg =
+                            call.argument<Boolean>("filterWhatsappCheckingNewMessages")
+
+                        if (screenWakeEnabledArg != null ||
+                            autoOpenEnabledArg != null ||
+                            soundEnabledArg != null
+                        ) {
+                            val settingsPrefs = applicationContext.getSharedPreferences(
+                                "flutter.notification_settings",
+                                Context.MODE_PRIVATE
+                            )
+                            val currentScreenWakeEnabled =
+                                settingsPrefs.getBoolean("flutter.screenWakeEnabled", false)
+                            val currentAutoOpenEnabled =
+                                settingsPrefs.getBoolean("flutter.autoOpenEnabled", false)
+                            val currentSoundEnabled =
+                                settingsPrefs.getBoolean("flutter.soundEnabled", true)
+
+                            val screenWakeEnabled = screenWakeEnabledArg ?: currentScreenWakeEnabled
+                            val autoOpenEnabled = autoOpenEnabledArg ?: currentAutoOpenEnabled
+                            val soundEnabled = soundEnabledArg ?: currentSoundEnabled
+
+                            localNotificationManager.updateSettings(
+                                screenWakeEnabled = screenWakeEnabled,
+                                autoOpenEnabled = autoOpenEnabled,
+                                soundEnabled = soundEnabled
+                            )
+                        }
+
+                        if (filterWhatsappMessageSummariesArg != null ||
+                            filterWhatsappCheckingNewMessagesArg != null
+                        ) {
+                            val prefs = applicationContext.getSharedPreferences(
+                                "FlutterSharedPreferences",
+                                Context.MODE_PRIVATE
+                            )
+                            val editor = prefs.edit()
+                            if (filterWhatsappMessageSummariesArg != null) {
+                                editor.putBoolean(
+                                    "flutter.filter_whatsapp_message_summaries",
+                                    filterWhatsappMessageSummariesArg
+                                )
+                            }
+                            if (filterWhatsappCheckingNewMessagesArg != null) {
+                                editor.putBoolean(
+                                    "flutter.filter_whatsapp_checking_new_messages",
+                                    filterWhatsappCheckingNewMessagesArg
+                                )
+                            }
+                            editor.apply()
+                        }
+
                         result.success(true)
-                        Log.d("MainActivity", "Configuración de notificaciones actualizada: screenWake=$screenWakeEnabled, autoOpen=$autoOpenEnabled, sound=$soundEnabled")
+                        Log.d("MainActivity", "Configuración de notificaciones actualizada")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error al actualizar configuración", e)
                         result.error("ERROR", "Error al actualizar configuración: ${e.message}", null)
@@ -1210,54 +1266,6 @@ class MainActivity: FlutterActivity() {
         }
 
         handleNavigationIntent(intent)
-        
-        // ✅ MANEJO ESPECÍFICO PARA ANDROID 8: Intent de activación de pantalla
-        if (intent.action == "WAKE_SCREEN_ACTION" && intent.getBooleanExtra("wakeScreenOnly", false)) {
-            Log.d("MainActivity", "Intent de activación de pantalla recibido (Android 8.0)")
-            
-            val screenWakeEnabled = intent.getBooleanExtra("screenWakeEnabled", false)
-            if (screenWakeEnabled && Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
-                Log.d("MainActivity", "Aplicando configuración de pantalla para Android 8.0")
-                
-                // Aplicar configuración específica para Android 8.0
-                try {
-                    // Usar tanto métodos nuevos como flags tradicionales
-                    setShowWhenLocked(true)
-                    setTurnScreenOn(true)
-                    
-                    window.addFlags(
-                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                        WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                    )
-                    
-                    Log.d("MainActivity", "Configuración de pantalla aplicada exitosamente (Android 8.0)")
-                    
-                    // Limpiar flags después de un tiempo
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        try {
-                            setShowWhenLocked(false)
-                            setTurnScreenOn(false)
-                            window.clearFlags(
-                                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                            )
-                            Log.d("MainActivity", "Flags de pantalla limpiados (Android 8.0)")
-                        } catch (e: Exception) {
-                            Log.e("MainActivity", "Error limpiando flags de pantalla", e)
-                        }
-                    }, 3000)
-                    
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "Error aplicando configuración de pantalla Android 8.0", e)
-                }
-            }
-            
-            // No procesar como notificación normal
-            return
-        }
-        
         handleNotificationIntent(intent)
     }
     
@@ -1272,11 +1280,20 @@ class MainActivity: FlutterActivity() {
             LocalNotificationManager.NOTIFICATION_ACTION_OPEN -> {
                 // Manejo normal cuando se toca la notificación
                 handleNormalNotificationTap(intent)
+                clearNotificationIntent()
             }
             LocalNotificationManager.NOTIFICATION_ACTION_AUTO_OPEN -> {
                 // ✅ Manejo especial para auto-apertura
                 handleAutoOpenNotification(intent)
+                clearNotificationIntent()
             }
+        }
+    }
+
+    private fun clearNotificationIntent() {
+        try {
+            setIntent(Intent(this, MainActivity::class.java))
+        } catch (_: Exception) {
         }
     }
     
@@ -1289,6 +1306,23 @@ class MainActivity: FlutterActivity() {
         val autoOpen = intent.getBooleanExtra("autoOpen", false)
         
         if (notificationId != null) {
+            val nowMs = System.currentTimeMillis()
+            if (notificationId == lastHandledNotificationIntentId &&
+                (nowMs - lastHandledNotificationIntentAtMs) < 2500L
+            ) {
+                sendBtDebug(
+                    "main_intent",
+                    "tap OPEN ignored duplicate id='${notificationId.take(80)}' deltaMs=${nowMs - lastHandledNotificationIntentAtMs}"
+                )
+                return
+            }
+            lastHandledNotificationIntentId = notificationId
+            lastHandledNotificationIntentAtMs = nowMs
+            sendBtDebug(
+                "main_intent",
+                "tap OPEN id='${notificationId.take(80)}' pkg='${(packageName ?: "").take(80)}' title='${(title ?: "").take(50)}'"
+            )
+            cancelReceptorNotification(notificationId)
             val notificationData = mapOf(
                 "notificationId" to notificationId,
                 "title" to (title ?: ""),
@@ -1298,101 +1332,18 @@ class MainActivity: FlutterActivity() {
                 "autoOpen" to autoOpen
             )
             
-            receptorChannel.invokeMethod("onNotificationTapped", notificationData)
+            try {
+                receptorChannel.invokeMethod("onNotificationTapped", notificationData)
+                sendBtDebug("main_intent", "flutter invoke onNotificationTapped ok id='${notificationId.take(80)}'")
+            } catch (_: Exception) {
+                sendBtDebug("main_intent", "flutter invoke onNotificationTapped failed id='${notificationId.take(80)}'")
+            }
             Log.d("MainActivity", "Notificación RECEPTOR tocada, enviando datos a Flutter")
         }
     }
     
     // ✅ CORREGIDO: Método handleAutoOpenNotification que respeta configuración
     private fun handleAutoOpenNotification(intent: Intent) {
-        if (intent?.action == LocalNotificationManager.NOTIFICATION_ACTION_AUTO_OPEN) {
-            Log.d("MainActivity", "Procesando auto-apertura de notificación")
-            
-            val fromBackground = intent.getBooleanExtra("fromBackground", false)
-            val timestamp = intent.getLongExtra("timestamp", 0)
-            val screenWakeEnabled = intent.getBooleanExtra("screenWakeEnabled", false)
-            
-            try {
-                // ✅ CONFIGURACIÓN ULTRA CONSERVADORA: Solo configurar flags si screenWakeEnabled está activo
-                if (screenWakeEnabled) {
-                    Log.d("MainActivity", "Configurando flags de pantalla - screenWakeEnabled: true")
-                    Log.d("MainActivity", "Android API Level: ${Build.VERSION.SDK_INT}")
-                    
-                    when {
-                        // Android 8.1+ (API 27+) - Usar métodos nuevos
-                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1 -> {
-                            Log.d("MainActivity", "Usando métodos para Android 8.1+ (API 27+)")
-                            setShowWhenLocked(true)
-                            setTurnScreenOn(true)
-                        }
-                        // Android 8.0 (API 26) - Manejo específico
-                        Build.VERSION.SDK_INT == Build.VERSION_CODES.O -> {
-                            Log.d("MainActivity", "Usando métodos específicos para Android 8.0 (API 26)")
-                            // En Android 8.0, usar tanto métodos nuevos como flags por compatibilidad
-                            try {
-                                setShowWhenLocked(true)
-                                setTurnScreenOn(true)
-                            } catch (e: Exception) {
-                                Log.w("MainActivity", "Error con métodos nuevos en Android 8.0, usando flags: $e")
-                            }
-                            
-                            // También usar flags como respaldo
-                            window.addFlags(
-                                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                            )
-                        }
-                        // Android 7.1 y anteriores - Usar flags tradicionales
-                        else -> {
-                            Log.d("MainActivity", "Usando flags tradicionales para Android < 8.0")
-                            window.addFlags(
-                                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                            )
-                        }
-                    }
-                    
-                    // ✅ MEJORAR: Manejo específico para segundo plano SOLO si screenWakeEnabled
-                    if (fromBackground) {
-                        // ✅ CORREGIR: Mover tarea al frente de forma segura
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            try {
-                                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                                activityManager.moveTaskToFront(taskId, ActivityManager.MOVE_TASK_WITH_HOME)
-                                Log.d("MainActivity", "Tarea movida al frente exitosamente")
-                            } catch (e: Exception) {
-                                Log.w("MainActivity", "No se pudo mover tarea al frente: $e")
-                            }
-                        }
-                    }
-                } else {
-                    // ✅ AUTO-OPEN SIN ACTIVAR PANTALLA: Solo navegar sin flags de pantalla
-                    Log.d("MainActivity", "screenWakeEnabled: false - Auto-open sin activar pantalla")
-                    
-                    // Solo mover la tarea al frente SIN activar la pantalla
-                    if (fromBackground) {
-                        // ✅ NAVEGACIÓN SILENCIOSA: Mover al frente sin activar pantalla
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            try {
-                                val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-                                // Usar flag que NO active la pantalla
-                                activityManager.moveTaskToFront(taskId, 0) // Sin flags adicionales
-                                Log.d("MainActivity", "Tarea movida al frente SILENCIOSAMENTE (sin activar pantalla)")
-                            } catch (e: Exception) {
-                                Log.w("MainActivity", "No se pudo mover tarea al frente silenciosamente: $e")
-                            }
-                        }
-                    }
-                }
-                
-                Log.d("MainActivity", "Auto-open procesado - Desde segundo plano: $fromBackground, ScreenWake: $screenWakeEnabled")
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Error configurando auto-open", e)
-            }
-        }
-
         val notificationId = intent.getStringExtra(LocalNotificationManager.EXTRA_NOTIFICATION_DATA)
         val title = intent.getStringExtra("title")
         val body = intent.getStringExtra("body")
@@ -1400,8 +1351,42 @@ class MainActivity: FlutterActivity() {
         val appName = intent.getStringExtra("appName")
         val fromBackground = intent.getBooleanExtra("fromBackground", false)
         val timestamp = intent.getLongExtra("timestamp", 0)
+        val screenWakeEnabled = intent.getBooleanExtra("screenWakeEnabled", false)
         
         if (notificationId != null) {
+            val nowMs = System.currentTimeMillis()
+            if (notificationId == lastHandledNotificationIntentId &&
+                (nowMs - lastHandledNotificationIntentAtMs) < 2500L
+            ) {
+                sendBtDebug(
+                    "main_intent",
+                    "AUTO_OPEN ignored duplicate id='${notificationId.take(80)}' deltaMs=${nowMs - lastHandledNotificationIntentAtMs}"
+                )
+                return
+            }
+            lastHandledNotificationIntentId = notificationId
+            lastHandledNotificationIntentAtMs = nowMs
+            sendBtDebug(
+                "main_intent",
+                "AUTO_OPEN id='${notificationId.take(80)}' fromBg=$fromBackground wake=$screenWakeEnabled ts=$timestamp pkg='${(packageName ?: "").take(80)}'"
+            )
+            if (screenWakeEnabled) {
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
+                        setShowWhenLocked(true)
+                        setTurnScreenOn(true)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        window.addFlags(
+                            android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+                        )
+                    }
+                } catch (_: Exception) {
+                }
+            }
             val notificationData = mapOf(
                 "notificationId" to notificationId,
                 "title" to (title ?: ""),
@@ -1414,17 +1399,46 @@ class MainActivity: FlutterActivity() {
                 "timestamp" to timestamp
             )
             
-            // ✅ MEJORAR: Delay adaptativo según el origen
-            val delay = if (fromBackground) 1500L else 750L
+            val delay = if (fromBackground) 850L else 450L
             
             Handler(Looper.getMainLooper()).postDelayed({
                 try {
                     receptorChannel.invokeMethod("onNotificationAutoOpened", notificationData)
-                    Log.d("MainActivity", "Datos enviados a Flutter - Delay: ${delay}ms")
+                    Log.d("MainActivity", "Auto-open enviado a Flutter delay=${delay}ms")
+                    sendBtDebug("main_intent", "flutter invoke onNotificationAutoOpened ok id='${notificationId.take(80)}' delayMs=$delay")
                 } catch (e: Exception) {
                     Log.e("MainActivity", "Error enviando datos a Flutter", e)
+                    sendBtDebug("main_intent", "flutter invoke onNotificationAutoOpened failed id='${notificationId.take(80)}' err='${e.message ?: ""}'")
                 }
             }, delay)
+        }
+    }
+
+    private fun cancelReceptorNotification(notificationId: String) {
+        val id = notificationId.trim()
+        if (id.isEmpty()) return
+        try {
+            val numericId = (id.hashCode() and 0x7FFFFFFF)
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            nm?.cancel(numericId)
+            sendBtDebug("main_intent", "cancel statusbar ok id='${id.take(80)}' numericId=$numericId")
+        } catch (_: Exception) {
+            sendBtDebug("main_intent", "cancel statusbar failed id='${id.take(80)}'")
+        }
+    }
+
+    private fun sendBtDebug(source: String, message: String) {
+        try {
+            val obj = org.json.JSONObject()
+            obj.put("type", "debug_log")
+            obj.put("source", source)
+            obj.put("message", message)
+            obj.put("timestamp", System.currentTimeMillis())
+            val i = Intent(this, BtClassicServerService::class.java)
+                .setAction(BtClassicServerService.ACTION_SEND_TO_PEERS)
+                .putExtra(BtClassicServerService.EXTRA_JSON, obj.toString())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+        } catch (_: Exception) {
         }
     }
     

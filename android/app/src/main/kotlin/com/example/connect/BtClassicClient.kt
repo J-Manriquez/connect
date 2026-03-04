@@ -242,6 +242,28 @@ object BtClassicClient {
                     val ts = obj.optLong("timestamp", 0L)
                     println("[btclassic][debug][$source][$ts] $message")
                 }
+                "notif_reply" -> {
+                    val sbnKey = obj.optString("sbnKey", "").trim()
+                    val replyText = obj.optString("replyText", "").trim()
+                    val requestId = obj.optString("requestId", "").trim()
+                    val now = System.currentTimeMillis()
+
+                    val res = NotificationListener.trySendNotificationReply(sbnKey, replyText)
+                    val ok = res.first
+                    val err = res.second
+
+                    try {
+                        val ack = JSONObject()
+                        ack.put("type", "notif_reply_ack")
+                        ack.put("requestId", requestId)
+                        ack.put("sbnKey", sbnKey)
+                        ack.put("ok", ok)
+                        ack.put("error", if (ok) "" else err)
+                        ack.put("time", now)
+                        send(ack.toString())
+                    } catch (_: Exception) {
+                    }
+                }
                 else -> return
             }
         } catch (_: Exception) {

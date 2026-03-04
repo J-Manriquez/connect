@@ -6,15 +6,17 @@ import 'package:connect/screens/receptor/conexion_screen.dart';
 import 'package:connect/screens/receptor/notifications_screen.dart';
 import 'package:connect/screens/receptor/receptor_ble_signal_screen.dart';
 import 'package:connect/screens/receptor/notification_detail_screen.dart';
+import 'package:connect/screens/receptor/conversation_apps_screen.dart';
 import 'package:connect/screens/receptor/receptor_screen.dart';
 import 'package:connect/screens/receptor/vibration_patterns_screen.dart';
 import 'package:connect/screens/receptor/create_vibration_pattern_screen.dart';
 import 'package:connect/screens/receptor/custom_sound_selection_screen.dart';
 import 'package:connect/screens/receptor/notification_settings_list_screen.dart';
 import 'package:connect/screens/receptor/configure_notification_screen.dart';
+import 'package:connect/screens/common/notification_filters_screen.dart';
 import 'package:connect/services/notification_filter_service.dart';
-import 'package:connect/services/notification_cache_service.dart';
 import 'package:connect/services/notification_listener_service.dart';
+import 'package:connect/services/notification_filters_config_service.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Import for MethodChannel
@@ -158,16 +160,22 @@ void initializeNotificationHandling() {
 
     final notificationId =
         (data['notificationId'] ?? data['id'] ?? '').toString().trim();
+    final nowDbg = DateTime.now().millisecondsSinceEpoch;
+    print('[auto_open][flutter] openDetail id=$notificationId');
+    unawaited(
+      BleService.sendBtServerMessage({
+        'type': 'debug_log',
+        'source': 'flutter_open_detail',
+        'message': 'openDetail id=$notificationId route=NotificationDetailScreen',
+        'timestamp': nowDbg,
+      }),
+    );
     final now = DateTime.now().millisecondsSinceEpoch;
     if (notificationId.isNotEmpty) {
       if (notificationId == lastOpenedNotificationId &&
           (now - lastOpenedAtMs) < 1500) {
         return;
       }
-
-      final alreadyVisualized = data['status-visualizacion'] == true ||
-          await NotificationCacheService.isVisualized(notificationId);
-      if (alreadyVisualized) return;
 
       lastOpenedNotificationId = notificationId;
       lastOpenedAtMs = now;
@@ -176,7 +184,7 @@ void initializeNotificationHandling() {
     final freshContext = navigatorKey.currentContext;
     if (freshContext == null || !freshContext.mounted) return;
 
-    Navigator.of(freshContext).push(
+    Navigator.of(freshContext).pushReplacement(
       MaterialPageRoute(
         builder: (context) => NotificationDetailScreen(notificationData: data),
       ),
@@ -230,11 +238,21 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   bool _isPermissionGranted = false;
   bool _isSavingToFirebase = false;
   bool _keepAppActive = false; // ✅ NUEVA VARIABLE PARA MANTENER APP ACTIVA
+  StreamSubscription? _bleLogSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _bleLogSub = BleService.logStream.listen((e) {
+      final type = (e['type'] ?? e['event'] ?? '').toString();
+      if (type != 'debug_log') return;
+      final source = (e['source'] ?? 'unknown').toString();
+      final message = (e['message'] ?? '').toString();
+      final tsMs = (e['timestamp'] as int?) ?? DateTime.now().millisecondsSinceEpoch;
+      final ts = DateTime.fromMillisecondsSinceEpoch(tsMs).toIso8601String();
+      print('[$ts][bt_debug][$source] $message');
+    });
     // Set up the method call handler to receive notifications from native
     platform.setMethodCallHandler(_handleMethodCall);
     // Verificar el estado inicial del servicio y el permiso
@@ -255,7 +273,20 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
       _loadKeepAppActivePreference(); // ✅ CARGAR PREFERENCIA DE MANTENER APP ACTIVA
       _initializeBleRole();
       BtHiveSyncService.syncOutboxToFirebase();
+      NotificationFiltersConfigService.startRemoteSync();
     });
+  }
+
+  @override
+  void dispose() {
+    try {
+      WidgetsBinding.instance.removeObserver(this);
+    } catch (_) {}
+    try {
+      _bleLogSub?.cancel();
+    } catch (_) {}
+    NotificationFiltersConfigService.stopRemoteSync();
+    super.dispose();
   }
 
   // ✅ NUEVO MÉTODO PARA INICIALIZAR EL SERVICIO DE BÚSQUEDA
@@ -722,6 +753,8 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
           final notificationData = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
           return ConfigureNotificationScreen(notificationData: notificationData);
         },
+        '/notification_filters': (context) => const NotificationFiltersScreen(),
+        '/conversation_apps': (context) => const ConversationAppsScreen(),
       }
     );
   }

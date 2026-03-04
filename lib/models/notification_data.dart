@@ -53,6 +53,23 @@ class NotificationData {
     final String uniqueId =
         providedId.isNotEmpty ? providedId : now.millisecondsSinceEpoch.toString();
     final DateTime timestamp = _extractTimestamp(notification) ?? now;
+
+    final Map<String, dynamic> extras =
+        Map<String, dynamic>.from(notification['extras'] ?? {});
+    notification.forEach((key, value) {
+      if (key == 'id' ||
+          key == 'title' ||
+          key == 'text' ||
+          key == 'packageName' ||
+          key == 'appName' ||
+          key == 'timestamp' ||
+          key == 'time' ||
+          key == 'dateId' ||
+          key == 'status-visualizacion') {
+        return;
+      }
+      extras.putIfAbsent(key, () => value);
+    });
     
     return NotificationData(
       id: uniqueId,
@@ -61,7 +78,7 @@ class NotificationData {
       packageName: notification['packageName'] ?? '',
       appName: notification['appName'] ?? '',
       timestamp: timestamp,
-      extras: Map<String, dynamic>.from(notification['extras'] ?? {}),
+      extras: extras,
       statusVisualizacion: false, // Siempre inicializar como false para nuevas notificaciones
     );
   }
