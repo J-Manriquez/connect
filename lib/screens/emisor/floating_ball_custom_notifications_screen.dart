@@ -6,7 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class FloatingBallCustomNotificationsScreen extends StatefulWidget {
-  const FloatingBallCustomNotificationsScreen({super.key});
+  final int initialSection;
+
+  const FloatingBallCustomNotificationsScreen({
+    super.key,
+    this.initialSection = 0,
+  });
 
   @override
   State<FloatingBallCustomNotificationsScreen> createState() =>
@@ -296,14 +301,20 @@ class _FloatingBallCustomNotificationsScreenState
       final fsBarRestoreIconPngBase64 =
           await FloatingBallService.getFullScreenBarMediaRestoreIconPngBase64();
 
-      final screenBgColor = await FloatingBallService.getCustomNotificationsBgColor();
-      final itemBgColor = await FloatingBallService.getCustomNotificationsItemBgColor();
+      final screenBgColor =
+          await FloatingBallService.getCustomNotificationsBgColor();
+      final itemBgColor =
+          await FloatingBallService.getCustomNotificationsItemBgColor();
       final itemBorderColor =
           await FloatingBallService.getCustomNotificationsItemBorderColor();
-      final titleColor = await FloatingBallService.getCustomNotificationsTitleColor();
-      final textColor = await FloatingBallService.getCustomNotificationsTextColor();
-      final titleSizeSp = await FloatingBallService.getCustomNotificationsTitleSizeSp();
-      final textSizeSp = await FloatingBallService.getCustomNotificationsTextSizeSp();
+      final titleColor =
+          await FloatingBallService.getCustomNotificationsTitleColor();
+      final textColor =
+          await FloatingBallService.getCustomNotificationsTextColor();
+      final titleSizeSp =
+          await FloatingBallService.getCustomNotificationsTitleSizeSp();
+      final textSizeSp =
+          await FloatingBallService.getCustomNotificationsTextSizeSp();
 
       if (!mounted) return;
       setState(() {
@@ -671,7 +682,8 @@ class _FloatingBallCustomNotificationsScreenState
                         : ListView(
                             children: [
                               SizedBox(
-                                height: MediaQuery.of(context).size.height * 0.7,
+                                height:
+                                    MediaQuery.of(context).size.height * 0.7,
                                 child: content,
                               ),
                             ],
@@ -682,11 +694,12 @@ class _FloatingBallCustomNotificationsScreenState
                   ValueListenableBuilder<_SystemState>(
                     valueListenable: _systemState,
                     builder: (context, s, _) {
-                      final closeEnabled =
-                          !s.showMediaRestore || !_fsCloseDisableStickyWhenMediaActive;
+                      final closeEnabled = !s.showMediaRestore ||
+                          !_fsCloseDisableStickyWhenMediaActive;
                       if (!closeEnabled) return const SizedBox.shrink();
                       return Padding(
-                        padding: EdgeInsets.fromLTRB(stickyPad, 0, stickyPad, stickyPad),
+                        padding: EdgeInsets.fromLTRB(
+                            stickyPad, 0, stickyPad, stickyPad),
                         child: _BottomButtonsRow(
                           heightDp: _fsCloseHeightDp,
                           bgColor: _fsCloseBgColor,
@@ -739,6 +752,8 @@ class _FloatingBallCustomNotificationsScreenState
                       ),
                     ),
                   );
+
+
                 },
               ),
           ],
@@ -746,6 +761,7 @@ class _FloatingBallCustomNotificationsScreenState
       ),
     );
   }
+
 }
 
 class _SystemState {

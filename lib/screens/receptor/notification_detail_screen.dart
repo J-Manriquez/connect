@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:connect/theme_colors.dart';
@@ -14,8 +15,15 @@ import 'package:intl/intl.dart';
 
 class NotificationDetailScreen extends StatefulWidget {
   final Map<String, dynamic> notificationData;
+  final bool startInConversationMode;
+  final bool useFloatingBallLayout;
 
-  const NotificationDetailScreen({super.key, required this.notificationData});
+  const NotificationDetailScreen({
+    super.key,
+    required this.notificationData,
+    this.startInConversationMode = false,
+    this.useFloatingBallLayout = false,
+  });
 
   @override
   State<NotificationDetailScreen> createState() =>
@@ -29,10 +37,13 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   bool _isConversationLoading = false;
   bool _isConversationPaging = false;
   bool _isReplySending = false;
+  bool _dynamicPaddingEnabled = false;
   String _conversationTitle = '';
   String _packageName = '';
   String _appName = '';
   String _appIconBase64 = '';
+  String _appIconCacheKey = '';
+  Uint8List? _appIconCacheBytes;
   String _selectedMessageId = '';
   List<Map<String, dynamic>> _allConversationMessages = [];
   int _windowStart = 0;
@@ -50,6 +61,19 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       '/notificaciones',
       (route) => false,
     );
+  }
+
+  void _toggleDynamicPadding() {
+    setState(() {
+      _dynamicPaddingEnabled = !_dynamicPaddingEnabled;
+    });
+  }
+
+  double _dynamicHorizontalPadding(BuildContext context) {
+    if (!_dynamicPaddingEnabled) return 8;
+    final width = MediaQuery.sizeOf(context).width;
+    final raw = width * 0.06;
+    return raw.clamp(8.0, 42.0);
   }
 
   @override
@@ -141,8 +165,9 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       _conversationTitle = title;
       _appName = appName;
       _selectedMessageId = selectedMessageId;
-      _appIconBase64 = appIconBase64;
-      _isConversationMode = conversationMode;
+      _appIconBase64 = _appIconBase64.isNotEmpty ? _appIconBase64 : appIconBase64;
+      _isConversationMode =
+          widget.startInConversationMode ? true : conversationMode;
     });
 
     if (_isConversationMode) {
@@ -246,6 +271,16 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                     ),
                   ],
                 ),
+                actions: [
+                  IconButton(
+                    onPressed: _toggleDynamicPadding,
+                    icon: Icon(
+                      _dynamicPaddingEnabled
+                          ? Icons.format_indent_decrease
+                          : Icons.format_indent_increase,
+                    ),
+                  ),
+                ],
                 bottom: PreferredSize(
                   preferredSize: Size.fromHeight(_isConversationPaging ? 2 : 0),
                   child: _isConversationPaging
@@ -261,247 +296,283 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   onPressed: _goBackToConexion,
                 ),
                 title: const Text('Detalle de Notificación'),
+                actions: [
+                  IconButton(
+                    onPressed: _toggleDynamicPadding,
+                    icon: Icon(
+                      _dynamicPaddingEnabled
+                          ? Icons.format_indent_decrease
+                          : Icons.format_indent_increase,
+                    ),
+                  ),
+                ],
                 backgroundColor: customColor[700],
                 foregroundColor: Colors.white,
               ),
         body: _isConversationMode
             ? _buildConversationBody()
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(8.0),
+            : _buildNonConversationBody(
+                title: title,
+                body: body,
+                appName: appName,
+                formattedTime: formattedTime,
+                subText: subText,
+                summaryText: summaryText,
+                infoText: infoText,
+                contentInfo: contentInfo,
+              ),
+      ),
+    );
+  }
+
+  Widget _buildNonConversationBody({
+    required String title,
+    required String body,
+    required String appName,
+    required String formattedTime,
+    String? subText,
+    String? summaryText,
+    String? infoText,
+    String? contentInfo,
+  }) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        _dynamicHorizontalPadding(context),
+        8,
+        _dynamicHorizontalPadding(context),
+        8,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.message,
+                        color: customColor[700],
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Contenido Principal',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildContentField('Título', title),
+                  const SizedBox(height: 10),
+                  _buildContentField('Mensaje', body),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (subText != null ||
+              summaryText != null ||
+              infoText != null ||
+              contentInfo != null) ...[
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Card(
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.message,
-                                  color: customColor[700],
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Contenido Principal',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            _buildContentField('Título', title),
-                            const SizedBox(height: 10),
-                            _buildContentField('Mensaje', body),
-                          ],
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: customColor[700],
+                          size: 24,
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (subText != null ||
-                        summaryText != null ||
-                        infoText != null ||
-                        contentInfo != null) ...[
-                      Card(
-                        elevation: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    color: customColor[700],
-                                    size: 24,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'Información Adicional',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              if (subText != null) ...[
-                                _buildContentField('Subtexto', subText),
-                                const SizedBox(height: 8),
-                              ],
-                              if (summaryText != null) ...[
-                                _buildContentField('Resumen', summaryText),
-                                const SizedBox(height: 8),
-                              ],
-                              if (infoText != null) ...[
-                                _buildContentField('Información', infoText),
-                                const SizedBox(height: 8),
-                              ],
-                              if (contentInfo != null) ...[
-                                _buildContentField(
-                                  'Info del Contenido',
-                                  contentInfo,
-                                ),
-                              ],
-                            ],
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Información Adicional',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (subText != null) ...[
+                      _buildContentField('Subtexto', subText),
+                      const SizedBox(height: 8),
                     ],
-                    Card(
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.apps,
-                                  color: customColor[700],
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Información de la Aplicación',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            _buildInfoRow('Aplicación:', appName),
-                            _buildInfoRow('Fecha y Hora:', formattedTime),
-                          ],
-                        ),
+                    if (summaryText != null) ...[
+                      _buildContentField('Resumen', summaryText),
+                      const SizedBox(height: 8),
+                    ],
+                    if (infoText != null) ...[
+                      _buildContentField('Información', infoText),
+                      const SizedBox(height: 8),
+                    ],
+                    if (contentInfo != null) ...[
+                      _buildContentField(
+                        'Info del Contenido',
+                        contentInfo,
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (_isMarkingAsRead)
-                      Card(
-                        elevation: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            children: [
-                              const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text('Marcando como leída...'),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      Card(
-                        elevation: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Notificación marcada como leída',
-                                style: TextStyle(
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 10),
-                    Card(
-                      elevation: 2,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.tune,
-                                  color: customColor[700],
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Configuración Personalizada',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            const Text(
-                              'Crear configuraciones personalizadas de sonido, vibración o bloqueo para notificaciones similares.',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            const SizedBox(height: 15),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/configure_notification',
-                                    arguments: widget.notificationData,
-                                  );
-                                },
-                                icon: const Icon(Icons.settings),
-                                label: const Text(
-                                  'Configurar Notificación',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: customColor[600],
-                                  foregroundColor: Colors.white,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 25),
+                    ],
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.apps,
+                        color: customColor[700],
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Información de la Aplicación',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _buildInfoRow('Aplicación:', appName),
+                  _buildInfoRow('Fecha y Hora:', formattedTime),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (_isMarkingAsRead)
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Marcando como leída...'),
+                  ],
+                ),
+              ),
+            )
+          else
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Notificación marcada como leída',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
+          Card(
+            elevation: 2,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.tune,
+                        color: customColor[700],
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Configuración Personalizada',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Crear configuraciones personalizadas de sonido, vibración o bloqueo para notificaciones similares.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/configure_notification',
+                          arguments: widget.notificationData,
+                        );
+                      },
+                      icon: const Icon(Icons.settings),
+                      label: const Text(
+                        'Configurar Notificación',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: customColor[600],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 25),
+        ],
       ),
     );
   }
@@ -530,10 +601,14 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
 
   Widget _buildAppIconForAppBar() {
     if (_appIconBase64.isEmpty) {
-      return const SizedBox(width: 28, height: 28);
+      return const SizedBox.shrink();
     }
     try {
-      final bytes = base64Decode(_appIconBase64);
+      if (_appIconCacheKey != _appIconBase64 || _appIconCacheBytes == null) {
+        _appIconCacheBytes = base64Decode(_appIconBase64);
+        _appIconCacheKey = _appIconBase64;
+      }
+      final bytes = _appIconCacheBytes!;
       return ClipRRect(
         borderRadius: BorderRadius.circular(6),
         child: Image.memory(
@@ -569,6 +644,37 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
         sig: 'remoteCount:${remote.length}',
         throttleMs: 0,
       );
+
+      List<Map<String, dynamic>> localReplies = const [];
+      try {
+        localReplies = await BtHiveStorageService.getConversationRepliesForUi(
+          packageName: _packageName,
+          conversationTitle: _conversationTitle,
+        );
+      } catch (_) {
+        localReplies = const [];
+      }
+      _btDebug(
+        '_loadConversationMessages localReplies=${localReplies.length}',
+        sig: 'localReplies:${localReplies.length}:$_packageName:$_conversationTitle',
+        throttleMs: 0,
+      );
+
+      String normForMatch(String s) {
+        var out = s.trim().toLowerCase();
+        if (out.isEmpty) return '';
+        out = out
+            .replaceAll(RegExp(r'[áàäâ]'), 'a')
+            .replaceAll(RegExp(r'[éèëê]'), 'e')
+            .replaceAll(RegExp(r'[íìïî]'), 'i')
+            .replaceAll(RegExp(r'[óòöô]'), 'o')
+            .replaceAll(RegExp(r'[úùüû]'), 'u')
+            .replaceAll('ñ', 'n');
+        out = out.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+        out = out.replaceAll(RegExp(r'\s+'), ' ').trim();
+        return out;
+      }
+
       final conversationTitleNorm = _normalizeConversationKey(_conversationTitle);
       List<Map<String, dynamic>> filtered = remote.where((n) {
         final pkg = _stringFromMessage(n, ['packageName', 'paquete']);
@@ -600,6 +706,66 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
           throttleMs: 0,
         );
       }
+
+      if (localReplies.isNotEmpty && filtered.isNotEmpty) {
+        final remoteTextNorms = filtered.map((m) {
+          final pkg = _stringFromMessage(m, ['packageName', 'paquete']);
+          final title = _stringFromMessage(m, ['title', 'titulo']);
+          final text = _stringFromMessage(
+            m,
+            ['text', 'body', 'bigText', 'mensaje', 'contenido'],
+          );
+          return {
+            'pkg': pkg,
+            'title': title,
+            'textNorm': normForMatch(text),
+          };
+        }).toList();
+
+        final kept = <Map<String, dynamic>>[];
+        for (final r in localReplies) {
+          final rid = _messageId(r);
+          final rtextNorm = normForMatch((r['text'] ?? '').toString());
+          if (rid.isEmpty || rtextNorm.isEmpty) {
+            kept.add(r);
+            continue;
+          }
+
+          final hasRemote = remoteTextNorms.any((m) {
+            final pkg = (m['pkg'] ?? '').toString();
+            final title = (m['title'] ?? '').toString();
+            final textNorm = (m['textNorm'] ?? '').toString();
+            if (pkg != _packageName) return false;
+            if (title != _conversationTitle) return false;
+            if (textNorm.isEmpty) return false;
+            return textNorm.contains(rtextNorm) || rtextNorm.contains(textNorm);
+          });
+
+          if (hasRemote) {
+            try {
+              await BtHiveStorageService.deleteConversationReplyById(rid);
+            } catch (_) {}
+            continue;
+          }
+          kept.add(r);
+        }
+        localReplies = kept;
+      }
+
+      try {
+        final byId = <String, Map<String, dynamic>>{};
+        for (final m in filtered) {
+          final id = _messageId(m);
+          if (id.isEmpty) continue;
+          byId[id] = m;
+        }
+        for (final m in localReplies) {
+          final id = _messageId(m);
+          if (id.isEmpty) continue;
+          byId.putIfAbsent(id, () => m);
+        }
+        filtered = byId.values.toList();
+      } catch (_) {}
 
       final currentId = _selectedMessageId;
       final hasCurrent = filtered.any((m) => _messageId(m) == currentId);
@@ -810,13 +976,14 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     }
 
     final items = _buildConversationItems(messages);
+    final hPad = _dynamicHorizontalPadding(context);
 
     return Column(
       children: [
         Expanded(
           child: ListView.builder(
             controller: _conversationScrollController,
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 12),
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
@@ -835,11 +1002,12 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   Widget _buildReplyComposer() {
     final canAttemptReply = _packageName.trim().isNotEmpty;
     final enabled = canAttemptReply && !_isReplySending;
+    final hPad = _dynamicHorizontalPadding(context);
 
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 10),
         child: Row(
           children: [
             Expanded(
@@ -908,19 +1076,61 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       return;
     }
 
-    setState(() {
-      _isReplySending = true;
-    });
-
     final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final replyId = 'reply_$requestId';
     final payload = <String, dynamic>{
       'type': 'notif_reply',
       'packageName': _packageName,
+      'conversationTitle': _conversationTitle,
       'sbnKey': sbnKey,
       'replyText': text,
       'requestId': requestId,
       'time': DateTime.now().millisecondsSinceEpoch,
     };
+    final timeMs = (payload['time'] as int?) ?? DateTime.now().millisecondsSinceEpoch;
+
+    final optimisticMessage = <String, dynamic>{
+      'notificationId': replyId,
+      'id': replyId,
+      'title': _conversationTitle,
+      'text': text,
+      'packageName': _packageName,
+      'appName': _appName,
+      'timestamp': Timestamp.fromMillisecondsSinceEpoch(timeMs),
+      'extras': <String, dynamic>{
+        'direction': 'out',
+        'isReply': true,
+        'requestId': requestId,
+        'sbnKey': sbnKey,
+      },
+      'status-visualizacion': true,
+    };
+
+    if (mounted) {
+      setState(() {
+        _isReplySending = true;
+        _selectedMessageId = replyId;
+        final next = List<Map<String, dynamic>>.from(_allConversationMessages);
+        next.add(optimisticMessage);
+        next.sort((a, b) {
+          final ta = _messageTimestamp(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final tb = _messageTimestamp(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return ta.compareTo(tb);
+        });
+        _allConversationMessages = next;
+        _windowEnd = next.length;
+        _windowStart = (_windowEnd - 15).clamp(0, _windowEnd);
+        _messageKeys.clear();
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_conversationScrollController.hasClients) return;
+        try {
+          _conversationScrollController.jumpTo(
+            _conversationScrollController.position.maxScrollExtent,
+          );
+        } catch (_) {}
+      });
+    }
 
     bool sent = false;
     try {
@@ -946,7 +1156,31 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
         sent = true;
       }
 
+      try {
+        await NotificationCacheService.recordSentReply(
+          packageName: _packageName,
+          conversationTitle: _conversationTitle,
+          replyText: text,
+          timestampMs: payload['time'] as int?,
+        );
+      } catch (_) {}
+
+      try {
+        await BtHiveStorageService.storeConversationReply(
+          requestId: requestId,
+          packageName: _packageName,
+          conversationTitle: _conversationTitle,
+          replyText: text,
+          sbnKey: sbnKey,
+          timestampMs: payload['time'] as int?,
+        );
+      } catch (_) {}
+
       _replyController.clear();
+      try {
+        _selectedMessageId = replyId;
+        await _loadConversationMessages();
+      } catch (_) {}
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Respuesta enviada.')),
@@ -1050,6 +1284,13 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     final time = _formatMessageTime(message);
     final visualized = message['status-visualizacion'] == true;
 
+    final extrasRaw = message['extras'];
+    final extras = extrasRaw is Map
+        ? Map<String, dynamic>.from(extrasRaw)
+        : <String, dynamic>{};
+    final isOutgoing = (extras['direction'] ?? '').toString().trim() == 'out';
+    const horizontal = 32.0;
+
     return SizedBox(
       key: key,
       width: double.infinity,
@@ -1057,42 +1298,58 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: GestureDetector(
           onLongPress: () => _showMessageActionsDialog(message),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: customColor[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: customColor[200]!),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  content,
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text(
-                      time,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
+          child: Row(
+            mainAxisAlignment:
+                isOutgoing ? MainAxisAlignment.end : MainAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(
+                    left: isOutgoing ? horizontal : 0,
+                    right: isOutgoing ? 0 : horizontal,
+                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isOutgoing ? customColor[200] : customColor[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color:
+                          isOutgoing ? customColor[400]! : customColor[200]!,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        content,
+                        style: const TextStyle(fontSize: 16),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      visualized ? Icons.done : Icons.done_outline,
-                      size: 16,
-                      color: visualized ? Colors.green : Colors.black45,
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                            time,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            visualized ? Icons.done : Icons.done_outline,
+                            size: 16,
+                            color:
+                                visualized ? Colors.green : Colors.black45,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

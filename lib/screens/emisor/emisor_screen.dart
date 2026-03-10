@@ -9,6 +9,7 @@ import 'package:connect/widgets/buscar_receptor_modal.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/notification_filter_service.dart'; // Add this import
 import 'package:connect/theme_colors.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class EmisorScreen extends StatefulWidget {
   final List<Map<String, dynamic>> notifications;
@@ -946,6 +947,18 @@ class _EmisorScreenState extends State<EmisorScreen>
 
 Future<void> _checkInitialRoute(BuildContext context) async {
   try {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final blockUntilMs = (prefs.getInt('auto_open_block_until_ms') ?? 0).toInt();
+      if (blockUntilMs > nowMs) return;
+      final skipOnce = prefs.getBool('skip_auto_redirect_once') == true;
+      if (skipOnce) {
+        await prefs.remove('skip_auto_redirect_once');
+        return;
+      }
+    } catch (_) {}
+
     final receptorService = ReceptorService();
     final deviceId = await receptorService.getLinkedDeviceId();
     final linkStatus = await FirebaseService().getLinkStatus();

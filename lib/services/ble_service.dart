@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'local_notification_service.dart';
 import 'preferences_service.dart';
+import 'receptor_service.dart';
 
 class BleService {
   static const MethodChannel _channel = MethodChannel('com.example.connect/ble');
+  static const MethodChannel _btHiveBridge = MethodChannel('com.example.connect/bt_hive_bridge');
   static final StreamController<Map<String, dynamic>> _logController = StreamController<Map<String, dynamic>>.broadcast();
   static Stream<Map<String, dynamic>> get logStream => _logController.stream;
   static final StreamController<Map<String, dynamic>> _scanResultsController = StreamController<Map<String, dynamic>>.broadcast();
@@ -15,6 +17,29 @@ class BleService {
       if (call.method == 'onBleNotificationReceived') {
         final Map<String, dynamic> data = Map<String, dynamic>.from(call.arguments as Map);
         _logController.add({'source': 'flutter', 'event': 'notification_received', 'data': data, 'timestamp': DateTime.now().millisecondsSinceEpoch});
+        try {
+          final payload = Map<String, dynamic>.from(data);
+          payload['id'] = (payload['id'] ?? payload['notificationId'] ?? DateTime.now().millisecondsSinceEpoch.toString()).toString();
+          final id = payload['id'].toString();
+          final pkg = (payload['packageName'] ?? '').toString();
+          final title = (payload['title'] ?? '').toString();
+          print('[ble_rx] enqueue start id=$id pkg=$pkg title="${title.length > 40 ? title.substring(0, 40) : title}"');
+          try {
+            await _btHiveBridge.invokeMethod('sendDebugLog', {
+              'source': 'ble_rx',
+              'message': 'enqueue_start id=$id pkg=$pkg title="${title.length > 60 ? title.substring(0, 60) : title}" keys=${payload.keys.length}',
+            });
+          } catch (_) {}
+          await BtHiveStorageService.enqueueBtNotification(payload);
+          await BtHiveSyncService.syncOutboxToFirebase();
+          print('[ble_rx] enqueue+sync done id=$id');
+          try {
+            await _btHiveBridge.invokeMethod('sendDebugLog', {
+              'source': 'ble_rx',
+              'message': 'enqueue_sync_done id=$id',
+            });
+          } catch (_) {}
+        } catch (_) {}
         await LocalNotificationService.showNotification(
           title: data['title'] ?? 'Nueva notificación',
           body: data['text'] ?? '',

@@ -184,6 +184,88 @@ class NotificationListener : NotificationListenerService() {
             return Pair(false, "sin_remoteinput")
         }
 
+        fun trySendNotificationReplySmart(
+            sbnKey: String,
+            replyText: String,
+            packageName: String?,
+            conversationTitle: String?
+        ): Pair<Boolean, String> {
+            val first = trySendNotificationReply(sbnKey, replyText)
+            if (first.first) return first
+
+            val err = first.second
+            val pkg = packageName?.trim().orEmpty()
+            val title = conversationTitle?.trim().orEmpty()
+            if (pkg.isEmpty() || title.isEmpty()) return first
+            if (err != "notificacion_no_encontrada" && err != "sin_remoteinput" && err != "sin_acciones") {
+                return first
+            }
+
+            fun norm(s: String): String {
+                return s.trim().lowercase().replace(Regex("\\s+"), " ")
+            }
+
+            val inst = serviceInstance ?: return Pair(false, "servicio_no_disponible")
+            val list = try { inst.activeNotifications?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
+            val targetTitle = norm(title)
+            if (targetTitle.isEmpty()) return first
+
+            val candidates = list
+                .filter { it.packageName == pkg }
+                .sortedByDescending { it.postTime }
+
+            for (sbn in candidates) {
+                val notif = sbn.notification ?: continue
+                val extras = try { notif.extras } catch (_: Exception) { null }
+                val rawTitle = try {
+                    extras?.getString(Notification.EXTRA_TITLE)
+                        ?: extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+                        ?: ""
+                } catch (_: Exception) {
+                    ""
+                }
+                val candTitle = norm(rawTitle)
+                val titleMatch = candTitle == targetTitle ||
+                        (candTitle.isNotEmpty() && targetTitle.isNotEmpty() &&
+                                (candTitle.contains(targetTitle) || targetTitle.contains(candTitle)))
+                if (!titleMatch) continue
+
+                val actions = try { notif.actions?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
+                if (actions.isEmpty()) continue
+                for (action in actions) {
+                    val remoteInputs = try { action.remoteInputs?.toList() ?: emptyList() } catch (_: Exception) { emptyList() }
+                    if (remoteInputs.isEmpty()) continue
+
+                    val fillIn = Intent().apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        clipData = ClipData.newIntent("remoteinput", Intent())
+                    }
+
+                    val results = Bundle()
+                    for (ri in remoteInputs) {
+                        results.putCharSequence(ri.resultKey, replyText.trim())
+                    }
+                    try {
+                        RemoteInput.addResultsToIntent(remoteInputs.toTypedArray(), fillIn, results)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            RemoteInput.setResultsSource(fillIn, RemoteInput.SOURCE_FREE_FORM_INPUT)
+                        }
+                    } catch (_: Exception) {
+                        return Pair(false, "remoteinput_add_failed")
+                    }
+
+                    return try {
+                        action.actionIntent.send(inst, 0, fillIn)
+                        Pair(true, "")
+                    } catch (_: Exception) {
+                        Pair(false, "pending_intent_send_failed")
+                    }
+                }
+            }
+
+            return Pair(false, "smart_no_match")
+        }
+
         fun startReplyQueueListener(ctx: Context) {
             if (replyQueueReg != null) return
             val prefs = try {
@@ -215,6 +297,8 @@ class NotificationListener : NotificationListenerService() {
                     val requestId = doc.getString("requestId")?.trim().orEmpty().ifEmpty { doc.id }
                     val sbnKey = doc.getString("sbnKey")?.trim().orEmpty()
                     val replyText = doc.getString("replyText")?.trim().orEmpty()
+                    val packageName = doc.getString("packageName")?.trim().orEmpty()
+                    val conversationTitle = doc.getString("conversationTitle")?.trim().orEmpty()
                     if (requestId.isEmpty() || sbnKey.isEmpty() || replyText.isEmpty()) {
                         try {
                             doc.reference.update(
@@ -241,7 +325,7 @@ class NotificationListener : NotificationListenerService() {
                     }
 
                     replyExecutor.execute {
-                        val res = trySendNotificationReply(sbnKey, replyText)
+                        val res = trySendNotificationReplySmart(sbnKey, replyText, packageName, conversationTitle)
                         val ok = res.first
                         val err = res.second
                         try {

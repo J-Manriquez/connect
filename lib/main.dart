@@ -31,6 +31,7 @@ import 'screens/emisor/media_reproduction_screen.dart';
 import 'screens/emisor/floating_ball_settings_screen.dart';
 import 'screens/emisor/floating_ball_style_screen.dart';
 import 'screens/emisor/floating_ball_custom_notifications_screen.dart';
+import 'screens/emisor/floating_ball_conversation_screen.dart';
 import 'screens/receptor/receptor_settings_screen.dart';
 
 // Añadir este import al inicio del archivo
@@ -41,6 +42,8 @@ import 'package:connect/services/device_finder_service.dart';
 import 'package:connect/screens/buscar_dispositivo_screen.dart';
 import 'package:connect/services/notification_sound_handler.dart';
 import 'package:connect/services/ble_service.dart';
+import 'package:connect/services/floating_ball_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // reiniciar la app
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -87,8 +90,25 @@ Future<void> btHiveMain() async {
     switch (call.method) {
       case 'onBtNotification':
         final payload = Map<String, dynamic>.from(call.arguments as Map);
+        final id = (payload['id'] ?? '').toString();
+        final pkg = (payload['packageName'] ?? '').toString();
+        final title = (payload['title'] ?? '').toString();
+        final time = (payload['time'] ?? '').toString();
+        print('[bt_hive][rx] onBtNotification id=$id pkg=$pkg time=$time title="${title.length > 40 ? title.substring(0, 40) : title}"');
+        await sendDebug(
+          'bt_hive_rx',
+          'onBtNotification start id=$id pkg=$pkg time=$time title="${title.length > 60 ? title.substring(0, 60) : title}" keys=${payload.keys.length}',
+        );
         await BtHiveStorageService.enqueueBtNotification(payload);
+        await sendDebug(
+          'bt_hive_rx',
+          'onBtNotification enqueued id=$id',
+        );
         await BtHiveSyncService.syncOutboxToFirebase();
+        await sendDebug(
+          'bt_hive_rx',
+          'onBtNotification sync_done id=$id',
+        );
         return;
       case 'onBtMediaState':
         final payload = Map<String, dynamic>.from(call.arguments as Map);
@@ -124,9 +144,7 @@ Future<void> btHiveMain() async {
             .trim();
         final visualizado = payload['visualizado'] == true;
 
-        if (deviceId.isNotEmpty &&
-            dateId.isNotEmpty &&
-            notificationId.isNotEmpty) {
+        if (deviceId.isNotEmpty && notificationId.isNotEmpty) {
           await FirebaseService().updateNotificationVisualizationStatusForDevice(
             deviceId,
             notificationId,
@@ -136,14 +154,18 @@ Future<void> btHiveMain() async {
         }
         return;
       case 'syncNow':
+        await sendDebug('bt_hive_rx', 'syncNow start');
         await BtHiveSyncService.syncOutboxToFirebase();
+        await sendDebug('bt_hive_rx', 'syncNow done');
         return;
     }
   });
   await sendDebug('receptor_dart', 'btHiveMain_ready');
 
   Timer.periodic(const Duration(minutes: 1), (_) async {
-    await BtHiveSyncService.syncOutboxToFirebase();
+    try {
+      await BtHiveSyncService.syncOutboxToFirebase();
+    } catch (_) {}
   });
 }
 
@@ -186,7 +208,101 @@ void initializeNotificationHandling() {
 
     Navigator.of(freshContext).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => NotificationDetailScreen(notificationData: data),
+        builder: (context) => NotificationDetailScreen(
+          notificationData: data,
+          startInConversationMode: false,
+          useFloatingBallLayout: false,
+        ),
+      ),
+    );
+  }
+
+  Future<void> openFromAuto(Map<String, dynamic> data) async {
+    final context = navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      await prefs.setInt('auto_open_block_until_ms', nowMs + 8000);
+      await prefs.setBool('skip_auto_redirect_once', true);
+    } catch (_) {}
+
+    final notificationId =
+        (data['notificationId'] ?? data['id'] ?? '').toString().trim();
+    final nowDbg = DateTime.now().millisecondsSinceEpoch;
+    print('[auto_open][flutter] openFromAuto id=$notificationId');
+    unawaited(
+      BleService.sendBtServerMessage({
+        'type': 'debug_log',
+        'source': 'flutter_open_auto',
+        'message':
+            'openFromAuto id=$notificationId route=/floating_ball_custom_notifications',
+        'timestamp': nowDbg,
+      }),
+    );
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (notificationId.isNotEmpty) {
+      if (notificationId == lastOpenedNotificationId &&
+          (now - lastOpenedAtMs) < 1500) {
+        return;
+      }
+
+      lastOpenedNotificationId = notificationId;
+      lastOpenedAtMs = now;
+    }
+
+    final autoOpenPref = await LocalNotificationService.isAutoOpenEnabled();
+    if (!autoOpenPref) {
+      await openDetail(data);
+      return;
+    }
+
+    bool ballEnabled = false;
+    bool fsConversationEnabled = false;
+    try {
+      ballEnabled = await FloatingBallService.isEnabled();
+      fsConversationEnabled =
+          await FloatingBallService.isFullScreenConversationEnabled();
+    } catch (_) {
+      ballEnabled = false;
+      fsConversationEnabled = false;
+    }
+
+    final freshContext = navigatorKey.currentContext;
+    if (freshContext == null || !freshContext.mounted) return;
+
+    final pkg = (data['packageName'] ?? data['paquete'] ?? '').toString().trim();
+    bool appConversationEnabled = false;
+    try {
+      final enabled = await PreferencesService.getConversationEnabledPackages();
+      appConversationEnabled = enabled.contains(pkg);
+    } catch (_) {
+      appConversationEnabled = false;
+    }
+    final startInConversationMode = fsConversationEnabled && appConversationEnabled;
+
+    if (ballEnabled) {
+      final openedFromBackground = data['fromBackground'] == true;
+      Navigator.of(freshContext).pushNamed(
+        '/floating_ball_conversation',
+        arguments: {
+          'notificationData': data,
+          'startInConversationMode': startInConversationMode,
+          'openedFromBackground': openedFromBackground,
+        },
+      );
+      return;
+    }
+
+    Navigator.of(freshContext).pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => NotificationDetailScreen(
+          notificationData: data,
+          startInConversationMode: startInConversationMode,
+          useFloatingBallLayout: false,
+        ),
       ),
     );
   }
@@ -209,7 +325,7 @@ void initializeNotificationHandling() {
         // print('===============================');
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          unawaited(openDetail(data));
+          unawaited(openFromAuto(data));
         });
       };
 
@@ -239,6 +355,22 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   bool _isSavingToFirebase = false;
   bool _keepAppActive = false; // ✅ NUEVA VARIABLE PARA MANTENER APP ACTIVA
   StreamSubscription? _bleLogSub;
+
+  Future<void> _btDebug(String message) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    try {
+      final ts = DateTime.fromMillisecondsSinceEpoch(nowMs).toIso8601String();
+      print('[$ts][receptor_nav] $message');
+    } catch (_) {}
+    try {
+      await BleService.sendBtServerMessage({
+        'type': 'debug_log',
+        'source': 'receptor_nav',
+        'message': message,
+        'timestamp': nowMs,
+      });
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -336,30 +468,19 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         });
         // print('Received notification: $notificationData');
 
-        // Si está habilitado el guardado en Firebase, verificar si la notificación debe guardarse
-        if (_isSavingToFirebase) {
-          try {
-            // Obtener el packageName de la notificación
-            final String packageName =
-                notificationData['packageName'] as String? ?? '';
-
-            // Verificar si la notificación debe mostrarse según las apps habilitadas
-            final bool shouldShow =
-                await NotificationFilterService.shouldShowNotification(
-                  packageName,
-                );
-
-            // Solo guardar la notificación si debe mostrarse
-            if (shouldShow) {
-              await _firebaseService.saveNotification(notificationData);
-            } else {
-              // print(                'Notificación filtrada, no se guarda en Firebase: $packageName',              );
-            }
-          } catch (e) {
-            // print('Error al guardar notificación en Firebase: $e');
-            // En caso de error, NO guardar la notificación
+        try {
+          final id = (notificationData['id'] ?? notificationData['notificationId'] ?? '').toString();
+          final pkg = (notificationData['packageName'] ?? '').toString();
+          final title = (notificationData['title'] ?? '').toString();
+          print('[emisor][firebase] save start id=$id pkg=$pkg title="${title.length > 40 ? title.substring(0, 40) : title}"');
+          final allowed = await NotificationFilterService.shouldShowNotification(pkg);
+          if (!allowed) {
+            print('[emisor][firebase] save skip disabled_app id=$id pkg=$pkg');
+            return;
           }
-        }
+          await _firebaseService.saveNotification(notificationData);
+          print('[emisor][firebase] save ok id=$id');
+        } catch (_) {}
         break;
       case 'serviceConnected':
         setState(() {
@@ -638,6 +759,33 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
   // ✅ MODIFICAR EL MÉTODO _checkInitialRoute (líneas 311-350)
   Future<void> _checkInitialRoute() async {
     try {
+      final routeName =
+          WidgetsBinding.instance.platformDispatcher.defaultRouteName.trim();
+      if (routeName == '/floating_ball_conversation_auto' ||
+          routeName == '/floating_ball_conversation') {
+        unawaited(_btDebug('checkInitialRoute skip routeName=$routeName'));
+        return;
+      }
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final blockUntilMs =
+            (prefs.getInt('auto_open_block_until_ms') ?? 0).toInt();
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        if (blockUntilMs > nowMs) {
+          unawaited(_btDebug('checkInitialRoute skip_block now=$nowMs until=$blockUntilMs routeName=$routeName'));
+          return;
+        }
+        final skipOnce = prefs.getBool('skip_auto_redirect_once') == true;
+        if (skipOnce) {
+          await prefs.remove('skip_auto_redirect_once');
+          unawaited(_btDebug('checkInitialRoute skip_once=true routeName=$routeName'));
+          return;
+        }
+      } catch (_) {}
+
+      unawaited(_btDebug('checkInitialRoute start routeName=$routeName'));
+
       // print('[DEBUG] _checkInitialRoute: Start');
       final linkStatus = await _firebaseService.getLinkStatus();
       // print(        '[DEBUG] _checkInitialRoute: linkStatus from Firebase = $linkStatus',      );
@@ -657,6 +805,17 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
 
         // Navegar a la pantalla del receptor
         if (!mounted) return;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final blockUntilMs =
+              (prefs.getInt('auto_open_block_until_ms') ?? 0).toInt();
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          if (blockUntilMs > nowMs) {
+            unawaited(_btDebug('checkInitialRoute abort_redirect now=$nowMs until=$blockUntilMs reason=linkStatus'));
+            return;
+          }
+        } catch (_) {}
+        unawaited(_btDebug('checkInitialRoute redirect /receptor reason=linkStatus'));
         Navigator.pushReplacementNamed(context, '/receptor');
       } else if (linkStatus && disableAutoRedirect) {
         // print(          '[DEBUG] _checkInitialRoute: Dispositivo vinculado pero bloqueo automático desactivado - permaneciendo en emisor',        );
@@ -669,10 +828,22 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
       if (useAsReceptor && _isPermissionGranted && !disableAutoRedirect) {
         // print('[DEBUG] _checkInitialRoute: Navigating to /receptor');
         if (!mounted) return;
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final blockUntilMs =
+              (prefs.getInt('auto_open_block_until_ms') ?? 0).toInt();
+          final nowMs = DateTime.now().millisecondsSinceEpoch;
+          if (blockUntilMs > nowMs) {
+            unawaited(_btDebug('checkInitialRoute abort_redirect now=$nowMs until=$blockUntilMs reason=useAsReceptor'));
+            return;
+          }
+        } catch (_) {}
+        unawaited(_btDebug('checkInitialRoute redirect /receptor reason=useAsReceptor'));
         Navigator.pushReplacementNamed(context, '/receptor');
       }
       // print('[DEBUG] _checkInitialRoute: Staying on EmisorScreen');
     } catch (_) {
+      unawaited(_btDebug('checkInitialRoute error'));
       // print('Error al verificar ruta inicial: $e');
       // print('Stacktrace: $stack');
     }
@@ -708,7 +879,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
           centerTitle: true, // Centrar el título del AppBar
         ),
       ),
-      initialRoute: '/',
+      initialRoute: WidgetsBinding.instance.platformDispatcher.defaultRouteName,
       routes: {
         '/': (context) => EmisorScreen(
           notifications: _notifications,
@@ -734,6 +905,21 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         '/floating_ball_style': (context) => const FloatingBallStyleScreen(),
         '/floating_ball_custom_notifications': (context) =>
             const FloatingBallCustomNotificationsScreen(),
+        '/floating_ball_conversation': (context) {
+          final args =
+              ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+          final data = args?['notificationData'] as Map<String, dynamic>? ?? {};
+          final startInConversationMode =
+              args?['startInConversationMode'] == true;
+          final openedFromBackground = args?['openedFromBackground'] == true;
+          return FloatingBallConversationScreen(
+            notificationData: data,
+            startInConversationMode: startInConversationMode,
+            openedFromBackground: openedFromBackground,
+          );
+        },
+        '/floating_ball_conversation_auto': (context) =>
+            const FloatingBallConversationAutoOpenEntry(),
         '/receptor': (context) => const ReceptorScreen(),
         '/notificaciones': (context) => const NotificacionesScreen(),
         '/receptor_settings': (context) => const ReceptorSettingsScreen(),

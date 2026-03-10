@@ -52,6 +52,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
   int _fsAppsCols = 1;
   bool _fsBarEnabled = false;
   bool _fsCustomNotificationsEnabled = false;
+  bool _fsConversationEnabled = false;
   int _customNotifsBgColor = 0xDD111111;
   int _customNotifsItemBgColor = 0x22111111;
   int _customNotifsItemBorderColor = 0x22FFFFFF;
@@ -74,6 +75,11 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
   String _customNotifsClearAllIconId = 'delete';
   String? _customNotifsClearAllIconPngBase64;
   String _customNotifsClearAllText = 'Eliminar todo';
+  int _conversationBgColor = 0xDD111111;
+  int _conversationIncomingColor = 0x22111111;
+  int _conversationOutgoingColor = 0x22FFFFFF;
+  int _conversationTextColor = 0xFFFFFFFF;
+  int _conversationTextSizeSp = 14;
   int _fsBarHeightDp = 54;
   int _fsBarBgColor = 0xCC111111;
   int _fsBarContentColor = 0xFFFFFFFF;
@@ -293,6 +299,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     int nextFsAppsCols = _fsAppsCols;
     bool nextFsBarEnabled = _fsBarEnabled;
     bool nextFsCustomNotificationsEnabled = _fsCustomNotificationsEnabled;
+    bool nextFsConversationEnabled = _fsConversationEnabled;
     int nextCustomNotifsBgColor = _customNotifsBgColor;
     int nextCustomNotifsItemBgColor = _customNotifsItemBgColor;
     int nextCustomNotifsItemBorderColor = _customNotifsItemBorderColor;
@@ -315,6 +322,11 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     String nextCustomNotifsClearAllIconId = _customNotifsClearAllIconId;
     String? nextCustomNotifsClearAllIconPngBase64 = _customNotifsClearAllIconPngBase64;
     String nextCustomNotifsClearAllText = _customNotifsClearAllText;
+    int nextConversationBgColor = _conversationBgColor;
+    int nextConversationIncomingColor = _conversationIncomingColor;
+    int nextConversationOutgoingColor = _conversationOutgoingColor;
+    int nextConversationTextColor = _conversationTextColor;
+    int nextConversationTextSizeSp = _conversationTextSizeSp;
     int nextFsBarHeightDp = _fsBarHeightDp;
     int nextFsBarBgColor = _fsBarBgColor;
     int nextFsBarContentColor = _fsBarContentColor;
@@ -497,6 +509,18 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
           .getCustomNotificationsClearAllIconPngBase64();
       nextCustomNotifsClearAllText =
           await FloatingBallService.getCustomNotificationsClearAllText();
+      nextFsConversationEnabled =
+          await FloatingBallService.isFullScreenConversationEnabled();
+      nextConversationBgColor =
+          await FloatingBallService.getConversationBgColor();
+      nextConversationIncomingColor =
+          await FloatingBallService.getConversationIncomingColor();
+      nextConversationOutgoingColor =
+          await FloatingBallService.getConversationOutgoingColor();
+      nextConversationTextColor =
+          await FloatingBallService.getConversationTextColor();
+      nextConversationTextSizeSp =
+          await FloatingBallService.getConversationTextSizeSp();
       nextFsBarHeightDp = await FloatingBallService.getFullScreenBarHeightDp();
       nextFsBarBgColor = await FloatingBallService.getFullScreenBarBgColor();
       nextFsBarContentColor =
@@ -663,6 +687,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       _fsAppsCols = nextFsAppsCols;
       _fsBarEnabled = nextFsBarEnabled;
       _fsCustomNotificationsEnabled = nextFsCustomNotificationsEnabled;
+      _fsConversationEnabled = nextFsConversationEnabled;
       _customNotifsBgColor = nextCustomNotifsBgColor;
       _customNotifsItemBgColor = nextCustomNotifsItemBgColor;
       _customNotifsItemBorderColor = nextCustomNotifsItemBorderColor;
@@ -685,6 +710,11 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       _customNotifsClearAllIconId = nextCustomNotifsClearAllIconId;
       _customNotifsClearAllIconPngBase64 = nextCustomNotifsClearAllIconPngBase64;
       _customNotifsClearAllText = nextCustomNotifsClearAllText;
+      _conversationBgColor = nextConversationBgColor;
+      _conversationIncomingColor = nextConversationIncomingColor;
+      _conversationOutgoingColor = nextConversationOutgoingColor;
+      _conversationTextColor = nextConversationTextColor;
+      _conversationTextSizeSp = nextConversationTextSizeSp;
       _fsBarHeightDp = nextFsBarHeightDp;
       _fsBarBgColor = nextFsBarBgColor;
       _fsBarContentColor = nextFsBarContentColor;
@@ -1187,6 +1217,11 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     await FloatingBallService.setFullScreenCustomNotificationsEnabled(v);
   }
 
+  Future<void> _toggleFsConversationEnabled(bool v) async {
+    setState(() => _fsConversationEnabled = v);
+    await FloatingBallService.setFullScreenConversationEnabled(v);
+  }
+
   Future<void> _setCustomNotifsBgColor() async {
     final picked = await _showColorPickerInt(
       currentArgb: _customNotifsBgColor,
@@ -1196,6 +1231,17 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     if (picked == null) return;
     setState(() => _customNotifsBgColor = picked);
     await FloatingBallService.setCustomNotificationsBgColor(picked);
+  }
+
+  Future<void> _setConversationBgColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationBgColor,
+      title: 'Color de fondo (conversación)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationBgColor = picked);
+    await FloatingBallService.setConversationBgColor(picked);
   }
 
   Future<void> _setCustomNotifsItemBgColor() async {
@@ -1209,6 +1255,17 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     await FloatingBallService.setCustomNotificationsItemBgColor(picked);
   }
 
+  Future<void> _setConversationIncomingColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationIncomingColor,
+      title: 'Color burbuja recibida',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationIncomingColor = picked);
+    await FloatingBallService.setConversationIncomingColor(picked);
+  }
+
   Future<void> _setCustomNotifsItemBorderColor() async {
     final picked = await _showColorPickerInt(
       currentArgb: _customNotifsItemBorderColor,
@@ -1218,6 +1275,17 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     if (picked == null) return;
     setState(() => _customNotifsItemBorderColor = picked);
     await FloatingBallService.setCustomNotificationsItemBorderColor(picked);
+  }
+
+  Future<void> _setConversationOutgoingColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationOutgoingColor,
+      title: 'Color burbuja enviada',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationOutgoingColor = picked);
+    await FloatingBallService.setConversationOutgoingColor(picked);
   }
 
   Future<void> _setCustomNotifsTitleColor() async {
@@ -1240,6 +1308,17 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     if (picked == null) return;
     setState(() => _customNotifsTextColor = picked);
     await FloatingBallService.setCustomNotificationsTextColor(picked);
+  }
+
+  Future<void> _setConversationTextColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationTextColor,
+      title: 'Color de texto (conversación)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationTextColor = picked);
+    await FloatingBallService.setConversationTextColor(picked);
   }
 
   Future<void> _setCustomNotifsTitleSize() async {
@@ -1266,6 +1345,19 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     if (picked == null) return;
     setState(() => _customNotifsTextSizeSp = picked);
     await FloatingBallService.setCustomNotificationsTextSizeSp(picked);
+  }
+
+  Future<void> _setConversationTextSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño de texto (conversación)',
+      current: _conversationTextSizeSp,
+      min: 8,
+      max: 32,
+      suffix: 'sp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationTextSizeSp = picked);
+    await FloatingBallService.setConversationTextSizeSp(picked);
   }
 
   Future<void> _setCustomNotifsButtonsIconHeight() async {
@@ -3589,6 +3681,92 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                               trailing: const Icon(Icons.chevron_right),
                               onTap: (_fsBarEnabled && _fsCustomNotificationsEnabled)
                                   ? _setCustomNotifsTextSize
+                                  : null,
+                            ),
+                            const SizedBox(height: 16),
+                            const Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Conversación',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Habilitar sección de conversación'),
+                              subtitle: const Text(
+                                'Usar vista de chat al abrir automáticamente una notificación compatible',
+                              ),
+                              value: _fsConversationEnabled,
+                              onChanged: _fsBarEnabled ? _toggleFsConversationEnabled : null,
+                            ),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Color de fondo (pantalla conversación)'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _colorDot(Color(_conversationBgColor)),
+                                  const SizedBox(width: 10),
+                                  const Icon(Icons.chevron_right),
+                                ],
+                              ),
+                              onTap:
+                                  (_fsBarEnabled && _fsConversationEnabled) ? _setConversationBgColor : null,
+                            ),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Color burbuja recibida'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _colorDot(Color(_conversationIncomingColor)),
+                                  const SizedBox(width: 10),
+                                  const Icon(Icons.chevron_right),
+                                ],
+                              ),
+                              onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                  ? _setConversationIncomingColor
+                                  : null,
+                            ),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Color burbuja enviada'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _colorDot(Color(_conversationOutgoingColor)),
+                                  const SizedBox(width: 10),
+                                  const Icon(Icons.chevron_right),
+                                ],
+                              ),
+                              onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                  ? _setConversationOutgoingColor
+                                  : null,
+                            ),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Color de texto (conversación)'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _colorDot(Color(_conversationTextColor)),
+                                  const SizedBox(width: 10),
+                                  const Icon(Icons.chevron_right),
+                                ],
+                              ),
+                              onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                  ? _setConversationTextColor
+                                  : null,
+                            ),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Tamaño de texto (conversación)'),
+                              subtitle: Text('${_conversationTextSizeSp}sp'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                  ? _setConversationTextSize
                                   : null,
                             ),
                             const Divider(height: 22),

@@ -677,19 +677,14 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
     try {
       final notificationId =
           (notification['notificationId'] ?? notification['id'])?.toString();
-      final timestamp = notification['timestamp'] as Timestamp?;
       if (notificationId == null || notificationId.isEmpty) return;
 
       await BtHiveStorageService.deleteOutboxEntry(notificationId);
       await DismissedNotificationsService.markAsDismissed(notificationId);
       await LocalNotificationService.cancelNotification(notificationId);
 
-      if (timestamp == null) return;
-      final date = timestamp.toDate();
-      final dateId =
-          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       // Usa tu servicio de Firebase para eliminar
-      await FirebaseService().deleteNotification(notificationId, dateId);
+      await FirebaseService().deleteNotification(notificationId, '');
     } catch (e) {
       // print('Error al eliminar notificación: \$e');
     }

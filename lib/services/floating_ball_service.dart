@@ -149,6 +149,18 @@ class FloatingBallService {
       'floating_ball_custom_notifications_clear_all_icon_png_base64';
   static const String _keyCustomNotificationsClearAllText =
       'floating_ball_custom_notifications_clear_all_text';
+  static const String _keyFullScreenConversationEnabled =
+      'floating_ball_fs_conversation_enabled';
+  static const String _keyConversationBgColor =
+      'floating_ball_conversation_bg_color';
+  static const String _keyConversationIncomingColor =
+      'floating_ball_conversation_incoming_color';
+  static const String _keyConversationOutgoingColor =
+      'floating_ball_conversation_outgoing_color';
+  static const String _keyConversationTextColor =
+      'floating_ball_conversation_text_color';
+  static const String _keyConversationTextSizeSp =
+      'floating_ball_conversation_text_size_sp';
   static const String _keyFullScreenMediaAutoShow =
       'floating_ball_fs_media_auto_show';
   static const String _keyFullScreenCloseHeightDp =
@@ -314,6 +326,7 @@ class FloatingBallService {
   static const int _defaultFullScreenAppsCols = 1;
   static const bool _defaultFullScreenBarEnabled = false;
   static const bool _defaultFullScreenCustomNotificationsEnabled = false;
+  static const bool _defaultFullScreenConversationEnabled = false;
   static const int _defaultCustomNotificationsBgColor = _defaultFullScreenBgColor;
   static const int _defaultCustomNotificationsItemBgColor =
       _defaultFullScreenButtonColor;
@@ -335,6 +348,13 @@ class FloatingBallService {
   static const String _defaultCustomNotificationsCloseText = 'Cerrar';
   static const String _defaultCustomNotificationsClearAllIconId = 'delete';
   static const String _defaultCustomNotificationsClearAllText = 'Eliminar todo';
+  static const int _defaultConversationBgColor = _defaultFullScreenBgColor;
+  static const int _defaultConversationIncomingColor =
+      _defaultFullScreenButtonColor;
+  static const int _defaultConversationOutgoingColor =
+      _defaultFullScreenTileBorderColor;
+  static const int _defaultConversationTextColor = 0xFFFFFFFF;
+  static const int _defaultConversationTextSizeSp = 14;
   static const int _defaultFullScreenBarHeightDp = 54;
   static const int _defaultFullScreenBarBgColor = 0xCC111111;
   static const int _defaultFullScreenBarContentColor = 0xFFFFFFFF;
@@ -829,6 +849,18 @@ class FloatingBallService {
     await _channel.invokeMethod('updateConfig');
   }
 
+  static Future<bool> isFullScreenConversationEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyFullScreenConversationEnabled) ??
+        _defaultFullScreenConversationEnabled;
+  }
+
+  static Future<void> setFullScreenConversationEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyFullScreenConversationEnabled, enabled);
+    await _channel.invokeMethod('updateConfig');
+  }
+
   static Future<int> getCustomNotificationsBgColor() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_keyCustomNotificationsBgColor) ??
@@ -1136,6 +1168,66 @@ class FloatingBallService {
   static Future<void> setCustomNotificationsClearAllText(String text) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyCustomNotificationsClearAllText, text.trim());
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationBgColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationBgColor) ?? _defaultConversationBgColor;
+  }
+
+  static Future<void> setConversationBgColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationBgColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationIncomingColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationIncomingColor) ??
+        _defaultConversationIncomingColor;
+  }
+
+  static Future<void> setConversationIncomingColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationIncomingColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationOutgoingColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationOutgoingColor) ??
+        _defaultConversationOutgoingColor;
+  }
+
+  static Future<void> setConversationOutgoingColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationOutgoingColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationTextColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationTextColor) ??
+        _defaultConversationTextColor;
+  }
+
+  static Future<void> setConversationTextColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationTextColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationTextSizeSp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationTextSizeSp) ??
+            _defaultConversationTextSizeSp)
+        .clamp(8, 32);
+  }
+
+  static Future<void> setConversationTextSizeSp(int sp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationTextSizeSp, sp.clamp(8, 32));
     await _channel.invokeMethod('updateConfig');
   }
 

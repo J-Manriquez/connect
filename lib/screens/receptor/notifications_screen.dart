@@ -256,16 +256,11 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
     try {
       final notificationId =
           (notification['notificationId'] ?? notification['id'])?.toString();
-      final timestamp = notification['timestamp'] as Timestamp?;
       if (notificationId == null || notificationId.isEmpty) return;
 
       await BtHiveStorageService.deleteOutboxEntry(notificationId);
 
-      if (timestamp == null) return;
-      final date = timestamp.toDate();
-      final dateId =
-          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-      await FirebaseService().deleteNotification(notificationId, dateId);
+      await FirebaseService().deleteNotification(notificationId, '');
     } catch (_) {}
   }
 

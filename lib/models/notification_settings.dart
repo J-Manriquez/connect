@@ -89,25 +89,60 @@ class NotificationSettings {
 
   // Método para verificar si una notificación coincide con esta configuración
   bool matchesNotification(Map<String, dynamic> notification) {
-    final packageName = notificationData['packageName'];
-    if (packageName != null && notification['packageName'] != packageName) {
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
+    String normalizeForMatch(String s) {
+      var out = s.trim().toLowerCase();
+      if (out.isEmpty) return '';
+      out = out
+          .replaceAll(RegExp(r'[áàäâ]'), 'a')
+          .replaceAll(RegExp(r'[éèëê]'), 'e')
+          .replaceAll(RegExp(r'[íìïî]'), 'i')
+          .replaceAll(RegExp(r'[óòöô]'), 'o')
+          .replaceAll(RegExp(r'[úùüû]'), 'u')
+          .replaceAll('ñ', 'n');
+      out = out.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+      out = out.replaceAll(RegExp(r'\s+'), ' ').trim();
+      return out;
+    }
+
+    final packageName = clean(notificationData['packageName']);
+    final notificationPackage = clean(notification['packageName'] ?? notification['paquete']);
+    if (packageName.isNotEmpty && notificationPackage != packageName) {
       return false;
     }
 
     // Verificar título si está configurado
-    final configTitle = notificationData['title'];
-    if (configTitle != null && configTitle.isNotEmpty) {
-      final notificationTitle = notification['title'] ?? '';
-      if (!notificationTitle.toLowerCase().contains(configTitle.toLowerCase())) {
+    final configTitle = clean(notificationData['title'] ?? notificationData['titulo']);
+    if (configTitle.isNotEmpty) {
+      final notificationTitle = clean(notification['title'] ?? notification['titulo']);
+      final cfg = normalizeForMatch(configTitle);
+      final cur = normalizeForMatch(notificationTitle);
+      if (cfg.isNotEmpty && !cur.contains(cfg)) {
         return false;
       }
     }
 
     // Verificar contenido si está configurado
-    final configText = notificationData['text'];
-    if (configText != null && configText.isNotEmpty) {
-      final notificationText = notification['text'] ?? '';
-      if (!notificationText.toLowerCase().contains(configText.toLowerCase())) {
+    final configText = clean(notificationData['text'] ??
+        notificationData['body'] ??
+        notificationData['bigText'] ??
+        notificationData['mensaje'] ??
+        notificationData['contenido']);
+    if (configText.isNotEmpty) {
+      final notificationText = clean(notification['text'] ??
+          notification['body'] ??
+          notification['bigText'] ??
+          notification['mensaje'] ??
+          notification['contenido']);
+      final cfg = normalizeForMatch(configText);
+      final cur = normalizeForMatch(notificationText);
+      if (cfg.isNotEmpty && !cur.contains(cfg)) {
         return false;
       }
     }
@@ -115,10 +150,22 @@ class NotificationSettings {
     // Verificar información adicional si está configurada
     final configExtras = notificationData['extras'];
     if (configExtras != null && configExtras is Map) {
-      final notificationExtras = notification['extras'] ?? {};
-      for (final key in configExtras.keys) {
-        if (configExtras[key] != null && 
-            notificationExtras[key] != configExtras[key]) {
+      final notificationExtrasRaw = notification['extras'];
+      if (notificationExtrasRaw is! Map) return false;
+      final notificationExtras = Map<String, dynamic>.from(notificationExtrasRaw);
+      final extras = Map<String, dynamic>.from(configExtras);
+      for (final key in extras.keys) {
+        final expected = extras[key];
+        if (expected == null) continue;
+        final actual = notificationExtras[key];
+        if (actual == null) return false;
+        if (expected is num || expected is bool) {
+          if (actual != expected) return false;
+          continue;
+        }
+        final expectedStr = clean(expected);
+        final actualStr = clean(actual);
+        if (expectedStr.isNotEmpty && actualStr != expectedStr) {
           return false;
         }
       }
@@ -149,20 +196,32 @@ class NotificationConfigSelection {
 
   // Método para generar los datos de notificación basados en la selección
   Map<String, dynamic> generateNotificationData() {
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
     final Map<String, dynamic> data = {
-      'packageName': originalNotification['packageName'],
+      'packageName': clean(originalNotification['packageName'] ?? originalNotification['paquete']),
     };
 
     if (titleSelected) {
-      data['title'] = originalNotification['title'] ?? '';
+      data['title'] = clean(originalNotification['title'] ?? originalNotification['titulo']);
     }
 
     if (textSelected) {
-      data['text'] = originalNotification['text'] ?? '';
+      data['text'] = clean(originalNotification['text'] ??
+          originalNotification['body'] ??
+          originalNotification['bigText'] ??
+          originalNotification['mensaje'] ??
+          originalNotification['contenido']);
     }
 
     if (extrasSelected) {
-      data['extras'] = originalNotification['extras'] ?? {};
+      final raw = originalNotification['extras'];
+      data['extras'] = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
     }
 
     return data;

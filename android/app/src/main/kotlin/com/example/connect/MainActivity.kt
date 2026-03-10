@@ -74,6 +74,71 @@ class MainActivity: FlutterActivity() {
         var instance: MainActivity? = null
     }
 
+    private fun isAutoOpenForegroundBlockActive(intent: Intent?): Boolean {
+        try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val untilMs = prefs.getLong("flutter.auto_open_block_until_ms", 0L)
+            val nowMs = System.currentTimeMillis()
+            if (untilMs <= nowMs) return false
+
+            val action = intent?.action ?: ""
+            if (action == LocalNotificationManager.NOTIFICATION_ACTION_OPEN) return false
+            if (action == "DEVICE_FINDER_ACTION") return false
+            if (intent?.hasExtra("navigate_to") == true) return false
+
+            val wakeOnly = try { intent?.getBooleanExtra("wakeScreenOnly", false) == true } catch (_: Exception) { false }
+            if (wakeOnly) return true
+
+            if (action.isBlank() || action == Intent.ACTION_MAIN || action == "WAKE_SCREEN_ACTION") return true
+
+            return true
+        } catch (_: Exception) {
+            return false
+        }
+    }
+
+    private fun applyAutoOpenForegroundBlockIfNeeded(stage: String, intent: Intent?): Boolean {
+        if (!isAutoOpenForegroundBlockActive(intent)) return false
+        try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val untilMs = prefs.getLong("flutter.auto_open_block_until_ms", 0L)
+            val nowMs = System.currentTimeMillis()
+            val action = intent?.action ?: ""
+            val msg = "blocked $stage action='$action' nowMs=$nowMs untilMs=$untilMs moveToBack+finish"
+            try {
+                android.util.Log.d("MainActivity", "[main_guard] $msg")
+            } catch (_: Exception) {
+            }
+            try {
+                println("[main_guard] $msg")
+            } catch (_: Exception) {
+            }
+            try {
+                sendBtDebug("main_guard", msg)
+            } catch (_: Exception) {
+            }
+        } catch (_: Exception) {
+        }
+        try {
+            moveTaskToBack(true)
+        } catch (_: Exception) {
+        }
+        try {
+            finishAndRemoveTask()
+        } catch (_: Exception) {
+        }
+        try {
+            finish()
+        } catch (_: Exception) {
+        }
+        return true
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (applyAutoOpenForegroundBlockIfNeeded("onCreate", intent)) return
+    }
+
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
         return FlutterActivityLaunchConfigs.BackgroundMode.transparent
     }
@@ -1256,6 +1321,8 @@ class MainActivity: FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
 
+        if (applyAutoOpenForegroundBlockIfNeeded("onNewIntent", intent)) return
+
         if (handleMediaLaunchIntent(intent)) return
         
         // ✅ MANEJO ESPECÍFICO PARA DEVICE_FINDER_ACTION
@@ -1271,8 +1338,15 @@ class MainActivity: FlutterActivity() {
     
     override fun onResume() {
         super.onResume()
+        if (applyAutoOpenForegroundBlockIfNeeded("onResume", intent)) return
         if (handleMediaLaunchIntent(intent)) return
         handleNotificationIntent(intent)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) return
+        applyAutoOpenForegroundBlockIfNeeded("onWindowFocusChanged", intent)
     }
     
     private fun handleNotificationIntent(intent: Intent?) {
@@ -1398,6 +1472,11 @@ class MainActivity: FlutterActivity() {
                 "fromBackground" to fromBackground,
                 "timestamp" to timestamp
             )
+            try {
+                val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                prefs.edit().putBoolean("flutter.skip_auto_redirect_once", true).apply()
+            } catch (_: Exception) {
+            }
             
             val delay = if (fromBackground) 850L else 450L
             

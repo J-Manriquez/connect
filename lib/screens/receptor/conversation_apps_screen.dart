@@ -23,6 +23,7 @@ class _ConversationAppsScreenState extends State<ConversationAppsScreen> {
   List<AppData> _apps = [];
   Set<String> _conversationEnabled = {};
   Map<String, String> _iconByPackage = {};
+  String _linkedDeviceId = '';
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _ConversationAppsScreenState extends State<ConversationAppsScreen> {
 
       List<AppData> apps = [];
       if (linkedDeviceId != null && linkedDeviceId.trim().isNotEmpty) {
+        _linkedDeviceId = linkedDeviceId.trim();
         apps = await _firebaseService.getAppListForDeviceId(linkedDeviceId);
       }
 
@@ -91,6 +93,14 @@ class _ConversationAppsScreenState extends State<ConversationAppsScreen> {
       _conversationEnabled = updated;
     });
     await PreferencesService.saveConversationEnabledPackages(updated.toList());
+    if (_linkedDeviceId.isNotEmpty) {
+      try {
+        await _firebaseService.updateConversationEnabledPackagesForDeviceId(
+          _linkedDeviceId,
+          updated.toList(),
+        );
+      } catch (_) {}
+    }
   }
 
   Widget _buildIcon(String packageName) {

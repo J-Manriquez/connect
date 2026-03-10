@@ -16,6 +16,7 @@ import android.os.PowerManager
 import android.util.Base64
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Collections
 
@@ -45,6 +46,146 @@ class LocalNotificationManager(private val context: Context) {
     private var screenWakeEnabled: Boolean = false
     private var autoOpenEnabled: Boolean = false
     private var soundEnabled: Boolean = true
+
+    private var cachedBlockRulesAtMs: Long = 0L
+    private var cachedBlockRules: List<Map<String, String>> = emptyList()
+    private var cachedSentRepliesAtMs: Long = 0L
+    private var cachedSentReplies: List<Map<String, String>> = emptyList()
+
+    private fun normalizeForMatch(s: String): String {
+        var out = s.trim().lowercase()
+        if (out.isBlank()) return ""
+        out = out
+            .replace(Regex("[áàäâ]"), "a")
+            .replace(Regex("[éèëê]"), "e")
+            .replace(Regex("[íìïî]"), "i")
+            .replace(Regex("[óòöô]"), "o")
+            .replace(Regex("[úùüû]"), "u")
+            .replace("ñ", "n")
+        out = out.replace(Regex("[^a-z0-9]+"), " ")
+        out = out.replace(Regex("\\s+"), " ").trim()
+        return out
+    }
+
+    private fun loadCustomBlockRules(nowMs: Long): List<Map<String, String>> {
+        if (cachedBlockRulesAtMs > 0L && (nowMs - cachedBlockRulesAtMs) < 1500L) {
+            return cachedBlockRules
+        }
+        cachedBlockRulesAtMs = nowMs
+        return try {
+            val prefs = appContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val raw = prefs.getString("flutter.custom_block_rules_v1", "[]") ?: "[]"
+            val arr = JSONArray(raw)
+            val out = ArrayList<Map<String, String>>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val pkg = obj.optString("pkg", "").trim()
+                if (pkg.isBlank()) continue
+                val titleNorm = obj.optString("titleNorm", "").trim()
+                val textNorm = obj.optString("textNorm", "").trim()
+                out.add(
+                    mapOf(
+                        "pkg" to pkg,
+                        "titleNorm" to titleNorm,
+                        "textNorm" to textNorm
+                    )
+                )
+            }
+            cachedBlockRules = out
+            out
+        } catch (_: Throwable) {
+            cachedBlockRules = emptyList()
+            emptyList()
+        }
+    }
+
+    private fun loadRecentSentReplies(nowMs: Long): List<Map<String, String>> {
+        if (cachedSentRepliesAtMs > 0L && (nowMs - cachedSentRepliesAtMs) < 1500L) {
+            return cachedSentReplies
+        }
+        cachedSentRepliesAtMs = nowMs
+        return try {
+            val prefs = appContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val raw = prefs.getString("flutter.recent_sent_replies_v1", "[]") ?: "[]"
+            val arr = JSONArray(raw)
+            val out = ArrayList<Map<String, String>>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val pkg = obj.optString("pkg", "").trim()
+                val textNorm = obj.optString("textNorm", "").trim()
+                val titleNorm = obj.optString("titleNorm", "").trim()
+                val tsMs = obj.optLong("tsMs", 0L)
+                if (pkg.isBlank() || textNorm.isBlank() || tsMs <= 0L) continue
+                if ((nowMs - tsMs) > 2 * 60 * 1000L) continue
+                out.add(
+                    mapOf(
+                        "pkg" to pkg,
+                        "titleNorm" to titleNorm,
+                        "textNorm" to textNorm,
+                        "tsMs" to tsMs.toString()
+                    )
+                )
+            }
+            cachedSentReplies = out
+            out
+        } catch (_: Throwable) {
+            cachedSentReplies = emptyList()
+            emptyList()
+        }
+    }
+
+    private fun shouldBlockByCustomRules(
+        nowMs: Long,
+        packageName: String,
+        title: String,
+        body: String
+    ): Boolean {
+        val rules = loadCustomBlockRules(nowMs)
+        if (rules.isEmpty()) return false
+        val pkg = packageName.trim()
+        if (pkg.isBlank()) return false
+        val titleNorm = normalizeForMatch(title)
+        val bodyNorm = normalizeForMatch(body)
+        for (r in rules) {
+            val rpkg = (r["pkg"] ?: "").trim()
+            if (rpkg != pkg) continue
+            val rtitle = (r["titleNorm"] ?: "").trim()
+            val rtext = (r["textNorm"] ?: "").trim()
+            val titleOk = rtitle.isBlank() || (titleNorm.isNotBlank() && titleNorm.contains(rtitle))
+            val textOk = rtext.isBlank() || (bodyNorm.isNotBlank() && bodyNorm.contains(rtext))
+            if (titleOk && textOk) return true
+        }
+        return false
+    }
+
+    private fun shouldSuppressOutgoingEcho(
+        nowMs: Long,
+        packageName: String,
+        title: String,
+        body: String
+    ): Boolean {
+        val list = loadRecentSentReplies(nowMs)
+        if (list.isEmpty()) return false
+        val pkg = packageName.trim()
+        if (pkg.isBlank()) return false
+        val titleNorm = normalizeForMatch(title)
+        val bodyNorm = normalizeForMatch(body)
+        if (bodyNorm.isBlank()) return false
+        for (e in list) {
+            val epkg = (e["pkg"] ?: "").trim()
+            if (epkg != pkg) continue
+            val etext = (e["textNorm"] ?: "").trim()
+            if (etext.isBlank()) continue
+            val ets = (e["tsMs"] ?: "0").toLongOrNull() ?: 0L
+            if (ets <= 0L) continue
+            if ((nowMs - ets) > 20000L) continue
+            val etitle = (e["titleNorm"] ?: "").trim()
+            val titleOk = etitle.isBlank() || titleNorm.isBlank() || titleNorm.contains(etitle) || etitle.contains(titleNorm)
+            val textOk = bodyNorm.contains(etext) || etext.contains(bodyNorm)
+            if (titleOk && textOk) return true
+        }
+        return false
+    }
 
     init {
         createOrRecreateNotificationChannel()
@@ -82,7 +223,6 @@ class LocalNotificationManager(private val context: Context) {
         autoOpenEnabled: Boolean
     ) {
         val id = notificationId.ifBlank { System.currentTimeMillis().toString() }
-        val numericId = (id.hashCode() and 0x7FFFFFFF)
         val nowMs = System.currentTimeMillis()
 
         val notificationsEnabled = try {
@@ -121,6 +261,20 @@ class LocalNotificationManager(private val context: Context) {
         val effectiveScreenWakeEnabled = getCurrentScreenWakeEnabled() || screenWakeEnabled
         val effectiveAutoOpenEnabled = getCurrentAutoOpenEnabled() || autoOpenEnabled
         val effectiveSoundEnabled = getCurrentSoundEnabled() && soundEnabled
+
+        val displayTitle = title.ifBlank { appName.ifBlank { "Notificación" } }
+        if (shouldSuppressOutgoingEcho(nowMs, packageName, displayTitle, body)) {
+            sendBtDebug("notif_show", "blocked_outgoing_echo id='$id' pkg='${packageName.take(60)}' title='${displayTitle.take(50)}'")
+            return
+        }
+        if (shouldBlockByCustomRules(nowMs, packageName, displayTitle, body)) {
+            sendBtDebug("notif_show", "blocked_custom_rule id='$id' pkg='${packageName.take(60)}' title='${displayTitle.take(50)}'")
+            return
+        }
+        val groupKey = buildGroupKey(packageName, displayTitle)
+        val numericId = (groupKey.hashCode() and 0x7FFFFFFF)
+        val groupState = updateGroupState(groupKey, id, body, nowMs)
+        persistGroupKeyForId(id, groupKey)
 
         println(
             "[local_notification] showNotification start id=$id numericId=$numericId sdk=${Build.VERSION.SDK_INT} autoOpenReq=$autoOpenEnabled wakeReq=$screenWakeEnabled autoOpenEff=$effectiveAutoOpenEnabled wakeEff=$effectiveScreenWakeEnabled soundEff=$effectiveSoundEnabled pkg='${packageName.take(80)}'"
@@ -182,14 +336,17 @@ class LocalNotificationManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )
 
-        val displayTitle = title.ifBlank { appName.ifBlank { "Notificación" } }
         val largeIcon = decodeBase64Bitmap(appIcon)
 
         val builder = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(displayTitle)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentText(groupState.lastBody)
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    buildGroupedBodyText(groupState.prevBody, groupState.lastBody)
+                )
+            )
             .setAutoCancel(true)
             .setDeleteIntent(deletePendingIntent)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -226,7 +383,7 @@ class LocalNotificationManager(private val context: Context) {
         if (effectiveAutoOpenEnabled) {
             builder.setCategory(NotificationCompat.CATEGORY_MESSAGE)
             builder.setPriority(NotificationCompat.PRIORITY_HIGH)
-            builder.setContentIntent(openPi)
+            builder.setContentIntent(autoOpenPi)
             if (effectiveScreenWakeEnabled) {
                 try {
                     builder.setFullScreenIntent(autoOpenPi, true)
@@ -257,6 +414,25 @@ class LocalNotificationManager(private val context: Context) {
             sendBtDebug("notif_show", "notify FAILED id='$id' numericId=$numericId err='${t::class.java.simpleName}:${t.message ?: ""}'")
             return
         }
+
+        if (effectiveScreenWakeEnabled && !effectiveAutoOpenEnabled) {
+            try {
+                val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+                val isInteractive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                    pm.isInteractive
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.isScreenOn
+                }
+                sendBtDebug("wake_screen", "wakeOnly requested id='$id' interactive=$isInteractive")
+                if (!isInteractive) {
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        wakeUpScreenConservative(false)
+                    }, 80L)
+                }
+            } catch (_: Throwable) {
+            }
+        }
         println("[local_notification] show id=$id numericId=$numericId autoOpen=$effectiveAutoOpenEnabled pkg='$packageName' title='${title.take(40)}'")
         sendBtDebug("notif_show", "end id='$id' numericId=$numericId autoOpen=$effectiveAutoOpenEnabled")
     }
@@ -273,9 +449,36 @@ class LocalNotificationManager(private val context: Context) {
         }
     }
 
+    private fun persistGroupKeyForId(id: String, groupKey: String) {
+        if (id.isBlank() || groupKey.isBlank()) return
+        try {
+            idToGroupKey[id] = groupKey
+            settingsPrefs.edit().putString(KEY_GROUP_KEY_PREFIX + id, groupKey).apply()
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun takeGroupKeyForId(id: String): String? {
+        if (id.isBlank()) return null
+        val existing = idToGroupKey[id]
+        if (!existing.isNullOrBlank()) return existing
+        return try {
+            val s = settingsPrefs.getString(KEY_GROUP_KEY_PREFIX + id, null)
+            if (!s.isNullOrBlank()) {
+                idToGroupKey[id] = s
+            }
+            s
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     fun cancelNotification(notificationId: String) {
         val id = notificationId.ifBlank { return }
-        val numericId = (id.hashCode() and 0x7FFFFFFF)
+        val groupKey = takeGroupKeyForId(id)
+        val numericId =
+            if (groupKey.isNullOrBlank()) (id.hashCode() and 0x7FFFFFFF) else (groupKey.hashCode() and 0x7FFFFFFF)
+        markProgrammaticCancel(id)
         notificationManager.cancel(numericId)
         println("[local_notification] cancel id=$id numericId=$numericId")
     }
@@ -316,11 +519,28 @@ class LocalNotificationManager(private val context: Context) {
         timestamp: Long,
         screenWakeEnabled: Boolean
     ): Intent {
-        return Intent(appContext, MainActivity::class.java).apply {
+        val isAutoOpen = action == NOTIFICATION_ACTION_AUTO_OPEN
+        val targetClass = if (action == NOTIFICATION_ACTION_AUTO_OPEN) {
+            AutoOpenConversationActivity::class.java
+        } else {
+            MainActivity::class.java
+        }
+        try {
+            val fb = isFloatingBallEnabled()
+            sendBtDebug(
+                "auto_open",
+                "build_open_intent action='$action' target='${targetClass.simpleName}' fromBg=$fromBackground fbPref=$fb wake=$screenWakeEnabled"
+            )
+        } catch (_: Throwable) {
+        }
+        return Intent(appContext, targetClass).apply {
             this.action = action
-            val baseFlags =
+            val baseFlags = if (isAutoOpen) {
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            } else {
                 Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            flags = if (screenWakeEnabled) {
+            }
+            flags = if (!isAutoOpen && screenWakeEnabled) {
                 baseFlags or Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             } else {
                 baseFlags
@@ -343,6 +563,16 @@ class LocalNotificationManager(private val context: Context) {
         intent: Intent,
         screenWakeEnabled: Boolean
     ) {
+        try {
+            val untilMs = System.currentTimeMillis() + 6000L
+            val prefs = appContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean("flutter.skip_auto_redirect_once", true)
+                .putLong("flutter.auto_open_block_until_ms", untilMs)
+                .apply()
+            sendBtDebug("auto_open", "schedule_set_block untilMs=$untilMs id='$id'")
+        } catch (_: Throwable) {
+        }
         val payload = JSONObject().apply {
             put("id", id)
             put("numericId", numericId)
@@ -390,6 +620,17 @@ class LocalNotificationManager(private val context: Context) {
         val id = extrasObj.optString(EXTRA_NOTIFICATION_DATA, "").trim()
         if (id.isEmpty()) return
 
+        try {
+            val untilMs = nowMs + 6000L
+            val prefs = appContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean("flutter.skip_auto_redirect_once", true)
+                .putLong("flutter.auto_open_block_until_ms", untilMs)
+                .apply()
+            sendBtDebug("auto_open", "set_block untilMs=$untilMs id='$id'")
+        } catch (_: Throwable) {
+        }
+
         val km = appContext.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         val pm = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val isKeyguardLocked = try { km?.isKeyguardLocked == true } catch (_: Throwable) { false }
@@ -417,7 +658,7 @@ class LocalNotificationManager(private val context: Context) {
             if (wakeEnabled && !isInteractive) {
                 sendBtDebug("wake_screen", "secure_lock wake requested id='$id'")
                 Handler(Looper.getMainLooper()).postDelayed({
-                    wakeUpScreenConservative()
+                    wakeUpScreenConservative(false)
                 }, 80L)
             }
             return
@@ -453,7 +694,7 @@ class LocalNotificationManager(private val context: Context) {
             if (!isInteractive) {
                 sendBtDebug("wake_screen", "requested id='$id' willWake=true")
                 Handler(Looper.getMainLooper()).postDelayed({
-                    wakeUpScreenConservative()
+                    wakeUpScreenConservative(false)
                 }, 80L)
             } else {
                 sendBtDebug("wake_screen", "requested id='$id' willWake=false reason=interactive")
@@ -464,12 +705,31 @@ class LocalNotificationManager(private val context: Context) {
     }
 
     private fun buildIntentFromExtras(extrasObj: JSONObject, action: String): Intent {
-        return Intent(appContext, MainActivity::class.java).apply {
+        val fromBackground = extrasObj.optBoolean("fromBackground", true)
+        val isAutoOpen = action == NOTIFICATION_ACTION_AUTO_OPEN
+        val targetClass = if (action == NOTIFICATION_ACTION_AUTO_OPEN) {
+            AutoOpenConversationActivity::class.java
+        } else {
+            MainActivity::class.java
+        }
+        try {
+            val fb = isFloatingBallEnabled()
+            sendBtDebug(
+                "auto_open",
+                "build_intent action='$action' target='${targetClass.simpleName}' fromBg=$fromBackground fbPref=$fb"
+            )
+        } catch (_: Throwable) {
+        }
+
+        return Intent(appContext, targetClass).apply {
             this.action = action
-            val baseFlags =
-                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             val wakeEnabled = extrasObj.optBoolean("screenWakeEnabled", false)
-            flags = if (wakeEnabled) {
+            val baseFlags = if (isAutoOpen) {
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            } else {
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            flags = if (!isAutoOpen && wakeEnabled) {
                 baseFlags or Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             } else {
                 baseFlags
@@ -480,9 +740,18 @@ class LocalNotificationManager(private val context: Context) {
             putExtra("packageName", extrasObj.optString("packageName", ""))
             putExtra("appName", extrasObj.optString("appName", ""))
             putExtra("autoOpen", extrasObj.optBoolean("autoOpen", true))
-            putExtra("fromBackground", extrasObj.optBoolean("fromBackground", true))
+            putExtra("fromBackground", fromBackground)
             putExtra("timestamp", try { extrasObj.optLong("timestamp", System.currentTimeMillis()) } catch (_: Throwable) { System.currentTimeMillis() })
             putExtra("screenWakeEnabled", extrasObj.optBoolean("screenWakeEnabled", false))
+        }
+    }
+
+    private fun isFloatingBallEnabled(): Boolean {
+        return try {
+            val prefs = appContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            prefs.getBoolean("flutter.floating_ball_enabled", false)
+        } catch (_: Throwable) {
+            false
         }
     }
 
@@ -554,9 +823,9 @@ class LocalNotificationManager(private val context: Context) {
         }
     }
 
-    private fun wakeUpScreenConservative() {
+    private fun wakeUpScreenConservative(allowActivityLaunch: Boolean = true) {
         try {
-            println("[local_notification] wakeUpScreenConservative start sdk=${Build.VERSION.SDK_INT}")
+            println("[local_notification] wakeUpScreenConservative start sdk=${Build.VERSION.SDK_INT} allowActivityLaunch=$allowActivityLaunch")
             val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
             val isInteractive = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
                 pm.isInteractive
@@ -567,6 +836,11 @@ class LocalNotificationManager(private val context: Context) {
             if (isInteractive) return
 
             if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
+                if (!allowActivityLaunch) {
+                    sendBtDebug("wake_screen", "wakeUpScreenConservative android8 noActivity")
+                    wakeScreenOnce()
+                    return
+                }
                 sendBtDebug("wake_screen", "wakeUpScreenConservative android8 start")
                 println("[local_notification] wakeUpScreenConservative android8 path")
                 @Suppress("DEPRECATION")
@@ -669,6 +943,7 @@ class LocalNotificationManager(private val context: Context) {
         private const val KEY_AUTO_OPEN_ENABLED = "flutter.autoOpenEnabled"
         private const val KEY_SOUND_ENABLED = "flutter.soundEnabled"
         private const val KEY_PENDING_AUTO_OPEN_JSON = "flutter.pendingAutoOpenJson"
+        private const val KEY_GROUP_KEY_PREFIX = "flutter.groupKeyForId."
 
         private const val CHANNEL_ID = "receptor_notifications_channel"
         private const val CHANNEL_NAME = "Notificaciones del Receptor"
@@ -680,10 +955,66 @@ class LocalNotificationManager(private val context: Context) {
         const val EXTRA_NOTIFICATION_DATA = "notification_id"
 
         private val cancelledNotifications = Collections.synchronizedSet(mutableSetOf<String>())
+        private val programmaticCancelledNotifications =
+            Collections.synchronizedSet(mutableSetOf<String>())
+        private val groupStates =
+            Collections.synchronizedMap(mutableMapOf<String, GroupState>())
+        private val idToGroupKey =
+            Collections.synchronizedMap(mutableMapOf<String, String>())
         @Volatile private var lastAutoOpenAtMs: Long = 0L
         @Volatile private var autoOpenScheduled: Boolean = false
         @Volatile private var pendingAutoOpenJson: String? = null
         @Volatile private var unlockReceiverRegistered: Boolean = false
+
+        private data class GroupState(
+            var lastId: String,
+            var lastBody: String,
+            var prevBody: String?,
+            var updatedAtMs: Long
+        )
+
+        private fun buildGroupKey(packageName: String, title: String): String {
+            val pkg = packageName.trim()
+            val t = title.trim()
+            return (pkg + "|" + t).lowercase()
+        }
+
+        private fun updateGroupState(
+            groupKey: String,
+            id: String,
+            body: String,
+            nowMs: Long
+        ): GroupState {
+            val trimmedBody = body.trim()
+            val current = groupStates[groupKey]
+            if (current == null) {
+                val gs = GroupState(
+                    lastId = id,
+                    lastBody = trimmedBody,
+                    prevBody = null,
+                    updatedAtMs = nowMs
+                )
+                groupStates[groupKey] = gs
+                idToGroupKey[id] = groupKey
+                return gs
+            }
+
+            if (trimmedBody.isNotEmpty() && trimmedBody != current.lastBody) {
+                current.prevBody = current.lastBody
+                current.lastBody = trimmedBody
+            }
+            current.lastId = id
+            current.updatedAtMs = nowMs
+            idToGroupKey[id] = groupKey
+            return current
+        }
+
+        private fun buildGroupedBodyText(prevBody: String?, lastBody: String): String {
+            val last = lastBody.trim()
+            val prev = prevBody?.trim().orEmpty()
+            if (prev.isEmpty() || prev == last) return last
+            return prev + "\n" + last
+        }
 
         fun addToCancelledNotifications(notificationId: String) {
             if (notificationId.isBlank()) return
@@ -691,9 +1022,19 @@ class LocalNotificationManager(private val context: Context) {
             println("[local_notification] add_cancelled id=$notificationId size=${cancelledNotifications.size}")
         }
 
+        fun consumeProgrammaticCancel(notificationId: String): Boolean {
+            if (notificationId.isBlank()) return false
+            return programmaticCancelledNotifications.remove(notificationId)
+        }
+
         fun clearCancelledNotifications() {
             cancelledNotifications.clear()
             println("[local_notification] clear_cancelled")
+        }
+
+        private fun markProgrammaticCancel(notificationId: String) {
+            if (notificationId.isBlank()) return
+            programmaticCancelledNotifications.add(notificationId)
         }
 
         private fun isCancelled(notificationId: String): Boolean {

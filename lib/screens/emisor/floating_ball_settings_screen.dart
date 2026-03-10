@@ -149,6 +149,7 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
     }
     await FloatingBallService.setSelectedApps(_selectedApps);
     await FloatingBallService.setFullScreenEnabled(true);
+    await FloatingBallService.setFullScreenConversationEnabled(true);
     await FloatingBallService.enableAndStart();
     await _loadState();
     if (mounted) {

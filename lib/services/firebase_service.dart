@@ -12,7 +12,69 @@ class FirebaseService {
   static const String _recentNotificationHashesKey = 'recent_notification_hashes_v1';
   static const int _recentNotificationMaxEntries = 2000;
   static const int _recentNotificationTtlMs = 24 * 60 * 60 * 1000;
+  static const String _notificationsCollectionV2 = 'notificaciones_v2';
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  bool _isFirestoreDocSizeLimitError(Object e) {
+    if (e is FirebaseException) {
+      final code = e.code.toLowerCase();
+      final message = (e.message ?? '').toLowerCase();
+      if (code.contains('invalid-argument') &&
+          message.contains('exceeds') &&
+          message.contains('maximum allowed size')) {
+        return true;
+      }
+    }
+    final msg = e.toString().toLowerCase();
+    return msg.contains('exceeds the maximum allowed size');
+  }
+
+  Map<String, dynamic> _sanitizeNotificationForFirestore(
+    Map<String, dynamic> notification,
+  ) {
+    final sanitized = Map<String, dynamic>.from(notification);
+    void removeLargeKeys(Map<String, dynamic> m) {
+      m.remove('icon');
+      m.remove('appIcon');
+      m.remove('largeIcon');
+      m.remove('smallIcon');
+      m.remove('picture');
+      m.remove('image');
+      m.remove('bitmap');
+    }
+
+    removeLargeKeys(sanitized);
+    final extras = sanitized['extras'];
+    if (extras is Map) {
+      final em = Map<String, dynamic>.from(extras);
+      removeLargeKeys(em);
+      sanitized['extras'] = em;
+    }
+    return sanitized;
+  }
+
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _getDayDocsByPrefix(
+    CollectionReference<Map<String, dynamic>> colRef,
+    String dateId,
+  ) async {
+    final snap = await colRef
+        .where(FieldPath.documentId, isGreaterThanOrEqualTo: dateId)
+        .where(FieldPath.documentId, isLessThan: '$dateId\uf8ff')
+        .get();
+    return snap.docs;
+  }
+
+  Future<void> _ensureDayDocMeta(
+    DocumentReference<Map<String, dynamic>> docRef,
+    DateTime day,
+  ) async {
+    final doc = await docRef.get();
+    if (!doc.exists) {
+      await docRef.set({
+        'fecha': Timestamp.fromDate(DateTime(day.year, day.month, day.day)),
+      });
+    }
+  }
 
   // Método para obtener o generar el ID del dispositivo
   Future<String> getDeviceId() async {
@@ -32,35 +94,13 @@ class FirebaseService {
   Future<void> deleteNotification(String notificationId, String dateId) async {
     final deviceId = await getDeviceId();
 
-    // Referencia al documento que contiene la notificación
-    final dayDocRef = _firestore
-        .collection('dispositivos')
-        .doc(deviceId)
-        .collection('notificaciones')
-        .doc(dateId);
-
     try {
-      // Eliminar la notificación específica usando FieldValue.delete()
-      await dayDocRef.update({
-        'notificaciones.$notificationId': FieldValue.delete(),
-      });
-
-      // print('Notificación eliminada: $notificationId');
-
-      // Verificar si quedan notificaciones en el documento
-      final docSnapshot = await dayDocRef.get();
-      final data = docSnapshot.data();
-
-      if (data != null && data.containsKey('notificaciones')) {
-        final Map<String, dynamic> notificationsMap =
-            data['notificaciones'] as Map<String, dynamic>;
-
-        // Si no quedan notificaciones, eliminar el documento del día
-        if (notificationsMap.isEmpty) {
-          await dayDocRef.delete();
-          // print('Documento del día eliminado: $dateId (sin notificaciones)');
-        }
-      }
+      await _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection(_notificationsCollectionV2)
+          .doc(notificationId)
+          .delete();
     } catch (e) {
       // print('Error al eliminar notificación: $e');
     }
@@ -236,6 +276,35 @@ class FirebaseService {
     } catch (_) {
       return [];
     }
+  }
+
+  Future<void> updateConversationEnabledPackagesForDeviceId(
+    String deviceId,
+    List<String> packages,
+  ) async {
+    final id = deviceId.trim();
+    if (id.isEmpty) return;
+    final docRef = _firestore.collection('dispositivos').doc(id);
+
+    final cleaned = packages
+        .map((e) => e.toString().trim())
+        .where((e) => e.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
+    await docRef.set(
+      {
+        'conversation-enabled-packages': cleaned,
+        'ultima-actualizacion': FieldValue.arrayUnion([
+          {
+            'fecha': Timestamp.now(),
+            'tipo-actualizacion': 'conversation-enabled-packages',
+          },
+        ]),
+      },
+      SetOptions(merge: true),
+    );
   }
 
   // Obtiene el estado de guardado
@@ -686,92 +755,56 @@ class FirebaseService {
 
   // Guarda una notificación en Firebase
   Future<void> saveNotification(Map<String, dynamic> notification) async {
-    // Verificar si la notificación debe ser filtrada
-    if (await _shouldFilterNotification(notification)) {
-      // print('Notificación filtrada, no se guardará en Firebase');
+    final sanitized = _sanitizeNotificationForFirestore(notification);
+    final filteredByRules = await _shouldFilterNotification(sanitized);
+    if (filteredByRules) {
+      print("[emisor][firebase] saveNotification drop filtered");
       return;
     }
 
-    // Verificar si es una notificación duplicada
-    if (await _isDuplicateNotification(notification)) {
-      // print('Notificación duplicada, no se guardará en Firebase');
+    final duplicatedByCache = await _isDuplicateNotification(sanitized);
+    if (duplicatedByCache) {
+      print("[emisor][firebase] saveNotification drop duplicate_cache");
       return;
     }
 
     final deviceId = await getDeviceId();
-    final stableKey = _extractStableSbnKey(notification);
-    final signatureId = _generateStableSignatureId(notification);
-    if (stableKey.isNotEmpty && (notification['sbnKey'] ?? '').toString().trim().isEmpty) {
-      notification['sbnKey'] = stableKey;
+    final stableKey = _extractStableSbnKey(sanitized);
+    final signatureId = _generateStableSignatureId(sanitized);
+    if (stableKey.isNotEmpty &&
+        (sanitized['sbnKey'] ?? '').toString().trim().isEmpty) {
+      sanitized['sbnKey'] = stableKey;
     }
     if (signatureId.isNotEmpty &&
-        (notification['signatureId'] ?? '').toString().trim().isEmpty) {
-      notification['signatureId'] = signatureId;
+        (sanitized['signatureId'] ?? '').toString().trim().isEmpty) {
+      sanitized['signatureId'] = signatureId;
     }
-    final notificationData = NotificationData.fromNotificationMap(notification);
+    final notificationData = NotificationData.fromNotificationMap(sanitized);
 
-    // Obtener la fecha actual en formato YYYY-MM-DD para usar como ID del documento
-    final DateTime now = DateTime.now();
-    final String dateId =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final id = notificationData.id;
+    final stableKeyShort = stableKey.length > 40 ? stableKey.substring(0, 40) : stableKey;
+    final signatureShort = signatureId.length > 40 ? signatureId.substring(0, 40) : signatureId;
+    print("[emisor][firebase] saveNotification start id='$id' filtered=$filteredByRules duplicated=$duplicatedByCache stableKey='$stableKeyShort' sig='$signatureShort'");
 
-    // Referencia al documento que agrupa las notificaciones del día
-    final dayDocRef = _firestore
+    final ref = _firestore
         .collection('dispositivos')
         .doc(deviceId)
-        .collection('notificaciones')
-        .doc(dateId);
+        .collection(_notificationsCollectionV2)
+        .doc(notificationData.id);
 
-    // Verificar si necesitamos crear el documento del día
-    final dayDoc = await dayDocRef.get();
-    if (!dayDoc.exists) {
-      await dayDocRef.set({
-        'fecha': Timestamp.fromDate(DateTime(now.year, now.month, now.day)),
-      });
-    } else {
-      try {
-        final data = dayDoc.data();
-        if (data != null && data.containsKey('notificaciones')) {
-          final existing = Map<String, dynamic>.from(data['notificaciones'] as Map);
-
-          String clean(dynamic v) {
-            final raw = (v ?? '').toString().trim();
-            final lower = raw.toLowerCase();
-            if (lower == 'null' || lower == 'undefined') return '';
-            return raw;
-          }
-
-          for (final entry in existing.values) {
-            if (entry is! Map) continue;
-            final m = Map<String, dynamic>.from(entry);
-            final extras = m['extras'];
-            Map<String, dynamic>? em;
-            if (extras is Map) em = Map<String, dynamic>.from(extras);
-
-            final existingKey = clean(m['sbnKey']);
-            final nestedKey = em == null ? '' : clean(em['sbnKey']);
-            final keyToCompare = existingKey.isNotEmpty ? existingKey : nestedKey;
-            if (stableKey.isNotEmpty && keyToCompare == stableKey) {
-              return;
-            }
-
-            final existingSig = clean(m['signatureId']);
-            final nestedSig = em == null ? '' : clean(em['signatureId']);
-            final sigToCompare = existingSig.isNotEmpty ? existingSig : nestedSig;
-            if (signatureId.isNotEmpty && sigToCompare == signatureId) {
-              return;
-            }
-          }
-        }
-      } catch (_) {}
+    try {
+      await ref.set(notificationData.toMap());
+      print("[emisor][firebase] saveNotification done id='${notificationData.id}' docId='${ref.id}'");
+      return;
+    } catch (e) {
+      if (!_isFirestoreDocSizeLimitError(e)) rethrow;
+      final trimmed = notificationData.toMap();
+      trimmed['extras'] = <String, dynamic>{};
+      trimmed['extras_truncated'] = true;
+      await ref.set(trimmed);
+      print("[emisor][firebase] saveNotification done id='${notificationData.id}' docId='${ref.id}' extras_truncated=true");
+      return;
     }
-
-    // Guardar la notificación como un campo en el documento del día
-    await dayDocRef.update({
-      'notificaciones.${notificationData.id}': notificationData.toMap(),
-    });
-
-    // print('Notificación guardada con ID: ${notificationData.id}');
   }
 
   // Actualiza el estado de visualización de una notificación
@@ -782,17 +815,13 @@ class FirebaseService {
   ) async {
     final deviceId = await getDeviceId();
 
-    // Referencia al documento que contiene la notificación
-    final dayDocRef = _firestore
+    final docRef = _firestore
         .collection('dispositivos')
         .doc(deviceId)
-        .collection('notificaciones')
-        .doc(dateId);
+        .collection(_notificationsCollectionV2)
+        .doc(notificationId);
 
-    // Actualizar solo el campo de estado de visualización
-    await dayDocRef.update({
-      'notificaciones.$notificationId.status-visualizacion': visualizado,
-    });
+    await docRef.update({'status-visualizacion': visualizado});
 
     // print(      'Estado de visualización actualizado para notificación $notificationId: $visualizado',    );
   }
@@ -803,29 +832,14 @@ class FirebaseService {
     String dateId,
     bool visualizado,
   ) async {
-    final dayDocRef = _firestore
-        .collection('dispositivos')
-        .doc(deviceId)
-        .collection('notificaciones')
-        .doc(dateId);
-
     try {
-      final dayDoc = await dayDocRef.get();
-      if (!dayDoc.exists) {
-        final parts = dateId.split('-');
-        final int? year = parts.isNotEmpty ? int.tryParse(parts[0]) : null;
-        final int? month = parts.length >= 2 ? int.tryParse(parts[1]) : null;
-        final int? day = parts.length >= 3 ? int.tryParse(parts[2]) : null;
+      final docRef = _firestore
+          .collection('dispositivos')
+          .doc(deviceId)
+          .collection(_notificationsCollectionV2)
+          .doc(notificationId);
 
-        await dayDocRef.set({
-          if (year != null && month != null && day != null)
-            'fecha': Timestamp.fromDate(DateTime(year, month, day)),
-        });
-      }
-
-      await dayDocRef.update({
-        'notificaciones.$notificationId.status-visualizacion': visualizado,
-      });
+      await docRef.update({'status-visualizacion': visualizado});
       return true;
     } catch (_) {
       return false;
@@ -838,45 +852,26 @@ class FirebaseService {
     final List<NotificationData> allNotifications = [];
 
     try {
-      // Obtener todos los documentos de la colección de notificaciones
       final querySnapshot = await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
+          .collection(_notificationsCollectionV2)
+          .orderBy('timestamp', descending: true)
           .get();
 
-      // Iterar sobre cada documento (cada día)
-      for (final dayDoc in querySnapshot.docs) {
-        final data = dayDoc.data();
-        if (data.containsKey('notificaciones')) {
-          // Convertir el mapa de notificaciones a una lista de NotificationData
-          final Map<String, dynamic> notificationsMap =
-              data['notificaciones'] as Map<String, dynamic>;
-
-          notificationsMap.forEach((notificationId, notificationData) {
-            try {
-              if (notificationData == null ||
-                  notificationData is! Map<String, dynamic>) {
-                return;
-              }
-
-              final Map<String, dynamic> notificationDataMap =
-                  Map<String, dynamic>.from(notificationData);
-              notificationDataMap['dateId'] = dayDoc.id;
-
-              if (notificationDataMap.containsKey('timestamp') &&
-                  notificationDataMap['timestamp'] is Timestamp) {
-                allNotifications.add(
-                  NotificationData.fromMap(notificationDataMap),
-                );
-              }
-            } catch (_) {}
-          });
-        }
+      for (final notifDoc in querySnapshot.docs) {
+        try {
+          final notificationDataMap =
+              Map<String, dynamic>.from(notifDoc.data());
+          if ((notificationDataMap['id'] ?? '').toString().trim().isEmpty) {
+            notificationDataMap['id'] = notifDoc.id;
+          }
+          if (notificationDataMap.containsKey('timestamp') &&
+              notificationDataMap['timestamp'] is Timestamp) {
+            allNotifications.add(NotificationData.fromMap(notificationDataMap));
+          }
+        } catch (_) {}
       }
-
-      // Ordenar las notificaciones por fecha, más recientes primero
-      allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       // // print('Notificaciones procesadas correctamente: ${allNotifications.length}');
       return allNotifications;

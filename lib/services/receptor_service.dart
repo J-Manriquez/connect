@@ -2,17 +2,56 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/models/notification_data.dart';
-import 'package:connect/services/ble_service.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/services/notification_cache_service.dart';
 import 'package:connect/services/notification_filters_config_service.dart';
+import 'package:connect/services/notification_settings_service.dart';
+import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+const MethodChannel _btHiveBridgeChannel =
+    MethodChannel('com.example.connect/bt_hive_bridge');
+
+Future<void> _btHiveDebug(String source, String message) async {
+  final ts = DateTime.now().millisecondsSinceEpoch;
+  print('[bt_hive][$source][$ts] $message');
+  try {
+    await _btHiveBridgeChannel.invokeMethod('sendDebugLog', {
+      'source': source,
+      'message': message,
+    });
+  } catch (_) {}
+}
 
 class ReceptorService {
   final FirebaseService _firebaseService = FirebaseService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  static const String _notificationsCollectionV2 = 'notificaciones_v2';
+  final NotificationSettingsService _notificationSettingsService =
+      NotificationSettingsService();
+
+  Future<List<Map<String, dynamic>>> _removeBlockedNotifications(
+    List<Map<String, dynamic>> notifications,
+  ) async {
+    try {
+      final settings =
+          await _notificationSettingsService.getAllNotificationSettings();
+      final blocked = settings.where((s) => s.bloqueado).toList();
+      if (blocked.isEmpty) return notifications;
+
+      final filtered = <Map<String, dynamic>>[];
+      for (final n in notifications) {
+        final isBlocked = blocked.any((s) => s.matchesNotification(n));
+        if (!isBlocked) filtered.add(n);
+      }
+      return filtered;
+    } catch (_) {
+      return notifications;
+    }
+  }
 
   // Clave para almacenar el ID del dispositivo emisor vinculado
   static const String keyLinkedDeviceId = 'linked_device_id';
@@ -83,7 +122,6 @@ class ReceptorService {
     String notificationId,
     bool visualizado,
   ) async {
-    String? dateId;
     String? deviceId;
     try {
       deviceId = await getLinkedDeviceId();
@@ -92,29 +130,12 @@ class ReceptorService {
         return;
       }
 
-      final uniqueId = notificationId;
-      final int millisecondsSinceEpoch = int.parse(uniqueId);
-      // print('Milisegundos (int): $millisecondsSinceEpoch');
-
-      final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
-        millisecondsSinceEpoch,
-      );
-      // print('Objeto DateTime: $dateTimeObject');
-
-      final String year = dateTimeObject.year.toString();
-      final String month = dateTimeObject.month.toString().padLeft(2, '0');
-      final String day = dateTimeObject.day.toString().padLeft(2, '0');
-
-      dateId = '$year-$month-$day';
-      final docRef = _firestore
+      await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
-          .doc(dateId);
-
-      await docRef.update({
-        'notificaciones.$notificationId.status-visualizacion': visualizado,
-      });
+          .collection(_notificationsCollectionV2)
+          .doc(notificationId)
+          .update({'status-visualizacion': visualizado});
       // print(        'Estado de visualización actualizado para notificación $notificationId: $visualizado',      );
     } catch (e) {
       try {
@@ -123,11 +144,11 @@ class ReceptorService {
         if (deviceId == null || deviceId.isEmpty) {
           deviceId = await getLinkedDeviceId();
         }
-        if (dateId == null || dateId.isEmpty) {
-          final int millisecondsSinceEpoch = int.parse(notificationId);
-          final DateTime dateTimeObject = DateTime.fromMillisecondsSinceEpoch(
-            millisecondsSinceEpoch,
-          );
+        String dateId = '';
+        final millisecondsSinceEpoch = int.tryParse(notificationId);
+        if (millisecondsSinceEpoch != null) {
+          final DateTime dateTimeObject =
+              DateTime.fromMillisecondsSinceEpoch(millisecondsSinceEpoch);
           final String year = dateTimeObject.year.toString();
           final String month = dateTimeObject.month.toString().padLeft(2, '0');
           final String day = dateTimeObject.day.toString().padLeft(2, '0');
@@ -135,16 +156,16 @@ class ReceptorService {
         }
 
         final resolvedDeviceId = (deviceId ?? '').trim();
-        final resolvedDateId = dateId.trim();
-        if (resolvedDeviceId.isEmpty || resolvedDateId.isEmpty) return;
+        if (resolvedDeviceId.isEmpty) return;
 
         final hasInternet = await _hasInternetConnection();
         if (hasInternet) return;
 
-        await BleService.sendBtServerMessage({
+        await const MethodChannel('com.example.connect/ble')
+            .invokeMethod('sendBtServerMessage', {
           'type': 'visualization_update',
           'notificationId': notificationId,
-          'dateId': resolvedDateId,
+          'dateId': dateId,
           'visualizado': true,
           'deviceId': resolvedDeviceId,
         });
@@ -206,27 +227,20 @@ class ReceptorService {
       final colRef = _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones');
+          .collection(_notificationsCollectionV2);
 
-      yield* colRef.snapshots().asyncMap((snapshot) async {
+      yield* colRef.orderBy('timestamp', descending: true).snapshots().asyncMap((snapshot) async {
         final List<Map<String, dynamic>> notificationsList = [];
 
-        for (final dayDoc in snapshot.docs) {
-          final data = dayDoc.data();
-          final raw = data['notificaciones'];
-          if (raw is! Map) continue;
-
-          for (final entry in raw.entries) {
-            final notificationId = entry.key?.toString() ?? '';
-            if (notificationId.trim().isEmpty) continue;
-            final value = entry.value;
-            if (value is! Map) continue;
-
-            final notif = Map<String, dynamic>.from(value);
-            notif['notificationId'] = notificationId;
-            notif['dateId'] = dayDoc.id;
-            notificationsList.add(notif);
+        for (final notifDoc in snapshot.docs) {
+          final data = notifDoc.data();
+          final notif = Map<String, dynamic>.from(data);
+          notif['notificationId'] = notifDoc.id;
+          final existingId = (notif['id'] ?? '').toString().trim();
+          if (existingId.isEmpty) {
+            notif['id'] = notifDoc.id;
           }
+          notificationsList.add(notif);
         }
 
         notificationsList.sort((a, b) {
@@ -237,14 +251,16 @@ class ReceptorService {
           return tb.compareTo(ta);
         });
 
+        final withoutBlocked = await _removeBlockedNotifications(notificationsList);
+
         try {
-          await BtHiveStorageService.cacheFirebaseNotifications(notificationsList);
+          await BtHiveStorageService.cacheFirebaseNotifications(withoutBlocked);
         } catch (_) {}
 
         final filtered = <Map<String, dynamic>>[];
         final seenStableKeys = <String>{};
         final seenSignatureIds = <String>{};
-        for (final n in notificationsList) {
+        for (final n in withoutBlocked) {
           final ts = n['timestamp'];
           if (ts is! Timestamp) continue;
           if (await _shouldFilterNotification(n)) continue;
@@ -277,26 +293,19 @@ class ReceptorService {
       final querySnapshot = await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
+          .collection(_notificationsCollectionV2)
+          .orderBy('timestamp', descending: true)
           .get();
 
       final List<Map<String, dynamic>> notificationsList = [];
-      for (final dayDoc in querySnapshot.docs) {
-        final data = dayDoc.data();
-        final raw = data['notificaciones'];
-        if (raw is! Map) continue;
-
-        for (final entry in raw.entries) {
-          final notificationId = entry.key?.toString() ?? '';
-          if (notificationId.trim().isEmpty) continue;
-          final value = entry.value;
-          if (value is! Map) continue;
-
-          final notif = Map<String, dynamic>.from(value);
-          notif['notificationId'] = notificationId;
-          notif['dateId'] = dayDoc.id;
-          notificationsList.add(notif);
+      for (final notifDoc in querySnapshot.docs) {
+        final notif = Map<String, dynamic>.from(notifDoc.data());
+        notif['notificationId'] = notifDoc.id;
+        final existingId = (notif['id'] ?? '').toString().trim();
+        if (existingId.isEmpty) {
+          notif['id'] = notifDoc.id;
         }
+        notificationsList.add(notif);
       }
 
       notificationsList.sort((a, b) {
@@ -307,14 +316,16 @@ class ReceptorService {
         return tb.compareTo(ta);
       });
 
+      final withoutBlocked = await _removeBlockedNotifications(notificationsList);
+
       try {
-        await BtHiveStorageService.cacheFirebaseNotifications(notificationsList);
+        await BtHiveStorageService.cacheFirebaseNotifications(withoutBlocked);
       } catch (_) {}
 
       final filtered = <Map<String, dynamic>>[];
       final seenStableKeys = <String>{};
       final seenSignatureIds = <String>{};
-      for (final n in notificationsList) {
+      for (final n in withoutBlocked) {
         final ts = n['timestamp'];
         if (ts is! Timestamp) continue;
         if (await _shouldFilterNotification(n)) continue;
@@ -346,26 +357,19 @@ class ReceptorService {
       final querySnapshot = await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
+          .collection(_notificationsCollectionV2)
+          .orderBy('timestamp', descending: true)
           .get();
 
       final List<Map<String, dynamic>> notificationsList = [];
-      for (final dayDoc in querySnapshot.docs) {
-        final data = dayDoc.data();
-        final raw = data['notificaciones'];
-        if (raw is! Map) continue;
-
-        for (final entry in raw.entries) {
-          final notificationId = entry.key?.toString() ?? '';
-          if (notificationId.trim().isEmpty) continue;
-          final value = entry.value;
-          if (value is! Map) continue;
-
-          final notif = Map<String, dynamic>.from(value);
-          notif['notificationId'] = notificationId;
-          notif['dateId'] = dayDoc.id;
-          notificationsList.add(notif);
+      for (final notifDoc in querySnapshot.docs) {
+        final notif = Map<String, dynamic>.from(notifDoc.data());
+        notif['notificationId'] = notifDoc.id;
+        final existingId = (notif['id'] ?? '').toString().trim();
+        if (existingId.isEmpty) {
+          notif['id'] = notifDoc.id;
         }
+        notificationsList.add(notif);
       }
 
       notificationsList.sort((a, b) {
@@ -377,10 +381,11 @@ class ReceptorService {
       });
 
       try {
-        await BtHiveStorageService.cacheFirebaseNotifications(notificationsList);
+        final withoutBlocked = await _removeBlockedNotifications(notificationsList);
+        await BtHiveStorageService.cacheFirebaseNotifications(withoutBlocked);
       } catch (_) {}
 
-      return notificationsList;
+      return await _removeBlockedNotifications(notificationsList);
     } catch (_) {
       return const [];
     }
@@ -395,39 +400,23 @@ class ReceptorService {
       final querySnapshot = await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
+          .collection(_notificationsCollectionV2)
+          .orderBy('timestamp', descending: true)
           .get();
 
-      for (final dayDoc in querySnapshot.docs) {
-        final data = dayDoc.data();
-        if (data.containsKey('notificaciones')) {
-          final Map<String, dynamic> notificationsMap =
-              data['notificaciones'] as Map<String, dynamic>;
-
-          notificationsMap.forEach((notificationId, notificationData) {
-            try {
-              if (notificationData != null &&
-                  notificationData is Map<String, dynamic>) {
-                final Map<String, dynamic> notificationDataMap =
-                    Map<String, dynamic>.from(notificationData);
-                notificationDataMap['dateId'] = dayDoc.id;
-
-                if (notificationDataMap.containsKey('timestamp') &&
-                    notificationDataMap['timestamp'] is Timestamp) {
-                  allNotifications.add(
-                    NotificationData.fromMap(notificationDataMap),
-                  );
-                }
-              } else {
-              }
-            } catch (e) {
-              // print('Error al procesar notificación $notificationId: $e');
-            }
-          });
-        }
+      for (final notifDoc in querySnapshot.docs) {
+        try {
+          final notificationDataMap =
+              Map<String, dynamic>.from(notifDoc.data());
+          if ((notificationDataMap['id'] ?? '').toString().trim().isEmpty) {
+            notificationDataMap['id'] = notifDoc.id;
+          }
+          if (notificationDataMap.containsKey('timestamp') &&
+              notificationDataMap['timestamp'] is Timestamp) {
+            allNotifications.add(NotificationData.fromMap(notificationDataMap));
+          }
+        } catch (_) {}
       }
-
-      allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       return allNotifications;
     } catch (e) {
@@ -444,33 +433,23 @@ class ReceptorService {
       final querySnapshot = await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
+          .collection(_notificationsCollectionV2)
+          .orderBy('timestamp', descending: true)
           .get();
 
       final List<Map<String, dynamic>> all = [];
-      for (final dayDoc in querySnapshot.docs) {
-        final data = dayDoc.data();
-        final raw = data['notificaciones'];
-        if (raw is! Map) continue;
-
-        for (final entry in raw.entries) {
-          final notificationId = entry.key?.toString() ?? '';
-          if (notificationId.trim().isEmpty) continue;
-
-          final value = entry.value;
-          if (value is! Map) continue;
-
-          final notif = Map<String, dynamic>.from(value);
-          notif['notificationId'] = notificationId;
-          final existingId = (notif['id'] ?? '').toString().trim();
-          if (existingId.isEmpty) {
-            notif['id'] = notificationId;
-          }
-          all.add(notif);
+      for (final notifDoc in querySnapshot.docs) {
+        final notif = Map<String, dynamic>.from(notifDoc.data());
+        notif['notificationId'] = notifDoc.id;
+        final existingId = (notif['id'] ?? '').toString().trim();
+        if (existingId.isEmpty) {
+          notif['id'] = notifDoc.id;
         }
+        all.add(notif);
       }
 
-      await BtHiveStorageService.cacheFirebaseNotifications(all);
+      final withoutBlocked = await _removeBlockedNotifications(all);
+      await BtHiveStorageService.cacheFirebaseNotifications(withoutBlocked);
     } catch (_) {}
   }
 
@@ -500,52 +479,33 @@ class ReceptorService {
         // print('ReceptorService: Período inicial completado, ahora mostrando notificaciones nuevas');
       });
 
-      final DateTime now = DateTime.now();
-      final String dateId =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-
-      final dayDocRef = _firestore
+      final colRef = _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
-          .doc(dateId);
+          .collection(_notificationsCollectionV2)
+          .orderBy('timestamp', descending: true)
+          .limit(200);
 
-      yield* dayDocRef.snapshots().asyncMap((snapshot) async {
-        if (!snapshot.exists ||
-            !snapshot.data()!.containsKey('notificaciones')) {
-          return <Map<String, dynamic>>[];
+      yield* colRef.snapshots().asyncMap((snapshot) async {
+        final List<Map<String, dynamic>> notificationsList = [];
+        for (final doc in snapshot.docs) {
+          final notif = Map<String, dynamic>.from(doc.data());
+          notif['notificationId'] = doc.id;
+          final existingId = (notif['id'] ?? '').toString().trim();
+          if (existingId.isEmpty) {
+            notif['id'] = doc.id;
+          }
+          if (notif['timestamp'] is Timestamp) {
+            notificationsList.add(notif);
+          }
         }
 
-        final Map<String, dynamic> notificationsMap =
-            snapshot.data()!['notificaciones'] as Map<String, dynamic>;
-
-        final List<Map<String, dynamic>> notificationsList = notificationsMap
-            .entries
-            .map((entry) {
-              final notif = Map<String, dynamic>.from(entry.value as Map);
-              notif['notificationId'] =
-                  entry.key; // Agregar el ID de la notificación
-
-              if (notif['timestamp'] is Timestamp) {
-                return notif;
-              } else {
-                return null;
-              }
-            })
-            .where((notif) => notif != null)
-            .cast<Map<String, dynamic>>()
-            .toList();
-
-        notificationsList.sort((a, b) {
-          final DateTime timeA = (a['timestamp'] as Timestamp).toDate();
-          final DateTime timeB = (b['timestamp'] as Timestamp).toDate();
-          return timeB.compareTo(timeA);
-        });
+        final withoutBlocked = await _removeBlockedNotifications(notificationsList);
 
         final filtered = <Map<String, dynamic>>[];
         final seenStableKeys = <String>{};
         final seenSignatureIds = <String>{};
-        for (final n in notificationsList) {
+        for (final n in withoutBlocked) {
           if (await _shouldFilterNotification(n)) continue;
           final stableKey = _extractStableSbnKey(n);
           final signatureId = _extractStoredSignatureId(n).isNotEmpty
@@ -627,22 +587,14 @@ class ReceptorService {
       final snapshot = await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
+          .collection(_notificationsCollectionV2)
           .get();
       
       Set<String> allExistingIds = {};
-      
-      for (var dayDoc in snapshot.docs) {
-        final data = dayDoc.data();
-        if (data.containsKey('notificaciones')) {
-          final notificationsMap = Map<String, dynamic>.from(data['notificaciones']);
-          final notificationIds = notificationsMap.keys.toSet();
-          
-          // Almacenar IDs conocidos por fecha
-          _lastKnownNotificationIds[dayDoc.id] = notificationIds;
-          allExistingIds.addAll(notificationIds);
-        }
-      }
+
+      final ids = snapshot.docs.map((d) => d.id).toSet();
+      _lastKnownNotificationIds['v2'] = ids;
+      allExistingIds.addAll(ids);
   
       // Usar el nuevo servicio de caché
       await NotificationCacheService.registerPreExistingNotifications(allExistingIds);
@@ -1131,17 +1083,14 @@ class ReceptorService {
       
       // Extraer la fecha del ID de notificación
       final dateId = _extractDateFromNotificationId(notificationId);
-      if (dateId == null) return;
+      if (dateId == null) {}
       
-      final docRef = _firestore
+      await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
-          .doc(dateId);
-          
-      await docRef.update({
-        'notificaciones.$notificationId.visualizada': visualized,
-      });
+          .collection(_notificationsCollectionV2)
+          .doc(notificationId)
+          .update({'status-visualizacion': visualized});
       
       // print('Estado de visualización actualizado para $notificationId: $visualized');
     } catch (e) {
@@ -1202,6 +1151,8 @@ class BtHiveStorageService {
   static const String _outboxBoxName = 'bt_notification_outbox_v1';
   static const String _poisonBoxName = 'bt_notification_poison_v1';
   static const String _firebaseCacheBoxName = 'bt_notification_firebase_cache_v1';
+  static const String _conversationRepliesBoxName =
+      'bt_conversation_replies_v1';
   static const String _appsBoxName = 'bt_apps_v1';
   static const String _mediaStateBoxName = 'bt_media_state_v1';
   static const String _volumeStateBoxName = 'bt_volume_state_v1';
@@ -1211,15 +1162,18 @@ class BtHiveStorageService {
 
   static Future<void> ensureInitialized() async {
     if (_initialized) return;
+    await _btHiveDebug('hive_init', 'start');
     await Hive.initFlutter();
     await Hive.openBox<Map>(_outboxBoxName);
     await Hive.openBox<Map>(_poisonBoxName);
     await Hive.openBox<Map>(_firebaseCacheBoxName);
+    await Hive.openBox<Map>(_conversationRepliesBoxName);
     await Hive.openBox<Map>(_appsBoxName);
     await Hive.openBox<Map>(_mediaStateBoxName);
     await Hive.openBox<Map>(_volumeStateBoxName);
     await Hive.openBox<Map>(_mediaPrefsBoxName);
     _initialized = true;
+    await _btHiveDebug('hive_init', 'ok');
   }
 
   static Future<void> setDefaultMediaAppPackage(String packageName) async {
@@ -1255,10 +1209,16 @@ class BtHiveStorageService {
     await ensureInitialized();
 
     final String id = (payload['id'] ?? '').toString().trim();
-    if (id.isEmpty) return;
+    if (id.isEmpty) {
+      await _btHiveDebug('hive_enqueue', 'skip empty_id keys=${payload.keys.length}');
+      return;
+    }
 
     final Box<Map> outbox = Hive.box<Map>(_outboxBoxName);
-    if (outbox.containsKey(id)) return;
+    if (outbox.containsKey(id)) {
+      await _btHiveDebug('hive_enqueue', "skip exists id='$id'");
+      return;
+    }
 
     final int timestampMs = _extractTimestampMs(payload) ??
         DateTime.now().millisecondsSinceEpoch;
@@ -1266,6 +1226,10 @@ class BtHiveStorageService {
     final Map<String, dynamic> normalized = _normalizePayload(payload);
     final String payloadJson = jsonEncode(normalized);
 
+    await _btHiveDebug(
+      'hive_enqueue',
+      "put id='$id' tsMs=$timestampMs pkg='${(payload['packageName'] ?? '').toString()}' title='${(payload['title'] ?? '').toString().trim().replaceAll('\n', ' ').substring(0, ((payload['title'] ?? '').toString().trim().replaceAll('\n', ' ').length).clamp(0, 60))}'",
+    );
     outbox.put(id, {
       'id': id,
       'timestampMs': timestampMs,
@@ -1292,6 +1256,7 @@ class BtHiveStorageService {
         });
       }
     }
+    await _btHiveDebug('hive_enqueue', "ok id='$id' outboxSize=${outbox.length}");
   }
 
   static Future<void> setBtMediaState(Map<String, dynamic> payload) async {
@@ -1405,6 +1370,110 @@ class BtHiveStorageService {
     return items;
   }
 
+  static Future<void> storeConversationReply({
+    required String requestId,
+    required String packageName,
+    required String conversationTitle,
+    required String replyText,
+    required String sbnKey,
+    int? timestampMs,
+  }) async {
+    await ensureInitialized();
+    final Box<Map> box = Hive.box<Map>(_conversationRepliesBoxName);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final int tsMs = timestampMs ?? nowMs;
+    final id = 'reply_$requestId';
+    if (id.trim().isEmpty) return;
+    if (box.containsKey(id)) return;
+
+    final payload = <String, dynamic>{
+      'id': id,
+      'requestId': requestId,
+      'packageName': packageName,
+      'title': conversationTitle,
+      'text': replyText,
+      'time': tsMs,
+      'extras': <String, dynamic>{
+        'direction': 'out',
+        'isReply': true,
+        'requestId': requestId,
+        'sbnKey': sbnKey,
+      },
+    };
+
+    final normalized = _normalizePayload(payload);
+    final payloadJson = jsonEncode(normalized);
+    box.put(id, {
+      'id': id,
+      'timestampMs': tsMs,
+      'createdAtMs': nowMs,
+      'payloadJson': payloadJson,
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getConversationRepliesForUi({
+    required String packageName,
+    required String conversationTitle,
+  }) async {
+    await ensureInitialized();
+    final Box<Map> box = Hive.box<Map>(_conversationRepliesBoxName);
+    final List<Map<String, dynamic>> out = [];
+
+    String norm(String s) => s.trim();
+    final targetPkg = norm(packageName);
+    final targetTitle = norm(conversationTitle);
+    if (targetPkg.isEmpty || targetTitle.isEmpty) return const [];
+
+    for (final key in box.keys) {
+      final value = box.get(key);
+      if (value == null) continue;
+      final m = Map<String, dynamic>.from(value);
+      final String id = (m['id'] ?? '').toString().trim();
+      if (id.isEmpty) continue;
+
+      final payloadJson = (m['payloadJson'] ?? '').toString();
+      final payload = _safeDecodePayload(payloadJson);
+      final pkg = norm((payload['packageName'] ?? '').toString());
+      final title = norm((payload['title'] ?? '').toString());
+      if (pkg != targetPkg) continue;
+      if (title != targetTitle) continue;
+
+      final int timestampMs = (m['timestampMs'] as int?) ??
+          _extractTimestampMs(payload) ??
+          DateTime.now().millisecondsSinceEpoch;
+      final extrasRaw = payload['extras'];
+      final extras = extrasRaw is Map
+          ? Map<String, dynamic>.from(extrasRaw)
+          : <String, dynamic>{};
+
+      out.add({
+        'notificationId': id,
+        'id': id,
+        'title': payload['title'] ?? '',
+        'text': payload['text'] ?? '',
+        'packageName': payload['packageName'] ?? '',
+        'appName': payload['appName'] ?? '',
+        'timestamp': Timestamp.fromMillisecondsSinceEpoch(timestampMs),
+        'extras': extras,
+        'status-visualizacion': true,
+      });
+    }
+
+    out.sort((a, b) {
+      final ta = (a['timestamp'] as Timestamp).toDate();
+      final tb = (b['timestamp'] as Timestamp).toDate();
+      return ta.compareTo(tb);
+    });
+    return out;
+  }
+
+  static Future<void> deleteConversationReplyById(String id) async {
+    await ensureInitialized();
+    final Box<Map> box = Hive.box<Map>(_conversationRepliesBoxName);
+    if (id.trim().isEmpty) return;
+    await box.delete(id);
+  }
+
   static Iterable<MapEntry<String, Map<String, dynamic>>> getOutboxEntries() {
     final Box<Map> outbox = Hive.box<Map>(_outboxBoxName);
     return outbox.keys.map((k) {
@@ -1421,6 +1490,10 @@ class BtHiveStorageService {
     await ensureInitialized();
     final Box<Map> outbox = Hive.box<Map>(_outboxBoxName);
     outbox.put(id, updated);
+    await _btHiveDebug(
+      'hive_outbox',
+      "update id='$id' attempts=${updated['attempts'] ?? ''} nextAttemptMs=${updated['nextAttemptMs'] ?? ''}",
+    );
   }
 
   static Future<void> deleteOutboxEntry(String id) async {
@@ -1429,6 +1502,7 @@ class BtHiveStorageService {
     await outbox.delete(id);
     final Box<Map> cache = Hive.box<Map>(_firebaseCacheBoxName);
     await cache.delete(id);
+    await _btHiveDebug('hive_outbox', "delete id='$id' outboxSize=${outbox.length}");
   }
 
   static Future<void> cacheFirebaseNotifications(
@@ -1492,6 +1566,10 @@ class BtHiveStorageService {
     final Box<Map> poison = Hive.box<Map>(_poisonBoxName);
     await poison.put(id, entry);
     await deleteOutboxEntry(id);
+    await _btHiveDebug(
+      'hive_poison',
+      "move id='$id' attempts=${entry['attempts'] ?? ''} err='${(entry['lastError'] ?? '').toString()}'",
+    );
   }
 
   static int? _extractTimestampMs(Map<String, dynamic> payload) {
@@ -1551,21 +1629,15 @@ class BtHiveSyncService {
 
     final receptorService = ReceptorService();
     final linkedDeviceId = await receptorService.getLinkedDeviceId();
-    if (linkedDeviceId == null || linkedDeviceId.isEmpty) return;
-
-    final firestore = FirebaseFirestore.instance;
-    final linkedDoc = await firestore
-        .collection('dispositivos')
-        .doc(linkedDeviceId)
-        .get();
-
-    final linkedData = linkedDoc.data();
-    final bool saveEnabled = linkedData?['status-guardado'] == true;
-    if (!saveEnabled) return;
+    if (linkedDeviceId == null || linkedDeviceId.isEmpty) {
+      await _btHiveDebug('sync', 'skip linkedDeviceId_empty');
+      return;
+    }
 
     final int nowMs = DateTime.now().millisecondsSinceEpoch;
 
     final entries = BtHiveStorageService.getOutboxEntries().toList();
+    await _btHiveDebug('sync', "start linked='$linkedDeviceId' entries=${entries.length}");
     entries.sort((a, b) {
       final int ca = (a.value['createdAtMs'] as int?) ?? 0;
       final int cb = (b.value['createdAtMs'] as int?) ?? 0;
@@ -1577,7 +1649,10 @@ class BtHiveSyncService {
       final Map<String, dynamic> value = entry.value;
 
       final int nextAttemptMs = (value['nextAttemptMs'] as int?) ?? 0;
-      if (nextAttemptMs > nowMs) continue;
+      if (nextAttemptMs > nowMs) {
+        await _btHiveDebug('sync', "skip backoff id='$id' nextAttemptMs=$nextAttemptMs nowMs=$nowMs");
+        continue;
+      }
 
       final String payloadJson = (value['payloadJson'] ?? '').toString();
       final payload = BtHiveStorageService._safeDecodePayload(payloadJson);
@@ -1589,11 +1664,10 @@ class BtHiveSyncService {
       final int attempts = (value['attempts'] as int?) ?? 0;
 
       try {
-        final bool duplicateContent = await _isDuplicateWhatsAppPayloadContent(payload);
-        if (duplicateContent) {
-          await BtHiveStorageService.deleteOutboxEntry(id);
-          continue;
-        }
+        await _btHiveDebug(
+          'sync',
+          "entry id='$id' attempts=$attempts tsMs=$timestampMs pkg='${(payload['packageName'] ?? '').toString()}'",
+        );
 
         final bool alreadyInFirebase = await _isAlreadyInFirebase(
           linkedDeviceId,
@@ -1602,16 +1676,19 @@ class BtHiveSyncService {
         );
 
         if (alreadyInFirebase) {
+          await _btHiveDebug('sync', "already_in_firebase id='$id' delete_outbox");
           await BtHiveStorageService.deleteOutboxEntry(id);
           continue;
         }
 
+        await _btHiveDebug('sync', "upload_start id='$id'");
         await _uploadToFirebase(
           linkedDeviceId: linkedDeviceId,
           id: id,
           timestampMs: timestampMs,
           payload: payload,
         );
+        await _btHiveDebug('sync', "upload_done id='$id'");
 
         final bool verified = await _isAlreadyInFirebase(
           linkedDeviceId,
@@ -1620,12 +1697,14 @@ class BtHiveSyncService {
         );
 
         if (verified) {
+          await _btHiveDebug('sync', "verified_ok id='$id' delete_outbox");
           await BtHiveStorageService.deleteOutboxEntry(id);
           continue;
         }
 
         throw StateError('No se pudo verificar existencia en Firestore');
       } catch (e) {
+        await _btHiveDebug('sync', "error id='$id' err='${e.toString()}'");
         final int nextAttempts = attempts + 1;
         final int backoffMs = _computeBackoffMs(nextAttempts);
         final Map<String, dynamic> updated = {
@@ -1649,6 +1728,7 @@ class BtHiveSyncService {
         await BtHiveStorageService.updateOutboxEntry(id, updated);
       }
     }
+    await _btHiveDebug('sync', 'done');
   }
 
   static Future<bool> _isDuplicateWhatsAppPayloadContent(
@@ -1748,6 +1828,32 @@ class BtHiveSyncService {
     return false;
   }
 
+  static bool _isFirestoreDocSizeLimitError(Object e) {
+    if (e is FirebaseException) {
+      final code = e.code.toLowerCase();
+      final message = (e.message ?? '').toLowerCase();
+      if (code.contains('invalid-argument') &&
+          message.contains('exceeds') &&
+          message.contains('maximum allowed size')) {
+        return true;
+      }
+    }
+    final msg = e.toString().toLowerCase();
+    return msg.contains('exceeds the maximum allowed size');
+  }
+
+  static Map<String, dynamic> _sanitizeExtrasForFirestore(Map<String, dynamic> extras) {
+    final sanitized = Map<String, dynamic>.from(extras);
+    sanitized.remove('icon');
+    sanitized.remove('appIcon');
+    sanitized.remove('largeIcon');
+    sanitized.remove('smallIcon');
+    sanitized.remove('picture');
+    sanitized.remove('image');
+    sanitized.remove('bitmap');
+    return sanitized;
+  }
+
   static String _dateIdFromTimestampMs(int timestampMs) {
     final date = DateTime.fromMillisecondsSinceEpoch(timestampMs);
     final y = date.year.toString();
@@ -1764,23 +1870,19 @@ class BtHiveSyncService {
     final firestore = FirebaseFirestore.instance;
     final dateId = _dateIdFromTimestampMs(timestampMs);
 
-    final dayDocRef = firestore
+    final doc = await firestore
         .collection('dispositivos')
         .doc(linkedDeviceId)
-        .collection('notificaciones')
-        .doc(dateId);
+        .collection('notificaciones_v2')
+        .doc(notificationId)
+        .get();
 
-    final dayDoc = await dayDocRef.get();
-    if (!dayDoc.exists) return false;
-
-    final data = dayDoc.data();
-    if (data == null) return false;
-
-    final notificaciones = data['notificaciones'];
-    if (notificaciones is Map) {
-      return notificaciones.containsKey(notificationId);
-    }
-    return false;
+    final exists = doc.exists;
+    await _btHiveDebug(
+      'sync_check',
+      "exists=$exists linked='$linkedDeviceId' dateId='$dateId' id='$notificationId'",
+    );
+    return exists;
   }
 
   static Future<void> _uploadToFirebase({
@@ -1792,20 +1894,7 @@ class BtHiveSyncService {
     final firestore = FirebaseFirestore.instance;
     final dateId = _dateIdFromTimestampMs(timestampMs);
 
-    final dayDocRef = firestore
-        .collection('dispositivos')
-        .doc(linkedDeviceId)
-        .collection('notificaciones')
-        .doc(dateId);
-
-    final dayDoc = await dayDocRef.get();
-    if (!dayDoc.exists) {
-      final now = DateTime.fromMillisecondsSinceEpoch(timestampMs);
-      await dayDocRef.set({
-        'fecha': Timestamp.fromDate(DateTime(now.year, now.month, now.day)),
-      });
-    }
-
+    final now = DateTime.fromMillisecondsSinceEpoch(timestampMs);
     final notificationData = NotificationData(
       id: id,
       title: (payload['title'] ?? '').toString(),
@@ -1814,13 +1903,41 @@ class BtHiveSyncService {
       appName: (payload['appName'] ?? '').toString(),
       timestamp: DateTime.fromMillisecondsSinceEpoch(timestampMs),
       extras: payload['extras'] is Map
-          ? Map<String, dynamic>.from(payload['extras'] as Map)
+          ? _sanitizeExtrasForFirestore(
+              Map<String, dynamic>.from(payload['extras'] as Map),
+            )
           : <String, dynamic>{},
       statusVisualizacion: false,
     );
 
-    await dayDocRef.update({
-      'notificaciones.$id': notificationData.toMap(),
-    });
+    final ref = firestore
+        .collection('dispositivos')
+        .doc(linkedDeviceId)
+        .collection('notificaciones_v2')
+        .doc(id);
+
+    try {
+      await _btHiveDebug(
+        'sync_upload',
+        "write_start linked='$linkedDeviceId' dateId='$dateId' docId='${ref.id}' id='$id'",
+      );
+      await ref.set(notificationData.toMap());
+      await _btHiveDebug(
+        'sync_upload',
+        "write_done linked='$linkedDeviceId' dateId='$dateId' docId='${ref.id}' id='$id'",
+      );
+      return;
+    } catch (e) {
+      if (!_isFirestoreDocSizeLimitError(e)) rethrow;
+      await _btHiveDebug(
+        'sync_upload',
+        "doc_full linked='$linkedDeviceId' dateId='$dateId' id='$id' extras_truncated=true",
+      );
+      final trimmed = notificationData.toMap();
+      trimmed['extras'] = <String, dynamic>{};
+      trimmed['extras_truncated'] = true;
+      await ref.set(trimmed);
+      return;
+    }
   }
 }

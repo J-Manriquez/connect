@@ -246,9 +246,16 @@ object BtClassicClient {
                     val sbnKey = obj.optString("sbnKey", "").trim()
                     val replyText = obj.optString("replyText", "").trim()
                     val requestId = obj.optString("requestId", "").trim()
+                    val packageName = obj.optString("packageName", "").trim()
+                    val conversationTitle = obj.optString("conversationTitle", "").trim()
                     val now = System.currentTimeMillis()
 
-                    val res = NotificationListener.trySendNotificationReply(sbnKey, replyText)
+                    val res = NotificationListener.trySendNotificationReplySmart(
+                        sbnKey,
+                        replyText,
+                        packageName,
+                        conversationTitle
+                    )
                     val ok = res.first
                     val err = res.second
 

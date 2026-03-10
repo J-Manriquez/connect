@@ -5,7 +5,7 @@ import 'dismissed_notifications_service.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
 import 'package:connect/services/notification_settings_service.dart';
 import 'package:connect/services/custom_sound_service.dart';
-import 'package:vibration/vibration.dart';
+import 'package:connect/services/notification_cache_service.dart';
 
 class LocalNotificationService {
   static const MethodChannel _channel = MethodChannel('com.example.connect/local_notifications');
@@ -129,6 +129,17 @@ class LocalNotificationService {
       'appName': appName,
       'extras': extras ?? {},
     };
+
+    try {
+      final suppress = await NotificationCacheService.shouldSuppressLocalEcho(
+        packageName: packageName,
+        title: effectiveTitle,
+        text: effectiveBody,
+      );
+      if (suppress) {
+        return;
+      }
+    } catch (_) {}
 
     final prefs = await SharedPreferences.getInstance();
     if (await _isDuplicateWhatsAppContent(prefs, notificationData)) {

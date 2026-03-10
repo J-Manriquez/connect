@@ -17,6 +17,8 @@ class NotificationListenerService {
   final FirebaseService _firebaseService = FirebaseService();
   StreamSubscription? _notificationStreamSubscription;
   
+  static const String _notificationsCollectionV2 = 'notificaciones_v2';
+
   // Optimización: Solo rastrear IDs de notificaciones en lugar de objetos completos
   Map<String, Set<String>> _lastKnownNotificationIds = {}; // dateId -> Set<notificationId>
   
@@ -56,21 +58,14 @@ class NotificationListenerService {
       final snapshot = await _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
+          .collection(_notificationsCollectionV2)
           .get();
       
       Set<String> allExistingIds = {};
       
-      for (var dayDoc in snapshot.docs) {
-        final data = dayDoc.data();
-        if (data.containsKey('notificaciones')) {
-          final notificationsMap = Map<String, dynamic>.from(data['notificaciones']);
-          final notificationIds = notificationsMap.keys.toSet();
-          
-          _lastKnownNotificationIds[dayDoc.id] = notificationIds;
-          allExistingIds.addAll(notificationIds);
-        }
-      }
+      final ids = snapshot.docs.map((d) => d.id).toSet();
+      _lastKnownNotificationIds['v2'] = ids;
+      allExistingIds.addAll(ids);
       
       // Registrar todas las notificaciones existentes como pre-existentes
       await NotificationCacheService.registerPreExistingNotifications(allExistingIds);
@@ -93,7 +88,7 @@ class NotificationListenerService {
     _notificationStreamSubscription = _firestore
         .collection('dispositivos')
         .doc(deviceId)
-        .collection('notificaciones')
+        .collection(_notificationsCollectionV2)
         .snapshots()
         .listen(
       (snapshot) async {
@@ -101,9 +96,12 @@ class NotificationListenerService {
           if (change.type == DocumentChangeType.added || change.type == DocumentChangeType.modified) {
             await _processDocumentChange(change.doc);
           } else if (change.type == DocumentChangeType.removed) {
-            final String dateId = change.doc.id;
-            _lastKnownNotificationIds.remove(dateId);
-            // print('NotificationListenerService: Documento diario eliminado: $dateId');
+            final String notificationId = change.doc.id;
+            final known = _lastKnownNotificationIds['v2'];
+            if (known != null) {
+              known.remove(notificationId);
+              _lastKnownNotificationIds['v2'] = known;
+            }
           }
         }
       },
@@ -117,38 +115,22 @@ class NotificationListenerService {
   }
 
   // Optimización: Procesar solo las notificaciones nuevas
-  Future<void> _processDocumentChange(DocumentSnapshot dayDoc) async {
-    final data = dayDoc.data() as Map<String, dynamic>?;
-    if (data == null || !data.containsKey('notificaciones')) return;
+  Future<void> _processDocumentChange(DocumentSnapshot notificationDoc) async {
+    final data = notificationDoc.data() as Map<String, dynamic>?;
+    if (data == null) return;
 
-    final currentNotificationsMap = Map<String, dynamic>.from(data['notificaciones']);
-    final String dateId = dayDoc.id;
-    final lastKnownIds = _lastKnownNotificationIds[dateId] ?? <String>{};
-    final currentIds = currentNotificationsMap.keys.toSet();
+    final String notificationId = notificationDoc.id;
+    final known = _lastKnownNotificationIds['v2'] ?? <String>{};
+    if (known.contains(notificationId)) return;
 
-    // Encontrar solo las notificaciones realmente nuevas
-    final newNotificationIds = currentIds.difference(lastKnownIds);
-
-    if (newNotificationIds.isNotEmpty) {
-      // print('NotificationListenerService: ${newNotificationIds.length} nuevas notificaciones en $dateId');
-      
-      for (final notificationId in newNotificationIds) {
-        await _processNewNotification(
-          notificationId, 
-          currentNotificationsMap[notificationId], 
-          dateId
-        );
-      }
-    }
-
-    // Actualizar el estado conocido solo con los IDs
-    _lastKnownNotificationIds[dateId] = currentIds;
+    await _processNewNotification(notificationId, data);
+    known.add(notificationId);
+    _lastKnownNotificationIds['v2'] = known;
   }
 
   Future<void> _processNewNotification(
     String notificationId, 
-    dynamic notificationDataMap, 
-    String dateId
+    dynamic notificationDataMap
   ) async {
     try {
       if (notificationDataMap == null || notificationDataMap is! Map<String, dynamic>) {
@@ -163,7 +145,6 @@ class NotificationListenerService {
       }
 
       final Map<String, dynamic> fullNotificationDataMap = Map<String, dynamic>.from(notificationDataMap);
-      fullNotificationDataMap['dateId'] = dateId;
       fullNotificationDataMap['id'] = notificationId;
 
       final notificationData = NotificationData.fromMap(fullNotificationDataMap);
@@ -231,6 +212,19 @@ class NotificationListenerService {
       if (_shouldFilterNotification(notification)) {
         return;
       }
+
+      try {
+        final suppress = await NotificationCacheService.shouldSuppressLocalEcho(
+          packageName: (notification['packageName'] ?? '').toString(),
+          title: (notification['title'] ?? '').toString(),
+          text: (notification['text'] ?? '').toString(),
+        );
+        if (suppress) {
+          await NotificationCacheService.markAsProcessed(notificationId);
+          await NotificationCacheService.markAsVisualized(notificationId);
+          return;
+        }
+      } catch (_) {}
       
       // Mostrar la notificación local
       await LocalNotificationService.showNotification(
@@ -249,26 +243,24 @@ class NotificationListenerService {
       await NotificationCacheService.markAsVisualized(notificationId);
       
       // Actualizar estado en Firebase
-      await _updateVisualizationStatus(notificationId, notification['dateId']);
+      await _updateVisualizationStatus(notificationId);
       
     } catch (e) {
       // print('NotificationListenerService: Error al mostrar notificación local: $e');
     }
   }
 
-  Future<void> _updateVisualizationStatus(String notificationId, String? dateId) async {
-    if (dateId == null) return;
-    
+  Future<void> _updateVisualizationStatus(String notificationId) async {
     try {
       final deviceId = await _firebaseService.getDeviceId();
       final docRef = _firestore
           .collection('dispositivos')
           .doc(deviceId)
-          .collection('notificaciones')
-          .doc(dateId);
+          .collection(_notificationsCollectionV2)
+          .doc(notificationId);
           
       await docRef.update({
-        'notificaciones.$notificationId.visualizada': true,
+        'status-visualizacion': true,
       });
       
       // print('NotificationListenerService: Estado de visualización actualizado: $notificationId');

@@ -9,13 +9,13 @@ class NotificationDeleteReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val notificationId = intent.getStringExtra("notification_id")
         if (notificationId != null) {
-            // Marcar la notificación como cancelada por el usuario
+            if (LocalNotificationManager.consumeProgrammaticCancel(notificationId)) {
+                Log.d("NotificationDeleteReceiver", "Cancelada por app: $notificationId")
+                return
+            }
+
             Log.d("NotificationDeleteReceiver", "Usuario eliminó notificación: $notificationId")
-            
-            // ✅ Agregar la notificación al conjunto de canceladas en LocalNotificationManager
             LocalNotificationManager.addToCancelledNotifications(notificationId)
-            
-            // ✅ Comunicar a Flutter que la notificación fue eliminada
             MainActivity.instance?.notifyNotificationDismissed(notificationId)
         }
     }

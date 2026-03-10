@@ -1,10 +1,134 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/models/notification_settings.dart';
 import 'package:connect/services/firebase_service.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationSettingsService {
   final FirebaseService _firebaseService = FirebaseService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const MethodChannel _bleChannel = MethodChannel('com.example.connect/ble');
+  static final Map<String, int> _lastDebugBySigMs = {};
+  static int _lastRulesSyncMs = 0;
+
+  Future<void> _relayDebugToEmisor(
+    String source,
+    String message, {
+    String? sig,
+    int throttleMs = 500,
+  }) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final key = sig ?? '$source|$message';
+    final last = _lastDebugBySigMs[key] ?? 0;
+    if (throttleMs > 0 && (nowMs - last) < throttleMs) return;
+    _lastDebugBySigMs[key] = nowMs;
+
+    print('[$source][$nowMs] $message');
+    try {
+      final rawStatus = await _bleChannel.invokeMethod('getBtServerStatus');
+      final status = Map<String, dynamic>.from(rawStatus as Map);
+      final running = status['running'] == true;
+      final peers = (status['connectedCount'] as num?)?.toInt() ?? 0;
+      if (!running || peers <= 0) return;
+      await _bleChannel.invokeMethod('sendBtServerMessage', {
+        'type': 'debug_log',
+        'source': source,
+        'message': message,
+        'timestamp': nowMs,
+      });
+    } catch (_) {}
+  }
+
+  Map<String, dynamic> _normalizeNotificationForMatch(
+    Map<String, dynamic> notification,
+  ) {
+    String clean(dynamic v) {
+      final raw = (v ?? '').toString().trim();
+      final lower = raw.toLowerCase();
+      if (lower == 'null' || lower == 'undefined') return '';
+      return raw;
+    }
+
+    final title = clean(notification['title'] ?? notification['titulo']);
+    final text = clean(notification['text'] ??
+        notification['body'] ??
+        notification['bigText'] ??
+        notification['mensaje'] ??
+        notification['contenido']);
+    final packageName = clean(notification['packageName'] ?? notification['paquete']);
+    final extrasRaw = notification['extras'];
+    final extras = extrasRaw is Map ? Map<String, dynamic>.from(extrasRaw) : <String, dynamic>{};
+
+    return {
+      ...notification,
+      'title': title,
+      'text': text,
+      'packageName': packageName,
+      'extras': extras,
+    };
+  }
+
+  String _normalizeForMatch(String s) {
+    var out = s.trim().toLowerCase();
+    if (out.isEmpty) return '';
+    out = out
+        .replaceAll(RegExp(r'[áàäâ]'), 'a')
+        .replaceAll(RegExp(r'[éèëê]'), 'e')
+        .replaceAll(RegExp(r'[íìïî]'), 'i')
+        .replaceAll(RegExp(r'[óòöô]'), 'o')
+        .replaceAll(RegExp(r'[úùüû]'), 'u')
+        .replaceAll('ñ', 'n');
+    out = out.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+    out = out.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return out;
+  }
+
+  Future<void> _syncBlockedRulesToNativePrefsFromList(
+    List<NotificationSettings> settings,
+  ) async {
+    try {
+      final blocked = settings.where((s) => s.bloqueado).toList();
+      final rules = <Map<String, dynamic>>[];
+      for (final s in blocked) {
+        final pkg = (s.notificationData['packageName'] ?? '').toString().trim();
+        if (pkg.isEmpty) continue;
+        final title = (s.notificationData['title'] ?? s.notificationData['titulo'] ?? '')
+            .toString();
+        final text = (s.notificationData['text'] ??
+                s.notificationData['body'] ??
+                s.notificationData['bigText'] ??
+                s.notificationData['mensaje'] ??
+                s.notificationData['contenido'] ??
+                '')
+            .toString();
+        rules.add({
+          'pkg': pkg,
+          'titleNorm': _normalizeForMatch(title),
+          'textNorm': _normalizeForMatch(text),
+          'id': s.id,
+        });
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('custom_block_rules_v1', jsonEncode(rules));
+      await _relayDebugToEmisor(
+        'receptor_bloqueo',
+        'sync_rules blocked=${rules.length}',
+        sig: 'sync_rules:${rules.length}',
+        throttleMs: 0,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _maybeSyncBlockedRulesToNativePrefs(
+    List<NotificationSettings> settings,
+  ) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_lastRulesSyncMs > 0 && (nowMs - _lastRulesSyncMs) < 10000) return;
+    _lastRulesSyncMs = nowMs;
+    await _syncBlockedRulesToNativePrefsFromList(settings);
+  }
 
   // Obtener todas las configuraciones de notificaciones para el dispositivo actual
   Future<List<NotificationSettings>> getAllNotificationSettings() async {
@@ -38,6 +162,7 @@ class NotificationSettingsService {
           .set(settings.toMap());
 
       // print('Configuración de notificación guardada: ${settings.id}');
+      await _syncBlockedRulesToNativePrefsFromList(await getAllNotificationSettings());
       return true;
     } catch (e) {
       // print('Error al guardar configuración de notificación: $e');
@@ -59,6 +184,7 @@ class NotificationSettingsService {
           .update(updatedSettings.toMap());
 
       // print('Configuración de notificación actualizada: ${settings.id}');
+      await _syncBlockedRulesToNativePrefsFromList(await getAllNotificationSettings());
       return true;
     } catch (e) {
       // print('Error al actualizar configuración de notificación: $e');
@@ -78,6 +204,7 @@ class NotificationSettingsService {
           .delete();
 
       // print('Configuración de notificación eliminada: $settingsId');
+      await _syncBlockedRulesToNativePrefsFromList(await getAllNotificationSettings());
       return true;
     } catch (e) {
       // print('Error al eliminar configuración de notificación: $e');
@@ -109,12 +236,106 @@ class NotificationSettingsService {
   // Verificar si una notificación debe ser bloqueada
   Future<bool> shouldBlockNotification(Map<String, dynamic> notification) async {
     try {
+      final normalized = _normalizeNotificationForMatch(notification);
       final settings = await getAllNotificationSettings();
+      await _maybeSyncBlockedRulesToNativePrefs(settings);
+
+      final pkg = (normalized['packageName'] ?? '').toString().trim();
+      final title = (normalized['title'] ?? '').toString().trim();
+      final text = (normalized['text'] ?? '').toString().trim();
+      final candidates = settings.where((s) => s.bloqueado).toList();
+      final pkgCandidates = candidates.where((s) {
+        final spkg = (s.notificationData['packageName'] ?? '').toString().trim();
+        return spkg.isEmpty || spkg == pkg;
+      }).toList();
+
+      if (pkgCandidates.isNotEmpty) {
+        final tShort = title.length > 60 ? title.substring(0, 60) : title;
+        final xShort = text.length > 80 ? text.substring(0, 80) : text;
+        await _relayDebugToEmisor(
+          'receptor_bloqueo',
+          "check pkg='$pkg' title='$tShort' text='$xShort' blockedRules=${pkgCandidates.length}",
+          sig: 'check:$pkg:$tShort:$xShort:${pkgCandidates.length}',
+          throttleMs: 250,
+        );
+      }
       
-      for (final setting in settings) {
-        if (setting.bloqueado && setting.matchesNotification(notification)) {
-          // print('Notificación bloqueada por configuración: ${setting.id}');
+      for (final setting in pkgCandidates) {
+        final matches = setting.matchesNotification(normalized);
+        if (matches) {
+          final ruleTitle = (setting.notificationData['title'] ?? '').toString();
+          final ruleText = (setting.notificationData['text'] ?? '').toString();
+          final ruleExtras = setting.notificationData['extras'] is Map
+              ? Map<String, dynamic>.from(setting.notificationData['extras'] as Map)
+              : <String, dynamic>{};
+          await _relayDebugToEmisor(
+            'receptor_bloqueo',
+            "BLOCK ruleId='${setting.id}' pkg='$pkg' ruleTitle='${ruleTitle.length > 40 ? ruleTitle.substring(0, 40) : ruleTitle}' ruleText='${ruleText.length > 60 ? ruleText.substring(0, 60) : ruleText}' ruleExtrasKeys=${ruleExtras.keys.length}",
+            sig: 'block:${setting.id}:$pkg',
+            throttleMs: 0,
+          );
           return true;
+        }
+      }
+
+      if (pkgCandidates.isNotEmpty) {
+        int shown = 0;
+        for (final setting in pkgCandidates) {
+          if (shown >= 3) break;
+          final rulePkg = (setting.notificationData['packageName'] ?? '').toString().trim();
+          final ruleTitle = (setting.notificationData['title'] ?? setting.notificationData['titulo'] ?? '')
+              .toString()
+              .trim();
+          final ruleText = (setting.notificationData['text'] ??
+                  setting.notificationData['body'] ??
+                  setting.notificationData['bigText'] ??
+                  setting.notificationData['mensaje'] ??
+                  setting.notificationData['contenido'] ??
+                  '')
+              .toString()
+              .trim();
+          final ruleExtras = setting.notificationData['extras'] is Map
+              ? Map<String, dynamic>.from(setting.notificationData['extras'] as Map)
+              : <String, dynamic>{};
+
+          final pkgOk = rulePkg.isEmpty || rulePkg == pkg;
+          final titleOk = ruleTitle.isEmpty ||
+              title.toLowerCase().contains(ruleTitle.toLowerCase());
+          final textOk = ruleText.isEmpty ||
+              text.toLowerCase().contains(ruleText.toLowerCase());
+          bool extrasOk = true;
+          if (ruleExtras.isNotEmpty) {
+            final extras = normalized['extras'] is Map
+                ? Map<String, dynamic>.from(normalized['extras'] as Map)
+                : <String, dynamic>{};
+            for (final k in ruleExtras.keys) {
+              final expected = ruleExtras[k];
+              if (expected == null) continue;
+              final actual = extras[k];
+              if (actual == null) {
+                extrasOk = false;
+                break;
+              }
+              if ((expected is num || expected is bool) && actual != expected) {
+                extrasOk = false;
+                break;
+              }
+              final expectedStr = expected.toString().trim();
+              final actualStr = actual.toString().trim();
+              if (expectedStr.isNotEmpty && actualStr != expectedStr) {
+                extrasOk = false;
+                break;
+              }
+            }
+          }
+
+          await _relayDebugToEmisor(
+            'receptor_bloqueo',
+            "NO_MATCH ruleId='${setting.id}' pkgOk=$pkgOk titleOk=$titleOk textOk=$textOk extrasOk=$extrasOk",
+            sig: 'no_match:${setting.id}:$pkg',
+            throttleMs: 1200,
+          );
+          shown++;
         }
       }
       
