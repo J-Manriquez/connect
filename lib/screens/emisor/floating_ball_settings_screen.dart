@@ -209,8 +209,12 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
   }) {
     final actionLabel = _gestureActionLabels[action] ?? action;
     final subtitle = action == 'app'
-        ? (packageName == null ? '$actionLabel: sin app' : '$actionLabel: $packageName')
-        : actionLabel;
+        ? (packageName == null
+            ? 'Acción: $actionLabel • App: sin seleccionar'
+            : 'Acción: $actionLabel • App: $packageName')
+        : 'Acción: $actionLabel';
+    final selectedAction =
+        _gestureActionLabels.containsKey(action) ? action : 'back';
     return Column(
       children: [
         ListTile(
@@ -219,7 +223,7 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
           subtitle: Text(subtitle),
           trailing: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: _gestureActionLabels.containsKey(action) ? action : 'back',
+              value: selectedAction,
               items: _gestureActionLabels.entries
                   .map(
                     (e) => DropdownMenuItem<String>(
@@ -236,24 +240,50 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
           ),
         ),
         if (action == 'app')
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Aplicación para esta acción'),
+            subtitle: const Text('Se usa cuando la acción es “Abrir app”.'),
+            trailing: TextButton(
               onPressed: onPickApp,
-              child: const Text('Seleccionar app'),
+              child: const Text('Seleccionar'),
             ),
           ),
-        const Divider(),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final statusText = _enabled ? 'Activada' : 'Desactivada';
+    final statusDesc = _enabled
+        ? 'La bola está activa y se mantiene en ejecución.'
+        : 'La bola no se muestra hasta que la actives.';
+    final selectedAppsText = _selectedApps.isEmpty
+        ? 'Sin aplicaciones seleccionadas'
+        : '${_selectedApps.length} seleccionadas';
+    final primaryBtnStyle = ElevatedButton.styleFrom(
+      backgroundColor: customColor[600],
+      foregroundColor: Colors.white,
+      minimumSize: const Size.fromHeight(48),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    );
+    final destructiveBtnStyle = ElevatedButton.styleFrom(
+      backgroundColor: Colors.red,
+      foregroundColor: Colors.white,
+      minimumSize: const Size.fromHeight(48),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    );
+    final linkBtnStyle = TextButton.styleFrom(
+      foregroundColor: customColor[600],
+      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+    );
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configuración bola flotante'),
-        backgroundColor: customColor,
+        backgroundColor: customColor[700],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -262,307 +292,327 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
               child: Column(
                 children: [
                   Card(
-                    elevation: 4,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Row(
+                    child: ExpansionTile(
+                      title: const Text('Estado y permisos'),
+                      subtitle: const Text(
+                        'Activa la bola y revisa los permisos necesarios para que funcione en segundo plano.',
+                      ),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            _enabled ? Icons.check_circle : Icons.cancel,
+                            color: _enabled ? Colors.green : Colors.red,
+                          ),
+                          title: Text(statusText),
+                          subtitle: Text(statusDesc),
+                          trailing: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                _enabled ? Icons.check_circle : Icons.cancel,
-                                color: _enabled ? Colors.green : Colors.red,
+                              ElevatedButton(
+                                onPressed: _enabled ? null : _activate,
+                                style: primaryBtnStyle,
+                                child: const Text('Activar'),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _enabled
-                                      ? 'Activada (no se desactiva nunca)'
-                                      : 'Desactivada',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              Column(
-                                children: [
-                                  ElevatedButton(
-                                    onPressed: _enabled ? null : _activate,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: customColor,
-                                    ),
-                                    child: const Text('Activar'),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ElevatedButton(
-                                    onPressed: _enabled ? _deactivate : null,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                    ),
-                                    child: const Text('Desactivar'),
-                                  ),
-                                ],
+                              const SizedBox(height: 8),
+                              ElevatedButton(
+                                onPressed: _enabled ? _deactivate : null,
+                                style: destructiveBtnStyle,
+                                child: const Text('Desactivar'),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Permiso sobre otras apps'),
-                            subtitle: Text(
-                              _overlayGranted
-                                  ? 'Concedido'
-                                  : 'Requerido para mostrar la bola',
-                            ),
-                            trailing: TextButton(
-                              onPressed: _overlayGranted
-                                  ? null
-                                  : () async {
-                                      await FloatingBallService
-                                          .openOverlayPermissionSettings();
-                                    },
-                              child: const Text('Abrir'),
-                            ),
+                        ),
+                        const Divider(),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Permiso sobre otras apps'),
+                          subtitle: Text(
+                            _overlayGranted
+                                ? 'Concedido • Permite mostrar la bola por encima de otras apps.'
+                                : 'Requerido para mostrar la bola por encima de otras apps.',
                           ),
-                          const Divider(),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Accesibilidad (Home/Recientes/Back)'),
-                            subtitle: Text(
-                              _accessibilityEnabled
-                                  ? 'Activada'
-                                  : 'Requerida para acciones globales',
-                            ),
-                            trailing: TextButton(
-                              onPressed: () async {
-                                await FloatingBallService
-                                    .openAccessibilitySettings();
-                              },
-                              child: const Text('Abrir'),
-                            ),
+                          trailing: TextButton(
+                            onPressed: _overlayGranted
+                                ? null
+                                : () async {
+                                    await FloatingBallService
+                                        .openOverlayPermissionSettings();
+                                  },
+                            style: linkBtnStyle,
+                            child: const Text('Abrir'),
                           ),
-                          const Divider(),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Optimización de batería'),
-                            subtitle: Text(
-                              _batteryIgnored
-                                  ? 'Ignorada'
-                                  : 'Recomendado para que no se cierre',
-                            ),
-                            trailing: TextButton(
-                              onPressed: _batteryIgnored
-                                  ? null
-                                  : () async {
-                                      await FloatingBallService
-                                          .requestBatteryOptimizationPermission();
-                                    },
-                              child: const Text('Permitir'),
-                            ),
+                        ),
+                        const Divider(),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Accesibilidad (Home/Recientes/Back)'),
+                          subtitle: Text(
+                            _accessibilityEnabled
+                                ? 'Activada • Habilita acciones globales como Home/Recientes/Back.'
+                                : 'Requerida para acciones globales como Home/Recientes/Back.',
                           ),
-                          const Divider(),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Personalizar bola'),
-                            subtitle: const Text('Color, icono y modo pantalla completa'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => Navigator.pushNamed(
-                              context,
-                              '/floating_ball_style',
-                            ),
-                          ),
-                          const Divider(),
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Gestos fuera de la bola'),
-                            subtitle: const Text(
-                              'Mantiene la bola estática y permite acciones por direcciones',
-                            ),
-                            value: _gesturesEnabled,
-                            onChanged: (v) async {
-                              setState(() => _gesturesEnabled = v);
-                              await FloatingBallService.setGesturesEnabled(v);
+                          trailing: TextButton(
+                            onPressed: () async {
+                              await FloatingBallService.openAccessibilitySettings();
                             },
+                            style: linkBtnStyle,
+                            child: const Text('Abrir'),
                           ),
-                          if (_gesturesEnabled) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              'Mantener presionado para mover: $_gestureLongPressMs ms',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            Slider(
-                              value: _gestureLongPressMs.toDouble(),
-                              min: 150,
-                              max: 2000,
-                              divisions: 37,
-                              label: '${_gestureLongPressMs}ms',
-                              onChanged: (v) {
-                                setState(() => _gestureLongPressMs = v.round());
-                              },
-                              onChangeEnd: (v) async {
-                                final ms = v.round();
-                                await FloatingBallService.setGestureLongPressMs(ms);
-                              },
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Vibración (duración): $_gestureVibrationMs ms',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            Slider(
-                              value: _gestureVibrationMs.toDouble(),
-                              min: 0,
-                              max: 500,
-                              divisions: 50,
-                              label: '${_gestureVibrationMs}ms',
-                              onChanged: (v) {
-                                setState(
-                                  () => _gestureVibrationMs = v.round(),
-                                );
-                              },
-                              onChangeEnd: (v) async {
-                                final ms = v.round();
-                                await FloatingBallService.setGestureVibrationMs(ms);
-                              },
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Vibración (potencia): $_gestureVibrationAmplitude',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            Slider(
-                              value: _gestureVibrationAmplitude.toDouble(),
-                              min: 1,
-                              max: 255,
-                              divisions: 254,
-                              label: '$_gestureVibrationAmplitude',
-                              onChanged: (v) {
-                                setState(
-                                  () => _gestureVibrationAmplitude = v.round(),
-                                );
-                              },
-                              onChangeEnd: (v) async {
-                                final amp = v.round();
-                                await FloatingBallService.setGestureVibrationAmplitude(
-                                  amp,
-                                );
-                              },
-                            ),
-                            SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Usar pantalla de notificaciones personalizada',
-                              ),
-                              subtitle: const Text(
-                                'Aplica a la acción "Barra de notificaciones"',
-                              ),
-                              value: _gestureNotificationsUseCustomScreen,
-                              onChanged: (v) async {
-                                setState(
-                                  () => _gestureNotificationsUseCustomScreen = v,
-                                );
-                                await FloatingBallService
-                                    .setGestureNotificationsUseCustomScreenEnabled(
-                                  v,
-                                );
-                              },
-                            ),
-                            _buildGestureTile(
-                              title: 'Gesto hacia arriba',
-                              action: _gestureUpAction,
-                              onActionChanged: (v) async {
-                                setState(() => _gestureUpAction = v);
-                                await FloatingBallService.setGestureUpAction(v);
-                              },
-                              packageName: _gestureUpApp,
-                              onPickApp: () => _pickGestureApp(
-                                direction: 'up',
-                                currentPackage: _gestureUpApp,
-                              ),
-                            ),
-                            _buildGestureTile(
-                              title: 'Gesto hacia la derecha',
-                              action: _gestureRightAction,
-                              onActionChanged: (v) async {
-                                setState(() => _gestureRightAction = v);
-                                await FloatingBallService.setGestureRightAction(v);
-                              },
-                              packageName: _gestureRightApp,
-                              onPickApp: () => _pickGestureApp(
-                                direction: 'right',
-                                currentPackage: _gestureRightApp,
-                              ),
-                            ),
-                            _buildGestureTile(
-                              title: 'Gesto hacia abajo',
-                              action: _gestureDownAction,
-                              onActionChanged: (v) async {
-                                setState(() => _gestureDownAction = v);
-                                await FloatingBallService.setGestureDownAction(v);
-                              },
-                              packageName: _gestureDownApp,
-                              onPickApp: () => _pickGestureApp(
-                                direction: 'down',
-                                currentPackage: _gestureDownApp,
-                              ),
-                            ),
-                            _buildGestureTile(
-                              title: 'Gesto hacia la izquierda',
-                              action: _gestureLeftAction,
-                              onActionChanged: (v) async {
-                                setState(() => _gestureLeftAction = v);
-                                await FloatingBallService.setGestureLeftAction(v);
-                              },
-                              packageName: _gestureLeftApp,
-                              onPickApp: () => _pickGestureApp(
-                                direction: 'left',
-                                currentPackage: _gestureLeftApp,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                        ),
+                        const Divider(),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Optimización de batería'),
+                          subtitle: Text(
+                            _batteryIgnored
+                                ? 'Ignorada • Reduce cortes del servicio por ahorro de batería.'
+                                : 'Recomendado para evitar que el sistema cierre el servicio.',
+                          ),
+                          trailing: TextButton(
+                            onPressed: _batteryIgnored
+                                ? null
+                                : () async {
+                                    await FloatingBallService
+                                        .requestBatteryOptimizationPermission();
+                                  },
+                            style: linkBtnStyle,
+                            child: const Text('Permitir'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
                   Card(
-                    elevation: 4,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Aplicaciones en el menú',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                    child: ExpansionTile(
+                      title: const Text('Personalización'),
+                      subtitle: const Text(
+                        'Ajusta el estilo de la bola y el contenido del menú (apps, pantalla completa y más).',
+                      ),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Personalizar bola'),
+                          subtitle: const Text(
+                            'Color, icono, modo pantalla completa, popup y pantallas asociadas.',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            '/floating_ball_style',
+                          ),
+                        ),
+                        const Divider(),
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('Aplicaciones del menú'),
+                          subtitle: const Text(
+                            'Se muestran al abrir la bola (acceso rápido a apps).',
+                          ),
+                          childrenPadding: const EdgeInsets.only(bottom: 8),
+                          children: [
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Seleccionar aplicaciones'),
+                              subtitle: Text(selectedAppsText),
+                              trailing: TextButton(
+                                onPressed: _pickApps,
+                                style: linkBtnStyle,
+                                child: const Text('Seleccionar'),
+                              ),
+                            ),
+                            if (_selectedApps.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: _selectedApps
+                                      .take(8)
+                                      .map((e) => Text('• $e'))
+                                      .toList(),
                                 ),
                               ),
-                              TextButton(
-                                onPressed: _pickApps,
-                                child: const Text('Seleccionar'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    child: ExpansionTile(
+                      title: const Text('Gestos'),
+                      subtitle: const Text(
+                        'Acciones al deslizar fuera de la bola. Útil si quieres mantener la bola estática.',
+                      ),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      children: [
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Habilitar gestos'),
+                          subtitle: const Text(
+                            'Permite acciones por dirección y configura vibración/tiempos.',
+                          ),
+                          value: _gesturesEnabled,
+                          activeColor: Colors.green,
+                          inactiveTrackColor: customColor[200],
+                          inactiveThumbColor: Colors.grey[300],
+                          onChanged: (v) async {
+                            setState(() => _gesturesEnabled = v);
+                            await FloatingBallService.setGesturesEnabled(v);
+                          },
+                        ),
+                        if (_gesturesEnabled) ...[
+                          const Divider(),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Mantener presionado para mover'),
+                            subtitle: Text('$_gestureLongPressMs ms • Duración requerida'),
+                          ),
+                          Slider(
+                            value: _gestureLongPressMs.toDouble(),
+                            min: 150,
+                            max: 2000,
+                            divisions: 37,
+                            label: '${_gestureLongPressMs}ms',
+                            onChanged: (v) {
+                              setState(() => _gestureLongPressMs = v.round());
+                            },
+                            onChangeEnd: (v) async {
+                              final ms = v.round();
+                              await FloatingBallService.setGestureLongPressMs(ms);
+                            },
+                          ),
+                          const Divider(),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Vibración (duración)'),
+                            subtitle: Text('$_gestureVibrationMs ms • 0 desactiva'),
+                          ),
+                          Slider(
+                            value: _gestureVibrationMs.toDouble(),
+                            min: 0,
+                            max: 500,
+                            divisions: 50,
+                            label: '${_gestureVibrationMs}ms',
+                            onChanged: (v) {
+                              setState(() => _gestureVibrationMs = v.round());
+                            },
+                            onChangeEnd: (v) async {
+                              final ms = v.round();
+                              await FloatingBallService.setGestureVibrationMs(ms);
+                            },
+                          ),
+                          const Divider(),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Vibración (potencia)'),
+                            subtitle: Text('$_gestureVibrationAmplitude • 1–255'),
+                          ),
+                          Slider(
+                            value: _gestureVibrationAmplitude.toDouble(),
+                            min: 1,
+                            max: 255,
+                            divisions: 254,
+                            label: '$_gestureVibrationAmplitude',
+                            onChanged: (v) {
+                              setState(() => _gestureVibrationAmplitude = v.round());
+                            },
+                            onChangeEnd: (v) async {
+                              final amp = v.round();
+                              await FloatingBallService.setGestureVibrationAmplitude(
+                                amp,
+                              );
+                            },
+                          ),
+                          const Divider(),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Pantalla de notificaciones personalizada'),
+                            subtitle: const Text(
+                              'Cuando la acción es “Barra de notificaciones”, usa la pantalla personalizada.',
+                            ),
+                            value: _gestureNotificationsUseCustomScreen,
+                            activeColor: Colors.green,
+                            inactiveTrackColor: customColor[200],
+                            inactiveThumbColor: Colors.grey[300],
+                            onChanged: (v) async {
+                              setState(() => _gestureNotificationsUseCustomScreen = v);
+                              await FloatingBallService
+                                  .setGestureNotificationsUseCustomScreenEnabled(
+                                v,
+                              );
+                            },
+                          ),
+                          const Divider(),
+                          ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            title: const Text('Acciones por dirección'),
+                            subtitle: const Text(
+                              'Configura qué hace cada gesto (arriba/derecha/abajo/izquierda).',
+                            ),
+                            children: [
+                              _buildGestureTile(
+                                title: 'Gesto hacia arriba',
+                                action: _gestureUpAction,
+                                onActionChanged: (v) async {
+                                  setState(() => _gestureUpAction = v);
+                                  await FloatingBallService.setGestureUpAction(v);
+                                },
+                                packageName: _gestureUpApp,
+                                onPickApp: () => _pickGestureApp(
+                                  direction: 'up',
+                                  currentPackage: _gestureUpApp,
+                                ),
+                              ),
+                              const Divider(),
+                              _buildGestureTile(
+                                title: 'Gesto hacia la derecha',
+                                action: _gestureRightAction,
+                                onActionChanged: (v) async {
+                                  setState(() => _gestureRightAction = v);
+                                  await FloatingBallService.setGestureRightAction(v);
+                                },
+                                packageName: _gestureRightApp,
+                                onPickApp: () => _pickGestureApp(
+                                  direction: 'right',
+                                  currentPackage: _gestureRightApp,
+                                ),
+                              ),
+                              const Divider(),
+                              _buildGestureTile(
+                                title: 'Gesto hacia abajo',
+                                action: _gestureDownAction,
+                                onActionChanged: (v) async {
+                                  setState(() => _gestureDownAction = v);
+                                  await FloatingBallService.setGestureDownAction(v);
+                                },
+                                packageName: _gestureDownApp,
+                                onPickApp: () => _pickGestureApp(
+                                  direction: 'down',
+                                  currentPackage: _gestureDownApp,
+                                ),
+                              ),
+                              const Divider(),
+                              _buildGestureTile(
+                                title: 'Gesto hacia la izquierda',
+                                action: _gestureLeftAction,
+                                onActionChanged: (v) async {
+                                  setState(() => _gestureLeftAction = v);
+                                  await FloatingBallService.setGestureLeftAction(v);
+                                },
+                                packageName: _gestureLeftApp,
+                                onPickApp: () => _pickGestureApp(
+                                  direction: 'left',
+                                  currentPackage: _gestureLeftApp,
+                                ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          if (_selectedApps.isEmpty)
-                            const Text('No hay aplicaciones seleccionadas')
-                          else
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: _selectedApps
-                                  .take(8)
-                                  .map((e) => Text('• $e'))
-                                  .toList(),
-                            ),
                         ],
-                      ),
+                      ],
                     ),
                   ),
                 ],

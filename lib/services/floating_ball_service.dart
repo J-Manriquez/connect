@@ -161,6 +161,78 @@ class FloatingBallService {
       'floating_ball_conversation_text_color';
   static const String _keyConversationTextSizeSp =
       'floating_ball_conversation_text_size_sp';
+  static const String _keyConversationTitleColor =
+      'floating_ball_conversation_title_color';
+  static const String _keyConversationTitleSizeSp =
+      'floating_ball_conversation_title_size_sp';
+  static const String _keyConversationCloseHeightDp =
+      'floating_ball_conversation_close_height_dp';
+  static const String _keyConversationCloseBgColor =
+      'floating_ball_conversation_close_bg_color';
+  static const String _keyConversationCloseTextColor =
+      'floating_ball_conversation_close_text_color';
+  static const String _keyConversationCloseHideText =
+      'floating_ball_conversation_close_hide_text';
+  static const String _keyConversationCloseIconId =
+      'floating_ball_conversation_close_icon_id';
+  static const String _keyConversationCloseIconPngBase64 =
+      'floating_ball_conversation_close_icon_png_base64';
+  static const String _keyConversationCloseText =
+      'floating_ball_conversation_close_text';
+  static const String _keyConversationCloseBorderColor =
+      'floating_ball_conversation_close_border_color';
+  static const String _keyConversationClosePaddingHorzDp =
+      'floating_ball_conversation_close_padding_horz_dp';
+  static const String _keyConversationClosePaddingVertDp =
+      'floating_ball_conversation_close_padding_vert_dp';
+  static const String _keyConversationReplyHeightDp =
+      'floating_ball_conversation_reply_height_dp';
+  static const String _keyConversationReplyBgColor =
+      'floating_ball_conversation_reply_bg_color';
+  static const String _keyConversationReplyTextColor =
+      'floating_ball_conversation_reply_text_color';
+  static const String _keyConversationReplyBorderColor =
+      'floating_ball_conversation_reply_border_color';
+  static const String _keyConversationReplyPaddingHorzDp =
+      'floating_ball_conversation_reply_padding_horz_dp';
+  static const String _keyConversationReplyPaddingVertDp =
+      'floating_ball_conversation_reply_padding_vert_dp';
+  static const String _keyConversationReplyHideText =
+      'floating_ball_conversation_reply_hide_text';
+  static const String _keyConversationReplyIconId =
+      'floating_ball_conversation_reply_icon_id';
+  static const String _keyConversationReplyIconPngBase64 =
+      'floating_ball_conversation_reply_icon_png_base64';
+  static const String _keyConversationReplyText =
+      'floating_ball_conversation_reply_text';
+  static const String _keyConversationBottomButtonsGapDp =
+      'floating_ball_conversation_bottom_buttons_gap_dp';
+  static const String _keyConversationBottomButtonsPaddingHorzDp =
+      'floating_ball_conversation_bottom_buttons_padding_horz_dp';
+  static const String _keyConversationBottomButtonsPaddingVertDp =
+      'floating_ball_conversation_bottom_buttons_padding_vert_dp';
+  static const String _keyConversationHeaderAppIconSizeDp =
+      'floating_ball_conversation_header_app_icon_size_dp';
+  static const String _keyConversationCloseIconSizeDp =
+      'floating_ball_conversation_close_icon_size_dp';
+  static const String _keyConversationReplyIconSizeDp =
+      'floating_ball_conversation_reply_icon_size_dp';
+  static const String _keyConversationReplyModalBgColor =
+      'floating_ball_conversation_reply_modal_bg_color';
+  static const String _keyConversationReplyModalTextColor =
+      'floating_ball_conversation_reply_modal_text_color';
+  static const String _keyConversationReplyModalTextSizeSp =
+      'floating_ball_conversation_reply_modal_text_size_sp';
+  static const String _keyConversationReplyModalSendIconId =
+      'floating_ball_conversation_reply_modal_send_icon_id';
+  static const String _keyConversationReplyModalSendIconPngBase64 =
+      'floating_ball_conversation_reply_modal_send_icon_png_base64';
+  static const String _keyConversationReplyModalSendIconSizeDp =
+      'floating_ball_conversation_reply_modal_send_icon_size_dp';
+  static const String _keyConversationReplyModalSendBgColor =
+      'floating_ball_conversation_reply_modal_send_bg_color';
+  static const String _keyConversationReplyModalSendBorderColor =
+      'floating_ball_conversation_reply_modal_send_border_color';
   static const String _keyFullScreenMediaAutoShow =
       'floating_ball_fs_media_auto_show';
   static const String _keyFullScreenCloseHeightDp =
@@ -355,6 +427,39 @@ class FloatingBallService {
       _defaultFullScreenTileBorderColor;
   static const int _defaultConversationTextColor = 0xFFFFFFFF;
   static const int _defaultConversationTextSizeSp = 14;
+  static const int _defaultConversationTitleColor = _defaultConversationTextColor;
+  static const int _defaultConversationTitleSizeSp = 16;
+  static const int _defaultConversationCloseHeightDp = 52;
+  static const int _defaultConversationCloseBgColor = 0xFFDC2626;
+  static const int _defaultConversationCloseTextColor = 0xFFFFFFFF;
+  static const bool _defaultConversationCloseHideText = false;
+  static const String _defaultConversationCloseIconId = 'close';
+  static const String _defaultConversationCloseText = 'Cerrar';
+  static const int _defaultConversationCloseBorderColor = 0x22FFFFFF;
+  static const int _defaultConversationClosePaddingHorzDp = 12;
+  static const int _defaultConversationClosePaddingVertDp = 14;
+  static const int _defaultConversationReplyHeightDp = 52;
+  static const int _defaultConversationReplyBgColor = 0xFF202020;
+  static const int _defaultConversationReplyTextColor = 0xFFFFFFFF;
+  static const bool _defaultConversationReplyHideText = false;
+  static const String _defaultConversationReplyIconId = 'reply';
+  static const String _defaultConversationReplyText = 'Responder';
+  static const int _defaultConversationReplyBorderColor = 0x22FFFFFF;
+  static const int _defaultConversationReplyPaddingHorzDp = 12;
+  static const int _defaultConversationReplyPaddingVertDp = 14;
+  static const int _defaultConversationBottomButtonsGapDp = 10;
+  static const int _defaultConversationBottomButtonsPaddingHorzDp = 14;
+  static const int _defaultConversationBottomButtonsPaddingVertDp = 10;
+  static const int _defaultConversationHeaderAppIconSizeDp = 34;
+  static const int _defaultConversationCloseIconSizeDp = 20;
+  static const int _defaultConversationReplyIconSizeDp = 20;
+  static const int _defaultConversationReplyModalBgColor = 0xFF111111;
+  static const int _defaultConversationReplyModalTextColor = 0xFFFFFFFF;
+  static const int _defaultConversationReplyModalTextSizeSp = 16;
+  static const String _defaultConversationReplyModalSendIconId = 'send';
+  static const int _defaultConversationReplyModalSendIconSizeDp = 22;
+  static const int _defaultConversationReplyModalSendBgColor = 0x00000000;
+  static const int _defaultConversationReplyModalSendBorderColor = 0x22FFFFFF;
   static const int _defaultFullScreenBarHeightDp = 54;
   static const int _defaultFullScreenBarBgColor = 0xCC111111;
   static const int _defaultFullScreenBarContentColor = 0xFFFFFFFF;
@@ -1228,6 +1333,489 @@ class FloatingBallService {
   static Future<void> setConversationTextSizeSp(int sp) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyConversationTextSizeSp, sp.clamp(8, 32));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationTitleColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationTitleColor) ??
+        _defaultConversationTitleColor;
+  }
+
+  static Future<void> setConversationTitleColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationTitleColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationTitleSizeSp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationTitleSizeSp) ??
+            _defaultConversationTitleSizeSp)
+        .clamp(10, 32);
+  }
+
+  static Future<void> setConversationTitleSizeSp(int sp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationTitleSizeSp, sp.clamp(10, 32));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationCloseHeightDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationCloseHeightDp) ??
+            _defaultConversationCloseHeightDp)
+        .clamp(36, 160);
+  }
+
+  static Future<void> setConversationCloseHeightDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationCloseHeightDp, dp.clamp(36, 160));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationCloseBgColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationCloseBgColor) ??
+        _defaultConversationCloseBgColor;
+  }
+
+  static Future<void> setConversationCloseBgColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationCloseBgColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationCloseTextColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationCloseTextColor) ??
+        _defaultConversationCloseTextColor;
+  }
+
+  static Future<void> setConversationCloseTextColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationCloseTextColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<bool> isConversationCloseHideTextEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyConversationCloseHideText) ??
+        _defaultConversationCloseHideText;
+  }
+
+  static Future<void> setConversationCloseHideTextEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyConversationCloseHideText, enabled);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<String> getConversationCloseIconId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getString(_keyConversationCloseIconId) ??
+            _defaultConversationCloseIconId)
+        .trim()
+        .isEmpty
+        ? _defaultConversationCloseIconId
+        : (prefs.getString(_keyConversationCloseIconId) ??
+                _defaultConversationCloseIconId)
+            .trim();
+  }
+
+  static Future<String?> getConversationCloseIconPngBase64() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyConversationCloseIconPngBase64);
+  }
+
+  static Future<void> setConversationCloseIconWithPng({
+    required String iconId,
+    required String? iconPngBase64,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyConversationCloseIconId, iconId.trim());
+    if (iconPngBase64 == null || iconPngBase64.trim().isEmpty) {
+      await prefs.remove(_keyConversationCloseIconPngBase64);
+    } else {
+      await prefs.setString(_keyConversationCloseIconPngBase64, iconPngBase64);
+    }
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<String> getConversationCloseText() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getString(_keyConversationCloseText) ??
+            _defaultConversationCloseText)
+        .trim()
+        .isEmpty
+        ? _defaultConversationCloseText
+        : (prefs.getString(_keyConversationCloseText) ??
+                _defaultConversationCloseText)
+            .trim();
+  }
+
+  static Future<void> setConversationCloseText(String text) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyConversationCloseText, text.trim());
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationCloseBorderColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationCloseBorderColor) ??
+        _defaultConversationCloseBorderColor;
+  }
+
+  static Future<void> setConversationCloseBorderColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationCloseBorderColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationClosePaddingHorzDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationClosePaddingHorzDp) ??
+            _defaultConversationClosePaddingHorzDp)
+        .clamp(0, 80);
+  }
+
+  static Future<void> setConversationClosePaddingHorzDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationClosePaddingHorzDp, dp.clamp(0, 80));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationClosePaddingVertDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationClosePaddingVertDp) ??
+            _defaultConversationClosePaddingVertDp)
+        .clamp(0, 80);
+  }
+
+  static Future<void> setConversationClosePaddingVertDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationClosePaddingVertDp, dp.clamp(0, 80));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyHeightDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationReplyHeightDp) ??
+            _defaultConversationReplyHeightDp)
+        .clamp(36, 160);
+  }
+
+  static Future<void> setConversationReplyHeightDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyHeightDp, dp.clamp(36, 160));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyBgColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationReplyBgColor) ??
+        _defaultConversationReplyBgColor;
+  }
+
+  static Future<void> setConversationReplyBgColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyBgColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyTextColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationReplyTextColor) ??
+        _defaultConversationReplyTextColor;
+  }
+
+  static Future<void> setConversationReplyTextColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyTextColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyBorderColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationReplyBorderColor) ??
+        _defaultConversationReplyBorderColor;
+  }
+
+  static Future<void> setConversationReplyBorderColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyBorderColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyPaddingHorzDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationReplyPaddingHorzDp) ??
+            _defaultConversationReplyPaddingHorzDp)
+        .clamp(0, 80);
+  }
+
+  static Future<void> setConversationReplyPaddingHorzDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyPaddingHorzDp, dp.clamp(0, 80));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyPaddingVertDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationReplyPaddingVertDp) ??
+            _defaultConversationReplyPaddingVertDp)
+        .clamp(0, 80);
+  }
+
+  static Future<void> setConversationReplyPaddingVertDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyPaddingVertDp, dp.clamp(0, 80));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<bool> isConversationReplyHideTextEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyConversationReplyHideText) ??
+        _defaultConversationReplyHideText;
+  }
+
+  static Future<void> setConversationReplyHideTextEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyConversationReplyHideText, enabled);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<String> getConversationReplyIconId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getString(_keyConversationReplyIconId) ??
+            _defaultConversationReplyIconId)
+        .trim()
+        .isEmpty
+        ? _defaultConversationReplyIconId
+        : (prefs.getString(_keyConversationReplyIconId) ??
+                _defaultConversationReplyIconId)
+            .trim();
+  }
+
+  static Future<String?> getConversationReplyIconPngBase64() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyConversationReplyIconPngBase64);
+  }
+
+  static Future<void> setConversationReplyIconWithPng({
+    required String iconId,
+    required String? iconPngBase64,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyConversationReplyIconId, iconId.trim());
+    if (iconPngBase64 == null || iconPngBase64.trim().isEmpty) {
+      await prefs.remove(_keyConversationReplyIconPngBase64);
+    } else {
+      await prefs.setString(_keyConversationReplyIconPngBase64, iconPngBase64);
+    }
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<String> getConversationReplyText() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getString(_keyConversationReplyText) ??
+            _defaultConversationReplyText)
+        .trim()
+        .isEmpty
+        ? _defaultConversationReplyText
+        : (prefs.getString(_keyConversationReplyText) ??
+                _defaultConversationReplyText)
+            .trim();
+  }
+
+  static Future<void> setConversationReplyText(String text) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyConversationReplyText, text.trim());
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationBottomButtonsGapDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationBottomButtonsGapDp) ??
+            _defaultConversationBottomButtonsGapDp)
+        .clamp(0, 60);
+  }
+
+  static Future<void> setConversationBottomButtonsGapDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationBottomButtonsGapDp, dp.clamp(0, 60));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationBottomButtonsPaddingHorzDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationBottomButtonsPaddingHorzDp) ??
+            _defaultConversationBottomButtonsPaddingHorzDp)
+        .clamp(0, 60);
+  }
+
+  static Future<void> setConversationBottomButtonsPaddingHorzDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationBottomButtonsPaddingHorzDp, dp.clamp(0, 60));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationBottomButtonsPaddingVertDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationBottomButtonsPaddingVertDp) ??
+            _defaultConversationBottomButtonsPaddingVertDp)
+        .clamp(0, 60);
+  }
+
+  static Future<void> setConversationBottomButtonsPaddingVertDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationBottomButtonsPaddingVertDp, dp.clamp(0, 60));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationHeaderAppIconSizeDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationHeaderAppIconSizeDp) ??
+            _defaultConversationHeaderAppIconSizeDp)
+        .clamp(12, 120);
+  }
+
+  static Future<void> setConversationHeaderAppIconSizeDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationHeaderAppIconSizeDp, dp.clamp(12, 120));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationCloseIconSizeDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationCloseIconSizeDp) ??
+            _defaultConversationCloseIconSizeDp)
+        .clamp(10, 120);
+  }
+
+  static Future<void> setConversationCloseIconSizeDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationCloseIconSizeDp, dp.clamp(10, 120));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyIconSizeDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationReplyIconSizeDp) ??
+            _defaultConversationReplyIconSizeDp)
+        .clamp(10, 120);
+  }
+
+  static Future<void> setConversationReplyIconSizeDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyIconSizeDp, dp.clamp(10, 120));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyModalBgColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationReplyModalBgColor) ??
+        _defaultConversationReplyModalBgColor;
+  }
+
+  static Future<void> setConversationReplyModalBgColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyModalBgColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyModalTextColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationReplyModalTextColor) ??
+        _defaultConversationReplyModalTextColor;
+  }
+
+  static Future<void> setConversationReplyModalTextColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyModalTextColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyModalTextSizeSp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationReplyModalTextSizeSp) ??
+            _defaultConversationReplyModalTextSizeSp)
+        .clamp(8, 32);
+  }
+
+  static Future<void> setConversationReplyModalTextSizeSp(int sp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyModalTextSizeSp, sp.clamp(8, 32));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<String> getConversationReplyModalSendIconId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getString(_keyConversationReplyModalSendIconId) ??
+            _defaultConversationReplyModalSendIconId)
+        .trim()
+        .isEmpty
+        ? _defaultConversationReplyModalSendIconId
+        : (prefs.getString(_keyConversationReplyModalSendIconId) ??
+                _defaultConversationReplyModalSendIconId)
+            .trim();
+  }
+
+  static Future<String?> getConversationReplyModalSendIconPngBase64() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyConversationReplyModalSendIconPngBase64);
+  }
+
+  static Future<void> setConversationReplyModalSendIconWithPng({
+    required String iconId,
+    required String? iconPngBase64,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyConversationReplyModalSendIconId, iconId.trim());
+    if (iconPngBase64 == null || iconPngBase64.trim().isEmpty) {
+      await prefs.remove(_keyConversationReplyModalSendIconPngBase64);
+    } else {
+      await prefs.setString(
+        _keyConversationReplyModalSendIconPngBase64,
+        iconPngBase64,
+      );
+    }
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyModalSendIconSizeDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyConversationReplyModalSendIconSizeDp) ??
+            _defaultConversationReplyModalSendIconSizeDp)
+        .clamp(10, 120);
+  }
+
+  static Future<void> setConversationReplyModalSendIconSizeDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyModalSendIconSizeDp, dp.clamp(10, 120));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyModalSendBgColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationReplyModalSendBgColor) ??
+        _defaultConversationReplyModalSendBgColor;
+  }
+
+  static Future<void> setConversationReplyModalSendBgColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyModalSendBgColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getConversationReplyModalSendBorderColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyConversationReplyModalSendBorderColor) ??
+        _defaultConversationReplyModalSendBorderColor;
+  }
+
+  static Future<void> setConversationReplyModalSendBorderColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyConversationReplyModalSendBorderColor, argb);
     await _channel.invokeMethod('updateConfig');
   }
 

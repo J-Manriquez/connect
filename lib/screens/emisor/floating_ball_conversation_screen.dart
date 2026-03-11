@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connect/services/ble_service.dart';
 import 'package:connect/services/floating_ball_service.dart';
+import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/notification_cache_service.dart';
 import 'package:connect/services/notification_filter_service.dart';
 import 'package:connect/services/preferences_service.dart';
@@ -147,6 +148,37 @@ class _FloatingBallConversationScreenState
   int _convOutgoingColor = 0x22FFFFFF;
   int _convTextColor = 0xFFFFFFFF;
   int _convTextSizeSp = 14;
+  int _convTitleColor = 0xFFFFFFFF;
+  int _convTitleSizeSp = 16;
+
+  int _convCloseHeightDp = 52;
+  int _convCloseBgColor = 0xFFDC2626;
+  int _convCloseTextColor = 0xFFFFFFFF;
+  int _convCloseBorderColor = 0x22FFFFFF;
+  bool _convCloseHideText = false;
+  String _convCloseText = 'Cerrar';
+  String? _convCloseIconPngBase64;
+
+  int _convReplyHeightDp = 52;
+  int _convReplyBgColor = 0xFF202020;
+  int _convReplyTextColor = 0xFFFFFFFF;
+  int _convReplyBorderColor = 0x22FFFFFF;
+  bool _convReplyHideText = false;
+  String _convReplyText = 'Responder';
+  String? _convReplyIconPngBase64;
+  int _convBottomButtonsGapDp = 10;
+  int _convBottomButtonsPaddingHorzDp = 14;
+  int _convBottomButtonsPaddingVertDp = 10;
+  int _convHeaderAppIconSizeDp = 34;
+  int _convCloseIconSizeDp = 20;
+  int _convReplyIconSizeDp = 20;
+  int _convReplyModalBgColor = 0xFF111111;
+  int _convReplyModalTextColor = 0xFFFFFFFF;
+  int _convReplyModalTextSizeSp = 16;
+  String? _convReplyModalSendIconPngBase64;
+  int _convReplyModalSendIconSizeDp = 22;
+  int _convReplyModalSendBgColor = 0x00000000;
+  int _convReplyModalSendBorderColor = 0x22FFFFFF;
 
   String _conversationTitle = '';
   String _packageName = '';
@@ -168,6 +200,7 @@ class _FloatingBallConversationScreenState
   final Map<String, GlobalKey> _messageKeys = {};
   bool _visibilityCheckScheduled = false;
   final Set<String> _visibilityMarked = {};
+  final Set<String> _hiddenMessageIds = {};
   int _lastBtDebugMs = 0;
   String _lastBtDebugSig = '';
 
@@ -272,6 +305,53 @@ class _FloatingBallConversationScreenState
       final convOutgoingColor = await FloatingBallService.getConversationOutgoingColor();
       final convTextColor = await FloatingBallService.getConversationTextColor();
       final convTextSizeSp = await FloatingBallService.getConversationTextSizeSp();
+      final convTitleColor = await FloatingBallService.getConversationTitleColor();
+      final convTitleSizeSp = await FloatingBallService.getConversationTitleSizeSp();
+
+      final closeHeightDp = await FloatingBallService.getConversationCloseHeightDp();
+      final closeBgColor = await FloatingBallService.getConversationCloseBgColor();
+      final closeTextColor = await FloatingBallService.getConversationCloseTextColor();
+      final closeBorderColor =
+          await FloatingBallService.getConversationCloseBorderColor();
+      final closeHideText = await FloatingBallService.isConversationCloseHideTextEnabled();
+      final closeText = await FloatingBallService.getConversationCloseText();
+      final closeIconPngBase64 =
+          await FloatingBallService.getConversationCloseIconPngBase64();
+
+      final replyHeightDp = await FloatingBallService.getConversationReplyHeightDp();
+      final replyBgColor = await FloatingBallService.getConversationReplyBgColor();
+      final replyTextColor = await FloatingBallService.getConversationReplyTextColor();
+      final replyBorderColor =
+          await FloatingBallService.getConversationReplyBorderColor();
+      final replyHideText = await FloatingBallService.isConversationReplyHideTextEnabled();
+      final replyText = await FloatingBallService.getConversationReplyText();
+      final replyIconPngBase64 =
+          await FloatingBallService.getConversationReplyIconPngBase64();
+      final bottomButtonsGapDp =
+          await FloatingBallService.getConversationBottomButtonsGapDp();
+      final bottomButtonsPaddingHorzDp =
+          await FloatingBallService.getConversationBottomButtonsPaddingHorzDp();
+      final bottomButtonsPaddingVertDp =
+          await FloatingBallService.getConversationBottomButtonsPaddingVertDp();
+      final headerAppIconSizeDp =
+          await FloatingBallService.getConversationHeaderAppIconSizeDp();
+      final closeIconSizeDp = await FloatingBallService.getConversationCloseIconSizeDp();
+      final replyIconSizeDp = await FloatingBallService.getConversationReplyIconSizeDp();
+
+      final replyModalBgColor =
+          await FloatingBallService.getConversationReplyModalBgColor();
+      final replyModalTextColor =
+          await FloatingBallService.getConversationReplyModalTextColor();
+      final replyModalTextSizeSp =
+          await FloatingBallService.getConversationReplyModalTextSizeSp();
+      final replyModalSendIconPngBase64 =
+          await FloatingBallService.getConversationReplyModalSendIconPngBase64();
+      final replyModalSendIconSizeDp =
+          await FloatingBallService.getConversationReplyModalSendIconSizeDp();
+      final replyModalSendBgColor =
+          await FloatingBallService.getConversationReplyModalSendBgColor();
+      final replyModalSendBorderColor =
+          await FloatingBallService.getConversationReplyModalSendBorderColor();
 
       if (!mounted) return;
       setState(() {
@@ -311,6 +391,37 @@ class _FloatingBallConversationScreenState
         _convOutgoingColor = convOutgoingColor;
         _convTextColor = convTextColor;
         _convTextSizeSp = convTextSizeSp;
+        _convTitleColor = convTitleColor;
+        _convTitleSizeSp = convTitleSizeSp;
+
+        _convCloseHeightDp = closeHeightDp;
+        _convCloseBgColor = closeBgColor;
+        _convCloseTextColor = closeTextColor;
+        _convCloseBorderColor = closeBorderColor;
+        _convCloseHideText = closeHideText;
+        _convCloseText = closeText;
+        _convCloseIconPngBase64 = closeIconPngBase64;
+
+        _convReplyHeightDp = replyHeightDp;
+        _convReplyBgColor = replyBgColor;
+        _convReplyTextColor = replyTextColor;
+        _convReplyBorderColor = replyBorderColor;
+        _convReplyHideText = replyHideText;
+        _convReplyText = replyText;
+        _convReplyIconPngBase64 = replyIconPngBase64;
+        _convBottomButtonsGapDp = bottomButtonsGapDp;
+        _convBottomButtonsPaddingHorzDp = bottomButtonsPaddingHorzDp;
+        _convBottomButtonsPaddingVertDp = bottomButtonsPaddingVertDp;
+        _convHeaderAppIconSizeDp = headerAppIconSizeDp;
+        _convCloseIconSizeDp = closeIconSizeDp;
+        _convReplyIconSizeDp = replyIconSizeDp;
+        _convReplyModalBgColor = replyModalBgColor;
+        _convReplyModalTextColor = replyModalTextColor;
+        _convReplyModalTextSizeSp = replyModalTextSizeSp;
+        _convReplyModalSendIconPngBase64 = replyModalSendIconPngBase64;
+        _convReplyModalSendIconSizeDp = replyModalSendIconSizeDp;
+        _convReplyModalSendBgColor = replyModalSendBgColor;
+        _convReplyModalSendBorderColor = replyModalSendBorderColor;
       });
     } catch (_) {}
   }
@@ -382,7 +493,11 @@ class _FloatingBallConversationScreenState
         fsConversationEnabled &&
         appConversationEnabled;
 
-    final iconBase64Clean = appIconBase64.replaceAll(RegExp(r'\s+'), '').trim();
+    final iconRaw = appIconBase64.trim();
+    final commaIdx = iconRaw.lastIndexOf(',');
+    final iconPayload = commaIdx >= 0 ? iconRaw.substring(commaIdx + 1) : iconRaw;
+    final iconBase64Clean =
+        iconPayload.replaceAll(RegExp(r'\s+'), '').trim();
     Uint8List? iconBytes;
     if (iconBase64Clean.isNotEmpty) {
       try {
@@ -464,12 +579,15 @@ class _FloatingBallConversationScreenState
   Widget _buildHeader() {
     final title = _getFieldValue(['title', 'titulo']) ?? 'Sin título';
     final titleStyle = TextStyle(
-      color: _isConversationMode ? Color(_convTextColor) : Color(_notifsTitleColor),
-      fontSize: (_isConversationMode ? _convTextSizeSp : _notifsTitleSizeSp).toDouble(),
+      color:
+          _isConversationMode ? Color(_convTitleColor) : Color(_notifsTitleColor),
+      fontSize:
+          (_isConversationMode ? _convTitleSizeSp : _notifsTitleSizeSp).toDouble(),
       fontWeight: FontWeight.w600,
     );
     final hasIcon = _appIconBase64.isNotEmpty;
     final iconBytes = _appIconBytes;
+    final iconSize = _convHeaderAppIconSizeDp.toDouble();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -487,18 +605,18 @@ class _FloatingBallConversationScreenState
                         borderRadius: BorderRadius.circular(10),
                         child: Image.memory(
                           iconBytes,
-                          width: 34,
-                          height: 34,
+                          width: iconSize,
+                          height: iconSize,
                           fit: BoxFit.cover,
                           gaplessPlayback: true,
                         ),
                       ),
                     if (iconBytes == null && hasIcon)
-                      const SizedBox(width: 34, height: 34),
+                      SizedBox(width: iconSize, height: iconSize),
                     if (iconBytes != null || hasIcon) const SizedBox(width: 10),
                     ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxWidth: (constraints.maxWidth - 34 - 10)
+                        maxWidth: (constraints.maxWidth - iconSize - 10)
                             .clamp(120.0, constraints.maxWidth),
                       ),
                       child: Text(
@@ -589,13 +707,117 @@ class _FloatingBallConversationScreenState
     );
   }
 
+  Uint8List? _decodePngBytes(String? raw) {
+    final s = raw?.trim();
+    if (s == null || s.isEmpty) return null;
+    final commaIdx = s.lastIndexOf(',');
+    final payload = commaIdx >= 0 ? s.substring(commaIdx + 1) : s;
+    final cleaned = payload.replaceAll(RegExp(r'\s+'), '').trim();
+    if (cleaned.isEmpty) return null;
+    try {
+      return base64Decode(cleaned);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _pngOrIcon({
+    required String? base64Png,
+    required IconData fallback,
+    required Color tint,
+    required double size,
+  }) {
+    final bytes = _decodePngBytes(base64Png);
+    if (bytes == null) return Icon(fallback, color: tint, size: size);
+    return Image.memory(
+      bytes,
+      width: size,
+      height: size,
+      color: tint,
+      colorBlendMode: BlendMode.srcIn,
+      errorBuilder: (context, error, stackTrace) {
+        return Icon(fallback, color: tint, size: size);
+      },
+    );
+  }
+
+  Widget _bottomActionButton({
+    required VoidCallback? onTap,
+    required int heightDp,
+    required int bgColor,
+    required int borderColor,
+    required int textColor,
+    required bool hideText,
+    required String text,
+    required String? iconPngBase64,
+    required IconData fallback,
+    required int iconSizeDp,
+  }) {
+    final fg = Color(textColor);
+    final ink = Ink(
+      decoration: BoxDecoration(
+        color: Color(bgColor),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Color(borderColor), width: 1),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: heightDp.toDouble()),
+        child: Center(
+          child: hideText
+              ? _pngOrIcon(
+                  base64Png: iconPngBase64,
+                  fallback: fallback,
+                  tint: fg,
+                  size: iconSizeDp.toDouble(),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _pngOrIcon(
+                      base64Png: iconPngBase64,
+                      fallback: fallback,
+                      tint: fg,
+                      size: iconSizeDp.toDouble(),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+
+    return Opacity(
+      opacity: onTap == null ? 0.6 : 1,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: ink,
+        ),
+      ),
+    );
+  }
+
   Widget _buildBottomBar() {
     final contentColor =
         _isConversationMode ? Color(_convTextColor) : Color(_notifsTextColor);
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: _convBottomButtonsPaddingHorzDp.toDouble(),
+          vertical: _convBottomButtonsPaddingVertDp.toDouble(),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -615,41 +837,39 @@ class _FloatingBallConversationScreenState
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () async {
+                  child: _bottomActionButton(
+                    onTap: () async {
                       if (widget.openedFromBackground) {
                         SystemNavigator.pop();
                         return;
                       }
                       Navigator.of(context).maybePop();
                     },
-                    icon: const Icon(Icons.close),
-                    label: const Text('Cerrar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+                    heightDp: _convCloseHeightDp,
+                    bgColor: _convCloseBgColor,
+                    borderColor: _convCloseBorderColor,
+                    textColor: _convCloseTextColor,
+                    hideText: _convCloseHideText,
+                    text: _convCloseText,
+                    iconPngBase64: _convCloseIconPngBase64,
+                    fallback: Icons.close,
+                    iconSizeDp: _convCloseIconSizeDp,
                   ),
                 ),
                 if (_isConversationMode) ...[
-                  const SizedBox(width: 10),
+                  SizedBox(width: _convBottomButtonsGapDp.toDouble()),
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isReplySending ? null : _openReplyDialog,
-                      icon: const Icon(Icons.reply),
-                      label: Text(_isReplySending ? 'Enviando…' : 'Responder'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF202020),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
+                    child: _bottomActionButton(
+                      onTap: _isReplySending ? null : _openReplyDialog,
+                      heightDp: _convReplyHeightDp,
+                      bgColor: _convReplyBgColor,
+                      borderColor: _convReplyBorderColor,
+                      textColor: _convReplyTextColor,
+                      hideText: _convReplyHideText,
+                      text: _isReplySending ? 'Enviando…' : _convReplyText,
+                      iconPngBase64: _convReplyIconPngBase64,
+                      fallback: Icons.reply,
+                      iconSizeDp: _convReplyIconSizeDp,
                     ),
                   ),
                 ],
@@ -932,8 +1152,47 @@ class _FloatingBallConversationScreenState
     );
   }
 
+  Future<void> _deleteConversationMessage(Map<String, dynamic> message) async {
+    final id = _messageId(message);
+    if (id.isEmpty) return;
+
+    final extrasRaw = message['extras'];
+    final extras =
+        extrasRaw is Map ? Map<String, dynamic>.from(extrasRaw) : <String, dynamic>{};
+    final isReply = extras['isReply'] == true || id.startsWith('reply_');
+
+    _hiddenMessageIds.add(id);
+    if (mounted) {
+      setState(() {
+        _allConversationMessages =
+            _allConversationMessages.where((m) => _messageId(m) != id).toList();
+        _windowEnd = _allConversationMessages.length;
+        _windowStart = (_windowEnd - 15).clamp(0, _windowEnd);
+        _messageKeys.clear();
+      });
+    }
+
+    try {
+      if (isReply) {
+        await BtHiveStorageService.deleteConversationReplyById(id);
+      } else {
+        await FirebaseService().deleteNotification(id, '');
+        await BtHiveStorageService.deleteOutboxEntry(id);
+      }
+    } catch (_) {}
+
+    try {
+      await _loadConversationMessages();
+    } catch (_) {}
+  }
+
   Future<void> _showMessageActionsDialog(Map<String, dynamic> message) async {
     final visualized = message['status-visualizacion'] == true;
+    final extrasRaw = message['extras'];
+    final extras =
+        extrasRaw is Map ? Map<String, dynamic>.from(extrasRaw) : <String, dynamic>{};
+    final id = _messageId(message);
+    final isReply = extras['isReply'] == true || id.startsWith('reply_');
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -953,6 +1212,14 @@ class _FloatingBallConversationScreenState
                         Navigator.of(context).pop();
                         await _markNotificationMapAsRead(message);
                       },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete),
+                title: Text(isReply ? 'Eliminar respuesta' : 'Eliminar mensaje'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await _deleteConversationMessage(message);
+                },
               ),
               ListTile(
                 leading: const Icon(Icons.settings),
@@ -985,10 +1252,15 @@ class _FloatingBallConversationScreenState
         final containerRadius = BorderRadius.circular(18);
 
         Widget panel() {
+          final modalTextColor = Color(_convReplyModalTextColor);
+          final modalTextStyle = TextStyle(
+            color: modalTextColor,
+            fontSize: _convReplyModalTextSizeSp.toDouble(),
+          );
           return ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
             child: Material(
-              color: const Color(0xFF111111),
+              color: Color(_convReplyModalBgColor),
               borderRadius: containerRadius,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -996,13 +1268,9 @@ class _FloatingBallConversationScreenState
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
+                    Text(
                       'Responder',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: modalTextStyle.copyWith(fontWeight: FontWeight.w600),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
@@ -1012,10 +1280,12 @@ class _FloatingBallConversationScreenState
                           child: TextField(
                             controller: controller,
                             autofocus: true,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(
+                            style: modalTextStyle,
+                            decoration: InputDecoration(
                               hintText: 'Escribe una respuesta…',
-                              hintStyle: TextStyle(color: Colors.white54),
+                              hintStyle: modalTextStyle.copyWith(
+                                color: modalTextColor.withOpacity(0.6),
+                              ),
                             ),
                             textInputAction: TextInputAction.send,
                             onSubmitted: (_) {
@@ -1026,14 +1296,31 @@ class _FloatingBallConversationScreenState
                           ),
                         ),
                         const SizedBox(width: 10),
-                        IconButton(
-                          onPressed: () {
+                        InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () {
                             final trimmed = controller.text.trim();
                             if (trimmed.isEmpty) return;
                             Navigator.of(context).pop(trimmed);
                           },
-                          icon: const Icon(Icons.send),
-                          color: Colors.white,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Color(_convReplyModalSendBgColor),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Color(_convReplyModalSendBorderColor),
+                                width: 1,
+                              ),
+                            ),
+                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                            alignment: Alignment.center,
+                            child: _pngOrIcon(
+                              base64Png: _convReplyModalSendIconPngBase64,
+                              fallback: Icons.send,
+                              tint: modalTextColor,
+                              size: _convReplyModalSendIconSizeDp.toDouble(),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1220,9 +1507,14 @@ class _FloatingBallConversationScreenState
       } catch (_) {
         localReplies = const [];
       }
+      if (localReplies.isNotEmpty && _hiddenMessageIds.isNotEmpty) {
+        localReplies =
+            localReplies.where((m) => !_hiddenMessageIds.contains(_messageId(m))).toList();
+      }
 
       final conversationTitleNorm = _normalizeConversationKey(_conversationTitle);
       List<Map<String, dynamic>> filtered = remote.where((n) {
+        if (_hiddenMessageIds.contains(_messageId(n))) return false;
         final pkg = _stringFromMessage(n, ['packageName', 'paquete']);
         final t = _stringFromMessage(n, ['title', 'titulo']);
         return pkg == _packageName && t == _conversationTitle;
@@ -1230,6 +1522,7 @@ class _FloatingBallConversationScreenState
 
       if (filtered.length <= 1) {
         filtered = remote.where((n) {
+          if (_hiddenMessageIds.contains(_messageId(n))) return false;
           final pkg = _stringFromMessage(n, ['packageName', 'paquete']);
           if (pkg != _packageName) return false;
           final t = _stringFromMessage(n, ['title', 'titulo']);
@@ -1248,58 +1541,23 @@ class _FloatingBallConversationScreenState
         return at.compareTo(bt);
       });
 
-      if (localReplies.isNotEmpty && filtered.isNotEmpty) {
-        String normForMatch(String s) {
-          return _normalizeConversationKey(s);
-        }
-
-        final remoteTextNorms = filtered.map((m) {
-          final pkg = _stringFromMessage(m, ['packageName', 'paquete']);
-          final title = _stringFromMessage(m, ['title', 'titulo']);
-          final text = _stringFromMessage(
-            m,
-            ['text', 'body', 'bigText', 'mensaje', 'contenido'],
-          );
-          return {
-            'pkg': pkg,
-            'title': title,
-            'textNorm': normForMatch(text),
-          };
-        }).toList();
-
-        for (final r in localReplies) {
-          final rid = _messageId(r);
-          final rtextNorm = normForMatch((r['text'] ?? '').toString());
-          if (rid.isEmpty || rtextNorm.isEmpty) continue;
-
-          final hasRemote = remoteTextNorms.any((m) {
-            final pkg = (m['pkg'] ?? '').toString();
-            final title = (m['title'] ?? '').toString();
-            final textNorm = (m['textNorm'] ?? '').toString();
-            if (pkg != _packageName) return false;
-            if (title != _conversationTitle) return false;
-            if (textNorm.isEmpty) return false;
-            return textNorm.contains(rtextNorm) || rtextNorm.contains(textNorm);
-          });
-
-          if (hasRemote) {
-            try {
-              await BtHiveStorageService.deleteConversationReplyById(rid);
-            } catch (_) {}
-          }
-        }
+      final byId = <String, Map<String, dynamic>>{};
+      for (final n in filtered) {
+        final id = _messageId(n);
+        if (id.isEmpty) continue;
+        byId[id] = n;
+      }
+      for (final r in localReplies) {
+        final m = Map<String, dynamic>.from(r);
+        final id = _messageId(m);
+        if (id.isEmpty) continue;
+        byId[id] = m;
       }
 
-      final all = <Map<String, dynamic>>[
-        ...filtered,
-        ...localReplies.map((e) => Map<String, dynamic>.from(e)),
-      ];
-
-      all.sort((a, b) {
-        final at = _messageTimestampMs(a);
-        final bt = _messageTimestampMs(b);
-        return at.compareTo(bt);
-      });
+      final all = byId.values.toList()
+        ..sort(
+          (a, b) => _messageTimestampMs(a).compareTo(_messageTimestampMs(b)),
+        );
 
       final focusIdx = _pickInitialFocusIndex(all);
 

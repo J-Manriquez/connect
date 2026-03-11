@@ -135,6 +135,9 @@ class FloatingBallService : Service() {
         private const val KEY_CUSTOM_NOTIFS_CLEAR_ALL_ICON_ID = "flutter.floating_ball_custom_notifications_clear_all_icon_id"
         private const val KEY_CUSTOM_NOTIFS_CLEAR_ALL_ICON_PNG_BASE64 = "flutter.floating_ball_custom_notifications_clear_all_icon_png_base64"
         private const val KEY_CUSTOM_NOTIFS_CLEAR_ALL_TEXT = "flutter.floating_ball_custom_notifications_clear_all_text"
+        private const val KEY_CONVERSATION_BOTTOM_BUTTONS_GAP_DP = "flutter.floating_ball_conversation_bottom_buttons_gap_dp"
+        private const val KEY_CONVERSATION_BOTTOM_BUTTONS_PADDING_HORZ_DP = "flutter.floating_ball_conversation_bottom_buttons_padding_horz_dp"
+        private const val KEY_CONVERSATION_BOTTOM_BUTTONS_PADDING_VERT_DP = "flutter.floating_ball_conversation_bottom_buttons_padding_vert_dp"
         private const val KEY_FS_BAR_HEIGHT_DP = "flutter.floating_ball_fs_bar_height_dp"
         private const val KEY_FS_BAR_BG_COLOR = "flutter.floating_ball_fs_bar_bg_color"
         private const val KEY_FS_BAR_CONTENT_COLOR = "flutter.floating_ball_fs_bar_content_color"
@@ -419,6 +422,9 @@ class FloatingBallService : Service() {
     private var cnClearAllIconId: String = "delete"
     private var cnClearAllIconPngBase64: String? = null
     private var cnClearAllText: String = "Eliminar todo"
+    private var convBottomButtonsGapDp: Int = 10
+    private var convBottomButtonsPaddingHorzDp: Int = 14
+    private var convBottomButtonsPaddingVertDp: Int = 10
     private var fsBarHeightDp: Int = 54
     private var fsBarBgColor: Int = 0xCC111111.toInt()
     private var fsBarContentColor: Int = 0xFFFFFFFF.toInt()
@@ -652,6 +658,9 @@ class FloatingBallService : Service() {
             cnClearAllIconId = (prefs.getString(KEY_CUSTOM_NOTIFS_CLEAR_ALL_ICON_ID, "delete") ?: "delete").trim().ifEmpty { "delete" }
             cnClearAllIconPngBase64 = prefs.getString(KEY_CUSTOM_NOTIFS_CLEAR_ALL_ICON_PNG_BASE64, null)
             cnClearAllText = (prefs.getString(KEY_CUSTOM_NOTIFS_CLEAR_ALL_TEXT, "Eliminar todo") ?: "Eliminar todo").trim().ifEmpty { "Eliminar todo" }
+            convBottomButtonsGapDp = readIntPref(prefs, KEY_CONVERSATION_BOTTOM_BUTTONS_GAP_DP, 10).coerceIn(0, 60)
+            convBottomButtonsPaddingHorzDp = readIntPref(prefs, KEY_CONVERSATION_BOTTOM_BUTTONS_PADDING_HORZ_DP, 14).coerceIn(0, 60)
+            convBottomButtonsPaddingVertDp = readIntPref(prefs, KEY_CONVERSATION_BOTTOM_BUTTONS_PADDING_VERT_DP, 10).coerceIn(0, 60)
             fsBarHeightDp = readIntPref(prefs, KEY_FS_BAR_HEIGHT_DP, 54).coerceIn(36, 160)
             fsBarBgColor = readColor(prefs, KEY_FS_BAR_BG_COLOR, 0xCC111111.toInt())
             fsBarContentColor = readColor(prefs, KEY_FS_BAR_CONTENT_COLOR, 0xFFFFFFFF.toInt())
@@ -2961,6 +2970,11 @@ class FloatingBallService : Service() {
     private fun buildFsNotificationsSectionView(padH: Int, padV: Int): View {
         val section = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            isClickable = true
+        }
+
+        val contentBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setPadding(padH, padV, padH, padV)
             isClickable = true
         }
@@ -2972,7 +2986,7 @@ class FloatingBallService : Service() {
             text = ""
             visibility = View.GONE
         }
-        section.addView(
+        contentBox.addView(
             emptyTv,
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(10)
@@ -3004,12 +3018,13 @@ class FloatingBallService : Service() {
             scroll,
             FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         )
-        section.addView(swipeRefresh, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        contentBox.addView(swipeRefresh, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        section.addView(contentBox, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val btnHeightPx = dp(cnButtonsHeightDp.coerceIn(36, 160))
         val btnIconSizePx = dp(cnButtonsIconHeightDp.coerceIn(10, 120))
         val btnCornerPx = dp(14).toFloat()
-        val btnGapPx = dp(10)
+        val btnGapPx = dp(convBottomButtonsGapDp.coerceIn(0, 60))
 
         fun buildBottomButton(
             iconId: String,
@@ -3090,11 +3105,23 @@ class FloatingBallService : Service() {
             clearAllBtn,
             LinearLayout.LayoutParams(0, btnHeightPx, 1f)
         )
-        section.addView(
+        val buttonsBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(
+                dp(convBottomButtonsPaddingHorzDp.coerceIn(0, 60)),
+                dp(convBottomButtonsPaddingVertDp.coerceIn(0, 60)),
+                dp(convBottomButtonsPaddingHorzDp.coerceIn(0, 60)),
+                dp(convBottomButtonsPaddingVertDp.coerceIn(0, 60))
+            )
+            isClickable = true
+        }
+        buttonsBox.addView(
             buttonsRow,
-            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dp(10)
-            }
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        )
+        section.addView(
+            buttonsBox,
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         )
 
         fsNotifsList = list

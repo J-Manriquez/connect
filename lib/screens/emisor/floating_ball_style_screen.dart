@@ -80,6 +80,38 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
   int _conversationOutgoingColor = 0x22FFFFFF;
   int _conversationTextColor = 0xFFFFFFFF;
   int _conversationTextSizeSp = 14;
+  int _conversationTitleColor = 0xFFFFFFFF;
+  int _conversationTitleSizeSp = 16;
+  int _conversationCloseHeightDp = 52;
+  int _conversationCloseBgColor = 0xFFDC2626;
+  int _conversationCloseTextColor = 0xFFFFFFFF;
+  int _conversationCloseBorderColor = 0x22FFFFFF;
+  bool _conversationCloseHideText = false;
+  String _conversationCloseText = 'Cerrar';
+  String _conversationCloseIconId = 'close';
+  String? _conversationCloseIconPngBase64;
+  int _conversationReplyHeightDp = 52;
+  int _conversationReplyBgColor = 0xFF202020;
+  int _conversationReplyTextColor = 0xFFFFFFFF;
+  int _conversationReplyBorderColor = 0x22FFFFFF;
+  bool _conversationReplyHideText = false;
+  String _conversationReplyText = 'Responder';
+  String _conversationReplyIconId = 'reply';
+  String? _conversationReplyIconPngBase64;
+  int _conversationBottomButtonsGapDp = 10;
+  int _conversationBottomButtonsPaddingHorzDp = 14;
+  int _conversationBottomButtonsPaddingVertDp = 10;
+  int _conversationHeaderAppIconSizeDp = 34;
+  int _conversationCloseIconSizeDp = 20;
+  int _conversationReplyIconSizeDp = 20;
+  int _conversationReplyModalBgColor = 0xFF111111;
+  int _conversationReplyModalTextColor = 0xFFFFFFFF;
+  int _conversationReplyModalTextSizeSp = 16;
+  String _conversationReplyModalSendIconId = 'send';
+  String? _conversationReplyModalSendIconPngBase64;
+  int _conversationReplyModalSendIconSizeDp = 22;
+  int _conversationReplyModalSendBgColor = 0x00000000;
+  int _conversationReplyModalSendBorderColor = 0x22FFFFFF;
   int _fsBarHeightDp = 54;
   int _fsBarBgColor = 0xCC111111;
   int _fsBarContentColor = 0xFFFFFFFF;
@@ -327,6 +359,43 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     int nextConversationOutgoingColor = _conversationOutgoingColor;
     int nextConversationTextColor = _conversationTextColor;
     int nextConversationTextSizeSp = _conversationTextSizeSp;
+    int nextConversationTitleColor = _conversationTitleColor;
+    int nextConversationTitleSizeSp = _conversationTitleSizeSp;
+    int nextConversationCloseHeightDp = _conversationCloseHeightDp;
+    int nextConversationCloseBgColor = _conversationCloseBgColor;
+    int nextConversationCloseTextColor = _conversationCloseTextColor;
+    int nextConversationCloseBorderColor = _conversationCloseBorderColor;
+    bool nextConversationCloseHideText = _conversationCloseHideText;
+    String nextConversationCloseText = _conversationCloseText;
+    String nextConversationCloseIconId = _conversationCloseIconId;
+    String? nextConversationCloseIconPngBase64 = _conversationCloseIconPngBase64;
+    int nextConversationReplyHeightDp = _conversationReplyHeightDp;
+    int nextConversationReplyBgColor = _conversationReplyBgColor;
+    int nextConversationReplyTextColor = _conversationReplyTextColor;
+    int nextConversationReplyBorderColor = _conversationReplyBorderColor;
+    bool nextConversationReplyHideText = _conversationReplyHideText;
+    String nextConversationReplyText = _conversationReplyText;
+    String nextConversationReplyIconId = _conversationReplyIconId;
+    String? nextConversationReplyIconPngBase64 = _conversationReplyIconPngBase64;
+    int nextConversationBottomButtonsGapDp = _conversationBottomButtonsGapDp;
+    int nextConversationBottomButtonsPaddingHorzDp =
+        _conversationBottomButtonsPaddingHorzDp;
+    int nextConversationBottomButtonsPaddingVertDp =
+        _conversationBottomButtonsPaddingVertDp;
+    int nextConversationHeaderAppIconSizeDp = _conversationHeaderAppIconSizeDp;
+    int nextConversationCloseIconSizeDp = _conversationCloseIconSizeDp;
+    int nextConversationReplyIconSizeDp = _conversationReplyIconSizeDp;
+    int nextConversationReplyModalBgColor = _conversationReplyModalBgColor;
+    int nextConversationReplyModalTextColor = _conversationReplyModalTextColor;
+    int nextConversationReplyModalTextSizeSp = _conversationReplyModalTextSizeSp;
+    String nextConversationReplyModalSendIconId = _conversationReplyModalSendIconId;
+    String? nextConversationReplyModalSendIconPngBase64 =
+        _conversationReplyModalSendIconPngBase64;
+    int nextConversationReplyModalSendIconSizeDp =
+        _conversationReplyModalSendIconSizeDp;
+    int nextConversationReplyModalSendBgColor = _conversationReplyModalSendBgColor;
+    int nextConversationReplyModalSendBorderColor =
+        _conversationReplyModalSendBorderColor;
     int nextFsBarHeightDp = _fsBarHeightDp;
     int nextFsBarBgColor = _fsBarBgColor;
     int nextFsBarContentColor = _fsBarContentColor;
@@ -521,6 +590,70 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
           await FloatingBallService.getConversationTextColor();
       nextConversationTextSizeSp =
           await FloatingBallService.getConversationTextSizeSp();
+      nextConversationTitleColor =
+          await FloatingBallService.getConversationTitleColor();
+      nextConversationTitleSizeSp =
+          await FloatingBallService.getConversationTitleSizeSp();
+      nextConversationCloseHeightDp =
+          await FloatingBallService.getConversationCloseHeightDp();
+      nextConversationCloseBgColor =
+          await FloatingBallService.getConversationCloseBgColor();
+      nextConversationCloseTextColor =
+          await FloatingBallService.getConversationCloseTextColor();
+      nextConversationCloseBorderColor =
+          await FloatingBallService.getConversationCloseBorderColor();
+      nextConversationCloseHideText =
+          await FloatingBallService.isConversationCloseHideTextEnabled();
+      nextConversationCloseText =
+          await FloatingBallService.getConversationCloseText();
+      nextConversationCloseIconId =
+          await FloatingBallService.getConversationCloseIconId();
+      nextConversationCloseIconPngBase64 =
+          await FloatingBallService.getConversationCloseIconPngBase64();
+      nextConversationReplyHeightDp =
+          await FloatingBallService.getConversationReplyHeightDp();
+      nextConversationReplyBgColor =
+          await FloatingBallService.getConversationReplyBgColor();
+      nextConversationReplyTextColor =
+          await FloatingBallService.getConversationReplyTextColor();
+      nextConversationReplyBorderColor =
+          await FloatingBallService.getConversationReplyBorderColor();
+      nextConversationReplyHideText =
+          await FloatingBallService.isConversationReplyHideTextEnabled();
+      nextConversationReplyText =
+          await FloatingBallService.getConversationReplyText();
+      nextConversationReplyIconId =
+          await FloatingBallService.getConversationReplyIconId();
+      nextConversationReplyIconPngBase64 =
+          await FloatingBallService.getConversationReplyIconPngBase64();
+      nextConversationBottomButtonsGapDp =
+          await FloatingBallService.getConversationBottomButtonsGapDp();
+      nextConversationBottomButtonsPaddingHorzDp = await FloatingBallService
+          .getConversationBottomButtonsPaddingHorzDp();
+      nextConversationBottomButtonsPaddingVertDp = await FloatingBallService
+          .getConversationBottomButtonsPaddingVertDp();
+      nextConversationHeaderAppIconSizeDp =
+          await FloatingBallService.getConversationHeaderAppIconSizeDp();
+      nextConversationCloseIconSizeDp =
+          await FloatingBallService.getConversationCloseIconSizeDp();
+      nextConversationReplyIconSizeDp =
+          await FloatingBallService.getConversationReplyIconSizeDp();
+      nextConversationReplyModalBgColor =
+          await FloatingBallService.getConversationReplyModalBgColor();
+      nextConversationReplyModalTextColor =
+          await FloatingBallService.getConversationReplyModalTextColor();
+      nextConversationReplyModalTextSizeSp =
+          await FloatingBallService.getConversationReplyModalTextSizeSp();
+      nextConversationReplyModalSendIconId =
+          await FloatingBallService.getConversationReplyModalSendIconId();
+      nextConversationReplyModalSendIconPngBase64 = await FloatingBallService
+          .getConversationReplyModalSendIconPngBase64();
+      nextConversationReplyModalSendIconSizeDp =
+          await FloatingBallService.getConversationReplyModalSendIconSizeDp();
+      nextConversationReplyModalSendBgColor =
+          await FloatingBallService.getConversationReplyModalSendBgColor();
+      nextConversationReplyModalSendBorderColor =
+          await FloatingBallService.getConversationReplyModalSendBorderColor();
       nextFsBarHeightDp = await FloatingBallService.getFullScreenBarHeightDp();
       nextFsBarBgColor = await FloatingBallService.getFullScreenBarBgColor();
       nextFsBarContentColor =
@@ -715,6 +848,43 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       _conversationOutgoingColor = nextConversationOutgoingColor;
       _conversationTextColor = nextConversationTextColor;
       _conversationTextSizeSp = nextConversationTextSizeSp;
+      _conversationTitleColor = nextConversationTitleColor;
+      _conversationTitleSizeSp = nextConversationTitleSizeSp;
+      _conversationCloseHeightDp = nextConversationCloseHeightDp;
+      _conversationCloseBgColor = nextConversationCloseBgColor;
+      _conversationCloseTextColor = nextConversationCloseTextColor;
+      _conversationCloseBorderColor = nextConversationCloseBorderColor;
+      _conversationCloseHideText = nextConversationCloseHideText;
+      _conversationCloseText = nextConversationCloseText;
+      _conversationCloseIconId = nextConversationCloseIconId;
+      _conversationCloseIconPngBase64 = nextConversationCloseIconPngBase64;
+      _conversationReplyHeightDp = nextConversationReplyHeightDp;
+      _conversationReplyBgColor = nextConversationReplyBgColor;
+      _conversationReplyTextColor = nextConversationReplyTextColor;
+      _conversationReplyBorderColor = nextConversationReplyBorderColor;
+      _conversationReplyHideText = nextConversationReplyHideText;
+      _conversationReplyText = nextConversationReplyText;
+      _conversationReplyIconId = nextConversationReplyIconId;
+      _conversationReplyIconPngBase64 = nextConversationReplyIconPngBase64;
+      _conversationBottomButtonsGapDp = nextConversationBottomButtonsGapDp;
+      _conversationBottomButtonsPaddingHorzDp =
+          nextConversationBottomButtonsPaddingHorzDp;
+      _conversationBottomButtonsPaddingVertDp =
+          nextConversationBottomButtonsPaddingVertDp;
+      _conversationHeaderAppIconSizeDp = nextConversationHeaderAppIconSizeDp;
+      _conversationCloseIconSizeDp = nextConversationCloseIconSizeDp;
+      _conversationReplyIconSizeDp = nextConversationReplyIconSizeDp;
+      _conversationReplyModalBgColor = nextConversationReplyModalBgColor;
+      _conversationReplyModalTextColor = nextConversationReplyModalTextColor;
+      _conversationReplyModalTextSizeSp = nextConversationReplyModalTextSizeSp;
+      _conversationReplyModalSendIconId = nextConversationReplyModalSendIconId;
+      _conversationReplyModalSendIconPngBase64 =
+          nextConversationReplyModalSendIconPngBase64;
+      _conversationReplyModalSendIconSizeDp =
+          nextConversationReplyModalSendIconSizeDp;
+      _conversationReplyModalSendBgColor = nextConversationReplyModalSendBgColor;
+      _conversationReplyModalSendBorderColor =
+          nextConversationReplyModalSendBorderColor;
       _fsBarHeightDp = nextFsBarHeightDp;
       _fsBarBgColor = nextFsBarBgColor;
       _fsBarContentColor = nextFsBarContentColor;
@@ -1358,6 +1528,408 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     if (picked == null) return;
     setState(() => _conversationTextSizeSp = picked);
     await FloatingBallService.setConversationTextSizeSp(picked);
+  }
+
+  Future<void> _setConversationTitleColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationTitleColor,
+      title: 'Color de título (conversación)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationTitleColor = picked);
+    await FloatingBallService.setConversationTitleColor(picked);
+  }
+
+  Future<void> _setConversationTitleSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño de título (conversación)',
+      current: _conversationTitleSizeSp,
+      min: 10,
+      max: 32,
+      suffix: 'sp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationTitleSizeSp = picked);
+    await FloatingBallService.setConversationTitleSizeSp(picked);
+  }
+
+  Future<void> _setConversationCloseHeight() async {
+    final picked = await _showIntSlider(
+      title: 'Altura (botón Cerrar)',
+      current: _conversationCloseHeightDp,
+      min: 36,
+      max: 160,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationCloseHeightDp = picked);
+    await FloatingBallService.setConversationCloseHeightDp(picked);
+  }
+
+  Future<void> _setConversationCloseBgColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationCloseBgColor,
+      title: 'Color (botón Cerrar)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationCloseBgColor = picked);
+    await FloatingBallService.setConversationCloseBgColor(picked);
+  }
+
+  Future<void> _setConversationCloseTextColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationCloseTextColor,
+      title: 'Color de texto/icono (Cerrar)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationCloseTextColor = picked);
+    await FloatingBallService.setConversationCloseTextColor(picked);
+  }
+
+  Future<void> _setConversationCloseBorderColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationCloseBorderColor,
+      title: 'Color de borde (Cerrar)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationCloseBorderColor = picked);
+    await FloatingBallService.setConversationCloseBorderColor(picked);
+  }
+
+  Future<void> _toggleConversationCloseHideText(bool v) async {
+    setState(() => _conversationCloseHideText = v);
+    await FloatingBallService.setConversationCloseHideTextEnabled(v);
+  }
+
+  Future<void> _setConversationCloseText() async {
+    final picked = await _showTextDialog(
+      title: 'Texto (Cerrar)',
+      current: _conversationCloseText,
+    );
+    if (picked == null) return;
+    setState(() => _conversationCloseText = picked);
+    await FloatingBallService.setConversationCloseText(picked);
+  }
+
+  Future<void> _pickConversationCloseIcon() async {
+    final picked = await _pickIconFromGallery();
+    if (picked == null) return;
+    if (picked.type == IconGalleryPickType.svg) {
+      final entry = picked.svg;
+      if (entry == null) return;
+      final png = await _renderSvgFilePngBase64(
+        entry.filePath,
+        sizePx: 128,
+        color: Colors.white,
+      );
+      if (png == null) return;
+      await FloatingBallService.setConversationCloseIconWithPng(
+        iconId: 'svg',
+        iconPngBase64: png,
+      );
+      setState(() {
+        _conversationCloseIconId = 'svg';
+        _conversationCloseIconPngBase64 = png;
+      });
+      return;
+    }
+    final id = picked.flutterId;
+    final icon = picked.flutterIcon;
+    if (id == null || icon == null) return;
+    final png = await _renderIconPngBase64(icon, sizePx: 96, color: Colors.white);
+    await FloatingBallService.setConversationCloseIconWithPng(
+      iconId: id,
+      iconPngBase64: png,
+    );
+    setState(() {
+      _conversationCloseIconId = id;
+      _conversationCloseIconPngBase64 = png;
+    });
+  }
+
+  Future<void> _setConversationReplyHeight() async {
+    final picked = await _showIntSlider(
+      title: 'Altura (botón Responder)',
+      current: _conversationReplyHeightDp,
+      min: 36,
+      max: 160,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyHeightDp = picked);
+    await FloatingBallService.setConversationReplyHeightDp(picked);
+  }
+
+  Future<void> _setConversationReplyBgColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationReplyBgColor,
+      title: 'Color (botón Responder)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyBgColor = picked);
+    await FloatingBallService.setConversationReplyBgColor(picked);
+  }
+
+  Future<void> _setConversationReplyTextColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationReplyTextColor,
+      title: 'Color de texto/icono (Responder)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyTextColor = picked);
+    await FloatingBallService.setConversationReplyTextColor(picked);
+  }
+
+  Future<void> _setConversationReplyBorderColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationReplyBorderColor,
+      title: 'Color de borde (Responder)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyBorderColor = picked);
+    await FloatingBallService.setConversationReplyBorderColor(picked);
+  }
+
+  Future<void> _setConversationBottomButtonsGap() async {
+    final picked = await _showIntSlider(
+      title: 'Espacio entre botones (inferiores)',
+      current: _conversationBottomButtonsGapDp,
+      min: 0,
+      max: 60,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationBottomButtonsGapDp = picked);
+    await FloatingBallService.setConversationBottomButtonsGapDp(picked);
+  }
+
+  Future<void> _setConversationBottomButtonsPaddingHorz() async {
+    final picked = await _showIntSlider(
+      title: 'Padding horizontal (contenedor botones inferiores)',
+      current: _conversationBottomButtonsPaddingHorzDp,
+      min: 0,
+      max: 60,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationBottomButtonsPaddingHorzDp = picked);
+    await FloatingBallService.setConversationBottomButtonsPaddingHorzDp(picked);
+  }
+
+  Future<void> _setConversationBottomButtonsPaddingVert() async {
+    final picked = await _showIntSlider(
+      title: 'Padding vertical (contenedor botones inferiores)',
+      current: _conversationBottomButtonsPaddingVertDp,
+      min: 0,
+      max: 60,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationBottomButtonsPaddingVertDp = picked);
+    await FloatingBallService.setConversationBottomButtonsPaddingVertDp(picked);
+  }
+
+  Future<void> _toggleConversationReplyHideText(bool v) async {
+    setState(() => _conversationReplyHideText = v);
+    await FloatingBallService.setConversationReplyHideTextEnabled(v);
+  }
+
+  Future<void> _setConversationReplyText() async {
+    final picked = await _showTextDialog(
+      title: 'Texto (Responder)',
+      current: _conversationReplyText,
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyText = picked);
+    await FloatingBallService.setConversationReplyText(picked);
+  }
+
+  Future<void> _pickConversationReplyIcon() async {
+    final picked = await _pickIconFromGallery();
+    if (picked == null) return;
+    if (picked.type == IconGalleryPickType.svg) {
+      final entry = picked.svg;
+      if (entry == null) return;
+      final png = await _renderSvgFilePngBase64(
+        entry.filePath,
+        sizePx: 128,
+        color: Colors.white,
+      );
+      if (png == null) return;
+      await FloatingBallService.setConversationReplyIconWithPng(
+        iconId: 'svg',
+        iconPngBase64: png,
+      );
+      setState(() {
+        _conversationReplyIconId = 'svg';
+        _conversationReplyIconPngBase64 = png;
+      });
+      return;
+    }
+    final id = picked.flutterId;
+    final icon = picked.flutterIcon;
+    if (id == null || icon == null) return;
+    final png = await _renderIconPngBase64(icon, sizePx: 96, color: Colors.white);
+    await FloatingBallService.setConversationReplyIconWithPng(
+      iconId: id,
+      iconPngBase64: png,
+    );
+    setState(() {
+      _conversationReplyIconId = id;
+      _conversationReplyIconPngBase64 = png;
+    });
+  }
+
+  Future<void> _setConversationHeaderAppIconSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño icono de app (header)',
+      current: _conversationHeaderAppIconSizeDp,
+      min: 12,
+      max: 120,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationHeaderAppIconSizeDp = picked);
+    await FloatingBallService.setConversationHeaderAppIconSizeDp(picked);
+  }
+
+  Future<void> _setConversationCloseIconSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño icono (Cerrar)',
+      current: _conversationCloseIconSizeDp,
+      min: 10,
+      max: 120,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationCloseIconSizeDp = picked);
+    await FloatingBallService.setConversationCloseIconSizeDp(picked);
+  }
+
+  Future<void> _setConversationReplyIconSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño icono (Responder)',
+      current: _conversationReplyIconSizeDp,
+      min: 10,
+      max: 120,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyIconSizeDp = picked);
+    await FloatingBallService.setConversationReplyIconSizeDp(picked);
+  }
+
+  Future<void> _setConversationReplyModalBgColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationReplyModalBgColor,
+      title: 'Color de fondo (modal Responder)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyModalBgColor = picked);
+    await FloatingBallService.setConversationReplyModalBgColor(picked);
+  }
+
+  Future<void> _setConversationReplyModalTextColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationReplyModalTextColor,
+      title: 'Color de texto (modal Responder)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyModalTextColor = picked);
+    await FloatingBallService.setConversationReplyModalTextColor(picked);
+  }
+
+  Future<void> _setConversationReplyModalTextSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño de texto (modal Responder)',
+      current: _conversationReplyModalTextSizeSp,
+      min: 8,
+      max: 32,
+      suffix: 'sp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyModalTextSizeSp = picked);
+    await FloatingBallService.setConversationReplyModalTextSizeSp(picked);
+  }
+
+  Future<void> _pickConversationReplyModalSendIcon() async {
+    final picked = await _pickIconFromGallery();
+    if (picked == null) return;
+    if (picked.type == IconGalleryPickType.svg) {
+      final entry = picked.svg;
+      if (entry == null) return;
+      final png = await _renderSvgFilePngBase64(
+        entry.filePath,
+        sizePx: 128,
+        color: Colors.white,
+      );
+      if (png == null) return;
+      await FloatingBallService.setConversationReplyModalSendIconWithPng(
+        iconId: 'svg',
+        iconPngBase64: png,
+      );
+      setState(() {
+        _conversationReplyModalSendIconId = 'svg';
+        _conversationReplyModalSendIconPngBase64 = png;
+      });
+      return;
+    }
+    final id = picked.flutterId;
+    final icon = picked.flutterIcon;
+    if (id == null || icon == null) return;
+    final png = await _renderIconPngBase64(icon, sizePx: 96, color: Colors.white);
+    await FloatingBallService.setConversationReplyModalSendIconWithPng(
+      iconId: id,
+      iconPngBase64: png,
+    );
+    setState(() {
+      _conversationReplyModalSendIconId = id;
+      _conversationReplyModalSendIconPngBase64 = png;
+    });
+  }
+
+  Future<void> _setConversationReplyModalSendIconSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño icono (Enviar)',
+      current: _conversationReplyModalSendIconSizeDp,
+      min: 10,
+      max: 120,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyModalSendIconSizeDp = picked);
+    await FloatingBallService.setConversationReplyModalSendIconSizeDp(picked);
+  }
+
+  Future<void> _setConversationReplyModalSendBgColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationReplyModalSendBgColor,
+      title: 'Color de fondo (Enviar)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyModalSendBgColor = picked);
+    await FloatingBallService.setConversationReplyModalSendBgColor(picked);
+  }
+
+  Future<void> _setConversationReplyModalSendBorderColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _conversationReplyModalSendBorderColor,
+      title: 'Color de borde (Enviar)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _conversationReplyModalSendBorderColor = picked);
+    await FloatingBallService.setConversationReplyModalSendBorderColor(picked);
   }
 
   Future<void> _setCustomNotifsButtonsIconHeight() async {
@@ -2605,325 +3177,392 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Personalizar bola'),
-        backgroundColor: customColor,
+        backgroundColor: customColor[700],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(8),
               child: Column(
                 children: [
                   Card(
-                    elevation: 4,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: Color(_ballColor),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.black12),
-                                ),
-                                child: Center(
-                                  child: _buildPngIconPreview(
-                                    base64Png: _ballIconPngBase64,
-                                    size: 22,
-                                    tint: Color(_ballIconColor),
-                                    fallback: _iconDataForId(_ballIcon),
-                                  ),
-                                ),
+                    elevation: 3,
+                    child: ExpansionTile(
+                      initiallyExpanded: false,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: customColor[100],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.bubble_chart, color: customColor[600], size: 24),
+                      ),
+                      title: const Text(
+                        'Bola flotante',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: const Text(
+                        'Cambia el aspecto del botón flotante y el modo de visualización (popup o pantalla completa).',
+                      ),
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: Color(_ballColor),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.black12),
                               ),
-                              const SizedBox(width: 12),
-                              const Expanded(
-                                child: Text(
-                                  'Vista previa',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Color de la bola'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _colorDot(Color(_ballColor)),
-                                const SizedBox(width: 10),
-                                const Icon(Icons.chevron_right),
-                              ],
-                            ),
-                            onTap: _setBallColor,
-                          ),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Icono'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _buildPngIconPreview(
+                              child: Center(
+                                child: _buildPngIconPreview(
                                   base64Png: _ballIconPngBase64,
                                   size: 22,
                                   tint: Color(_ballIconColor),
                                   fallback: _iconDataForId(_ballIcon),
                                 ),
-                                const SizedBox(width: 10),
-                                const Icon(Icons.chevron_right),
-                              ],
+                              ),
                             ),
-                            onTap: _pickBallIcon,
-                          ),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Color del icono'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _colorDot(Color(_ballIconColor)),
-                                const SizedBox(width: 10),
-                                const Icon(Icons.chevron_right),
-                              ],
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Vista previa',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
                             ),
-                            onTap: _setBallIconColor,
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Color de la bola'),
+                          subtitle: const Text('Color del fondo del botón flotante (incluye transparencia).'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _colorDot(Color(_ballColor)),
+                              const SizedBox(width: 10),
+                              const Icon(Icons.chevron_right),
+                            ],
                           ),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Tamaño del icono'),
-                            subtitle: Text('${_ballIconSizeDp}dp'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: _setBallIconSize,
+                          onTap: _setBallColor,
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Icono'),
+                          subtitle: const Text('Selecciona el icono que aparece dentro de la bola.'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildPngIconPreview(
+                                base64Png: _ballIconPngBase64,
+                                size: 22,
+                                tint: Color(_ballIconColor),
+                                fallback: _iconDataForId(_ballIcon),
+                              ),
+                              const SizedBox(width: 10),
+                              const Icon(Icons.chevron_right),
+                            ],
                           ),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Tamaño de la bola'),
-                            subtitle: Text('${_ballSizeDp}dp'),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: _setBallSize,
+                          onTap: _pickBallIcon,
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Color del icono'),
+                          subtitle: const Text('Color aplicado al icono (si el icono es PNG se tintará).'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _colorDot(Color(_ballIconColor)),
+                              const SizedBox(width: 10),
+                              const Icon(Icons.chevron_right),
+                            ],
                           ),
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Pantalla completa'),
-                            subtitle: const Text('Muestra el menú en pantalla completa con scroll'),
-                            value: _fullScreen,
-                            onChanged: _toggleFullScreen,
-                          ),
-                        ],
-                      ),
+                          onTap: _setBallIconColor,
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Tamaño del icono'),
+                          subtitle: Text('${_ballIconSizeDp}dp • Tamaño del icono dentro de la bola'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _setBallIconSize,
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Tamaño de la bola'),
+                          subtitle: Text('${_ballSizeDp}dp • Diámetro del botón flotante'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _setBallSize,
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Pantalla completa'),
+                          subtitle: const Text('Activa el modo de menú en pantalla completa (en lugar de popup).'),
+                          value: _fullScreen,
+                          onChanged: _toggleFullScreen,
+                        ),
+                      ],
                     ),
                   ),
                   if (!_fullScreen) ...[
                     const SizedBox(height: 16),
                     Card(
-                      elevation: 4,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Estilo popup',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('Color de fondo'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _colorDot(Color(_popupBgColor)),
-                                  const SizedBox(width: 10),
-                                  const Icon(Icons.chevron_right),
-                                ],
-                              ),
-                              onTap: _setPopupBgColor,
-                            ),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('Color de botones'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _colorDot(Color(_popupButtonColor)),
-                                  const SizedBox(width: 10),
-                                  const Icon(Icons.chevron_right),
-                                ],
-                              ),
-                              onTap: _setPopupButtonColor,
-                            ),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('Color de iconos'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _colorDot(Color(_popupIconColor)),
-                                  const SizedBox(width: 10),
-                                  const Icon(Icons.chevron_right),
-                                ],
-                              ),
-                              onTap: _setPopupIconColor,
-                            ),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('Tamaño de iconos'),
-                              subtitle: Text('${_popupIconSizeDp}dp'),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: _setPopupIconSize,
-                            ),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('Offset X'),
-                              subtitle: Text('${_popupOffsetXDp}dp'),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: _setPopupOffsetX,
-                            ),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('Offset Y'),
-                              subtitle: Text('${_popupOffsetYDp}dp'),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: _setPopupOffsetY,
-                            ),
-                            const SizedBox(height: 6),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Popup multimedia'),
-                              children: [
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Offset X'),
-                                  subtitle: Text('${_popupMediaOffsetXDp}dp'),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: _setPopupMediaOffsetX,
-                                ),
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Offset Y'),
-                                  subtitle: Text('${_popupMediaOffsetYDp}dp'),
-                                  trailing: const Icon(Icons.chevron_right),
-                                  onTap: _setPopupMediaOffsetY,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Iconos'),
-                              children: [
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Back'),
-                                  trailing: _buildPngIconPreview(
-                                    base64Png: _popupBackIconPngBase64,
-                                    size: 22,
-                                    tint: Color(_popupIconColor),
-                                    fallback: _iconDataForId(_popupBackIconId),
-                                  ),
-                                  onTap: () => _pickPopupButtonIcon('back'),
-                                ),
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Home'),
-                                  trailing: _buildPngIconPreview(
-                                    base64Png: _popupHomeIconPngBase64,
-                                    size: 22,
-                                    tint: Color(_popupIconColor),
-                                    fallback: _iconDataForId(_popupHomeIconId),
-                                  ),
-                                  onTap: () => _pickPopupButtonIcon('home'),
-                                ),
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Recientes'),
-                                  trailing: _buildPngIconPreview(
-                                    base64Png: _popupRecentsIconPngBase64,
-                                    size: 22,
-                                    tint: Color(_popupIconColor),
-                                    fallback: _iconDataForId(_popupRecentsIconId),
-                                  ),
-                                  onTap: () => _pickPopupButtonIcon('recents'),
-                                ),
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Volumen'),
-                                  trailing: _buildPngIconPreview(
-                                    base64Png: _popupVolumeIconPngBase64,
-                                    size: 22,
-                                    tint: Color(_popupIconColor),
-                                    fallback: _iconDataForId(_popupVolumeIconId),
-                                  ),
-                                  onTap: () => _pickPopupButtonIcon('volume'),
-                                ),
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Brillo'),
-                                  trailing: _buildPngIconPreview(
-                                    base64Png: _popupBrightnessIconPngBase64,
-                                    size: 22,
-                                    tint: Color(_popupIconColor),
-                                    fallback: _iconDataForId(_popupBrightnessIconId),
-                                  ),
-                                  onTap: () => _pickPopupButtonIcon('brightness'),
-                                ),
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('Ajustes'),
-                                  trailing: _buildPngIconPreview(
-                                    base64Png: _popupSettingsIconPngBase64,
-                                    size: 22,
-                                    tint: Color(_popupIconColor),
-                                    fallback: _iconDataForId(_popupSettingsIconId),
-                                  ),
-                                  onTap: () => _pickPopupButtonIcon('settings'),
-                                ),
-                              ],
-                            ),
-                          ],
+                      elevation: 3,
+                      child: ExpansionTile(
+                        initiallyExpanded: false,
+                        tilePadding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: customColor[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.dashboard, color: customColor[600], size: 24),
                         ),
+                        title: const Text(
+                          'Popup (modo compacto)',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text(
+                          'Personaliza el menú compacto que aparece junto a la bola (colores, posición e iconos).',
+                        ),
+                        children: [
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Color de fondo'),
+                            subtitle: const Text('Color del panel del popup (incluye transparencia).'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _colorDot(Color(_popupBgColor)),
+                                const SizedBox(width: 10),
+                                const Icon(Icons.chevron_right),
+                              ],
+                            ),
+                            onTap: _setPopupBgColor,
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Color de botones'),
+                            subtitle: const Text('Color de las tarjetas/botones del popup.'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _colorDot(Color(_popupButtonColor)),
+                                const SizedBox(width: 10),
+                                const Icon(Icons.chevron_right),
+                              ],
+                            ),
+                            onTap: _setPopupButtonColor,
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Color de iconos'),
+                            subtitle: const Text('Color/tinte aplicado a los iconos del popup.'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _colorDot(Color(_popupIconColor)),
+                                const SizedBox(width: 10),
+                                const Icon(Icons.chevron_right),
+                              ],
+                            ),
+                            onTap: _setPopupIconColor,
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Tamaño de iconos'),
+                            subtitle: Text('${_popupIconSizeDp}dp • Tamaño de iconos del popup'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _setPopupIconSize,
+                          ),
+                          const SizedBox(height: 6),
+                          ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            title: const Text('Posición del popup'),
+                            subtitle: const Text('Ajusta el desplazamiento del popup respecto a la bola.'),
+                            children: [
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Offset X'),
+                                subtitle: Text('${_popupOffsetXDp}dp • Horizontal'),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: _setPopupOffsetX,
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Offset Y'),
+                                subtitle: Text('${_popupOffsetYDp}dp • Vertical'),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: _setPopupOffsetY,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            title: const Text('Popup multimedia'),
+                            subtitle: const Text('Posición del panel multimedia dentro del popup.'),
+                            children: [
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Offset X'),
+                                subtitle: Text('${_popupMediaOffsetXDp}dp • Horizontal'),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: _setPopupMediaOffsetX,
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Offset Y'),
+                                subtitle: Text('${_popupMediaOffsetYDp}dp • Vertical'),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: _setPopupMediaOffsetY,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            title: const Text('Iconos del popup'),
+                            subtitle: const Text('Selecciona iconos para las acciones del popup.'),
+                            children: [
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Back'),
+                                subtitle: const Text('Acción: atrás'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _popupBackIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_popupBackIconId),
+                                ),
+                                onTap: () => _pickPopupButtonIcon('back'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Home'),
+                                subtitle: const Text('Acción: inicio'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _popupHomeIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_popupHomeIconId),
+                                ),
+                                onTap: () => _pickPopupButtonIcon('home'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Recientes'),
+                                subtitle: const Text('Acción: apps recientes'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _popupRecentsIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_popupRecentsIconId),
+                                ),
+                                onTap: () => _pickPopupButtonIcon('recents'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Volumen'),
+                                subtitle: const Text('Acción: controles de volumen'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _popupVolumeIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_popupVolumeIconId),
+                                ),
+                                onTap: () => _pickPopupButtonIcon('volume'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Brillo'),
+                                subtitle: const Text('Acción: controles de brillo'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _popupBrightnessIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_popupBrightnessIconId),
+                                ),
+                                onTap: () => _pickPopupButtonIcon('brightness'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Ajustes'),
+                                subtitle: const Text('Acción: abrir ajustes'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _popupSettingsIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_popupSettingsIconId),
+                                ),
+                                onTap: () => _pickPopupButtonIcon('settings'),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
                   if (_fullScreen) ...[
                     const SizedBox(height: 16),
                     Card(
-                      elevation: 4,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Estilo pantalla completa',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('Color de fondo'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
+                      elevation: 3,
+                      child: ExpansionTile(
+                        initiallyExpanded: false,
+                        tilePadding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: customColor[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(Icons.fullscreen, color: customColor[600], size: 24),
+                        ),
+                        title: const Text(
+                          'Pantalla completa',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text(
+                          'Personaliza el menú en pantalla completa: colores, distribución, barra, notificaciones, conversación y multimedia.',
+                        ),
+                        children: [
+                          Column(
+                            children: [
+                              ExpansionTile(
+                                tilePadding: EdgeInsets.zero,
+                                title: const Text('Diseño y distribución'),
+                                subtitle: const Text(
+                                  'Colores, tamaños y espaciados del menú principal en pantalla completa.',
+                                ),
                                 children: [
-                                  _colorDot(Color(_fsBgColor)),
-                                  const SizedBox(width: 10),
-                                  const Icon(Icons.chevron_right),
-                                ],
-                              ),
-                              onTap: _setFsBgColor,
-                            ),
-                            ListTile(
+                                  ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: const Text('Color de fondo'),
+                                    subtitle: const Text(
+                                      'Color de fondo de la pantalla completa (incluye transparencia).',
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _colorDot(Color(_fsBgColor)),
+                                        const SizedBox(width: 10),
+                                        const Icon(Icons.chevron_right),
+                                      ],
+                                    ),
+                                    onTap: _setFsBgColor,
+                                  ),
+                                  ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color de botones (sistema)'),
+                              subtitle: const Text('Color de fondo de los botones/tiles del sistema.'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -2937,6 +3576,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color de botones (apps)'),
+                              subtitle: const Text('Color de fondo de los botones/tiles de apps.'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -2950,6 +3590,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color de borde (sistema)'),
+                              subtitle: const Text('Borde de los botones del sistema (útil para resaltar).'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -2963,6 +3604,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color de borde (apps)'),
+                              subtitle: const Text('Borde de los botones de apps.'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -2976,6 +3618,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color base'),
+                              subtitle: const Text('Color base para elementos del sistema (si no tienen color propio).'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -2989,6 +3632,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color de iconos'),
+                              subtitle: const Text('Color/tinte de iconos en pantalla completa.'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -3002,6 +3646,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color de textos'),
+                              subtitle: const Text('Color de los textos de los botones.'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -3015,90 +3660,91 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Ocultar textos'),
+                              subtitle: const Text('Muestra solo iconos en los botones.'),
                               value: _fsHideText,
                               onChanged: _toggleFsHideText,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Tamaño de iconos'),
-                              subtitle: Text('${_fsIconSizeDp}dp'),
+                              subtitle: Text('${_fsIconSizeDp}dp • Tamaño de iconos del sistema'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsIconSize,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Tamaño de iconos (apps)'),
-                              subtitle: Text('${_fsAppsIconSizeDp}dp'),
+                              subtitle: Text('${_fsAppsIconSizeDp}dp • Tamaño de iconos de apps'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsAppsIconSize,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Tamaño de textos'),
-                              subtitle: Text('${_fsTextSizeSp}sp'),
+                              subtitle: Text('${_fsTextSizeSp}sp • Tamaño de etiqueta'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsTextSize,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Espacio entre botones (sistema)'),
-                              subtitle: Text('${_fsTileGapDp}dp'),
+                              subtitle: Text('${_fsTileGapDp}dp • Separación entre tiles del sistema'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsTileGap,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Espacio entre apps'),
-                              subtitle: Text('${_fsAppsTileGapDp}dp'),
+                              subtitle: Text('${_fsAppsTileGapDp}dp • Separación entre tiles de apps'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsAppsTileGap,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Padding del botón'),
-                              subtitle: Text('${_fsTilePaddingDp}dp'),
+                              subtitle: Text('${_fsTilePaddingDp}dp • Espacio interno del tile'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsTilePadding,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Padding del sticky'),
-                              subtitle: Text('${_fsStickyPaddingDp}dp'),
+                              subtitle: Text('${_fsStickyPaddingDp}dp • Margen del área fija inferior'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsStickyPadding,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Padding contenedor horizontal'),
-                              subtitle: Text('${_fsContainerPaddingHorzDp}dp'),
+                              subtitle: Text('${_fsContainerPaddingHorzDp}dp • Márgenes laterales'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsContainerPaddingHorz,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Padding contenedor vertical'),
-                              subtitle: Text('${_fsContainerPaddingVertDp}dp'),
+                              subtitle: Text('${_fsContainerPaddingVertDp}dp • Márgenes verticales'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsContainerPaddingVert,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Espacio icono-texto'),
-                              subtitle: Text('${_fsTileInnerGapDp}dp'),
+                              subtitle: Text('${_fsTileInnerGapDp}dp • Separación entre icono y texto'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsTileInnerGap,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Altura de botones (sistema)'),
-                              subtitle: Text('${_fsTileHeightDp}dp'),
+                              subtitle: Text('${_fsTileHeightDp}dp • Alto de tiles del sistema'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsTileHeight,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Altura de apps'),
-                              subtitle: Text('${_fsAppsTileHeightDp}dp'),
+                              subtitle: Text('${_fsAppsTileHeightDp}dp • Alto de tiles de apps'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsAppsTileHeight,
                             ),
@@ -3116,31 +3762,34 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsAppsCols,
                             ),
-                            const Divider(height: 22),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Barra',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 10),
-                            SwitchListTile(
+                              const Divider(height: 22),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Barra superior'),
+                              subtitle: const Text(
+                                'Muestra una barra con estado del sistema y acceso a notificaciones.',
+                              ),
+                              children: [
+                                SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Mostrar sección Barra'),
+                              subtitle: const Text('Activa/desactiva la barra superior.'),
                               value: _fsBarEnabled,
                               onChanged: _toggleFsBarEnabled,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Altura'),
-                              subtitle: Text('${_fsBarHeightDp}dp'),
+                              subtitle: Text('${_fsBarHeightDp}dp • Alto de la barra'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _fsBarEnabled ? _setFsBarHeight : null,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color de fondo'),
+                              subtitle: const Text('Fondo de la barra (incluye transparencia).'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -3154,6 +3803,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Color de textos/iconos'),
+                              subtitle: const Text('Color base de textos e iconos en la barra.'),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -3167,28 +3817,28 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Tamaño de iconos'),
-                              subtitle: Text('${_fsBarIconSizeDp}dp'),
+                              subtitle: Text('${_fsBarIconSizeDp}dp • Tamaño de iconos'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _fsBarEnabled ? _setFsBarIconSize : null,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Tamaño de texto'),
-                              subtitle: Text('${_fsBarTextSizeSp}sp'),
+                              subtitle: Text('${_fsBarTextSizeSp}sp • Tamaño del texto'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _fsBarEnabled ? _setFsBarTextSize : null,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Padding horizontal'),
-                              subtitle: Text('${_fsBarPaddingHorzDp}dp'),
+                              subtitle: Text('${_fsBarPaddingHorzDp}dp • Márgenes laterales'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _fsBarEnabled ? _setFsBarPaddingHorz : null,
                             ),
                             ListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Padding vertical'),
-                              subtitle: Text('${_fsBarPaddingVertDp}dp'),
+                              subtitle: Text('${_fsBarPaddingVertDp}dp • Márgenes verticales'),
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _fsBarEnabled ? _setFsBarPaddingVert : null,
                             ),
@@ -3196,6 +3846,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ExpansionTile(
                               tilePadding: EdgeInsets.zero,
                               title: const Text('Colores'),
+                              subtitle: const Text('Colores específicos para cada indicador.'),
                               children: [
                                 ListTile(
                                   contentPadding: EdgeInsets.zero,
@@ -3320,6 +3971,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             ExpansionTile(
                               tilePadding: EdgeInsets.zero,
                               title: const Text('Iconos'),
+                              subtitle: const Text('Iconos personalizados (opcional).'),
                               children: [
                                 ListTile(
                                   contentPadding: EdgeInsets.zero,
@@ -3389,16 +4041,17 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 ),
                               ],
                             ),
-                            const Divider(height: 22),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Pantalla de notificaciones',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
+                              ],
                             ),
-                            const SizedBox(height: 10),
-                            SwitchListTile(
+                            const Divider(height: 22),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Pantalla de notificaciones'),
+                              subtitle: const Text(
+                                'Estilo de la pantalla que se abre desde la barra (batería).',
+                              ),
+                              children: [
+                                SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Pantalla de notificaciones personalizada'),
                               subtitle: const Text(
@@ -3683,16 +4336,48 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                   ? _setCustomNotifsTextSize
                                   : null,
                             ),
-                            const SizedBox(height: 16),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Conversación',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
+                              ],
                             ),
-                            const SizedBox(height: 10),
-                            SwitchListTile(
+                            const Divider(height: 22),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Botones inferiores'),
+                              subtitle: const Text(
+                                'Se aplica a: Conversación y Pantalla de notificaciones (botones inferiores).',
+                              ),
+                              children: [
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Espacio entre botones'),
+                                  subtitle: Text('${_conversationBottomButtonsGapDp}dp'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: _setConversationBottomButtonsGap,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Padding horizontal del contenedor'),
+                                  subtitle: Text('${_conversationBottomButtonsPaddingHorzDp}dp'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: _setConversationBottomButtonsPaddingHorz,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Padding vertical del contenedor'),
+                                  subtitle: Text('${_conversationBottomButtonsPaddingVertDp}dp'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: _setConversationBottomButtonsPaddingVert,
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 22),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Conversación'),
+                              subtitle: const Text(
+                                'Vista tipo chat (burbujas) para notificaciones compatibles.',
+                              ),
+                              children: [
+                                SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Habilitar sección de conversación'),
                               subtitle: const Text(
@@ -3769,16 +4454,376 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                   ? _setConversationTextSize
                                   : null,
                             ),
-                            const Divider(height: 22),
+                            const SizedBox(height: 10),
                             const Align(
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                'Multimedia',
+                                'Título (pantalla conversación)',
                                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                               ),
                             ),
                             const SizedBox(height: 10),
-                            SwitchListTile(
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Color de título'),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _colorDot(Color(_conversationTitleColor)),
+                                  const SizedBox(width: 10),
+                                  const Icon(Icons.chevron_right),
+                                ],
+                              ),
+                              onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                  ? _setConversationTitleColor
+                                  : null,
+                            ),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Tamaño de título'),
+                              subtitle: Text('${_conversationTitleSizeSp}sp'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                  ? _setConversationTitleSize
+                                  : null,
+                            ),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Tamaño icono de app (header)'),
+                              subtitle: Text('${_conversationHeaderAppIconSizeDp}dp'),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                  ? _setConversationHeaderAppIconSize
+                                  : null,
+                            ),
+                            const SizedBox(height: 10),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Botón Cerrar'),
+                              subtitle: Text(_conversationCloseText),
+                              children: [
+                                SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Ocultar texto'),
+                                  value: _conversationCloseHideText,
+                                  onChanged: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _toggleConversationCloseHideText
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Texto'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationCloseText
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Icono'),
+                                  trailing: _buildPngIconPreview(
+                                    base64Png: _conversationCloseIconPngBase64,
+                                    size: 22,
+                                    tint: Color(_conversationCloseTextColor),
+                                    fallback: _iconDataForId(_conversationCloseIconId),
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _pickConversationCloseIcon
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Tamaño icono'),
+                                  subtitle: Text('${_conversationCloseIconSizeDp}dp'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationCloseIconSize
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Altura'),
+                                  subtitle: Text('${_conversationCloseHeightDp}dp'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationCloseHeight
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de fondo'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(Color(_conversationCloseBgColor)),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationCloseBgColor
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de texto/icono'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(Color(_conversationCloseTextColor)),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationCloseTextColor
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de borde'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(Color(_conversationCloseBorderColor)),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationCloseBorderColor
+                                      : null,
+                                ),
+                              ],
+                            ),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Botón Responder'),
+                              subtitle: Text(_conversationReplyText),
+                              children: [
+                                SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Ocultar texto'),
+                                  value: _conversationReplyHideText,
+                                  onChanged: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _toggleConversationReplyHideText
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Texto'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyText
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Icono'),
+                                  trailing: _buildPngIconPreview(
+                                    base64Png: _conversationReplyIconPngBase64,
+                                    size: 22,
+                                    tint: Color(_conversationReplyTextColor),
+                                    fallback: _iconDataForId(_conversationReplyIconId),
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _pickConversationReplyIcon
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Tamaño icono'),
+                                  subtitle: Text('${_conversationReplyIconSizeDp}dp'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyIconSize
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Altura'),
+                                  subtitle: Text('${_conversationReplyHeightDp}dp'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyHeight
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de fondo'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(Color(_conversationReplyBgColor)),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyBgColor
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de texto/icono'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(Color(_conversationReplyTextColor)),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyTextColor
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de borde'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(Color(_conversationReplyBorderColor)),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyBorderColor
+                                      : null,
+                                ),
+                              ],
+                            ),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Modal Responder'),
+                              children: [
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de fondo'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(Color(_conversationReplyModalBgColor)),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyModalBgColor
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de texto'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(Color(_conversationReplyModalTextColor)),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyModalTextColor
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Tamaño de texto'),
+                                  subtitle:
+                                      Text('${_conversationReplyModalTextSizeSp}sp'),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyModalTextSize
+                                      : null,
+                                ),
+                                const SizedBox(height: 6),
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Botón Enviar',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Icono'),
+                                  trailing: _buildPngIconPreview(
+                                    base64Png: _conversationReplyModalSendIconPngBase64,
+                                    size: 22,
+                                    tint: Color(_conversationReplyModalTextColor),
+                                    fallback: _iconDataForId(
+                                      _conversationReplyModalSendIconId,
+                                    ),
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _pickConversationReplyModalSendIcon
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Tamaño icono'),
+                                  subtitle: Text(
+                                    '${_conversationReplyModalSendIconSizeDp}dp',
+                                  ),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyModalSendIconSize
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de fondo'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(
+                                        Color(_conversationReplyModalSendBgColor),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyModalSendBgColor
+                                      : null,
+                                ),
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Color de borde'),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _colorDot(
+                                        Color(_conversationReplyModalSendBorderColor),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      const Icon(Icons.chevron_right),
+                                    ],
+                                  ),
+                                  onTap: (_fsBarEnabled && _fsConversationEnabled)
+                                      ? _setConversationReplyModalSendBorderColor
+                                      : null,
+                                ),
+                              ],
+                            ),
+                              ],
+                            ),
+                            const Divider(height: 22),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Multimedia'),
+                              subtitle: const Text(
+                                'Configura el panel multimedia y sus iconos.',
+                              ),
+                              children: [
+                                SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Mostrar automáticamente'),
                               subtitle: Text(
@@ -3879,16 +4924,17 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 ),
                               ],
                             ),
-                            const Divider(height: 22),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Botones',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
+                              ],
                             ),
-                            const SizedBox(height: 10),
+                            const Divider(height: 22),
                             ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Botones del sistema'),
+                              subtitle: const Text(
+                                'Personaliza textos e iconos (Back, Home, Recientes, etc.).',
+                              ),
+                              children: [
+                                ExpansionTile(
                               tilePadding: EdgeInsets.zero,
                               title: const Text('Back'),
                               subtitle: Text(_fsBackText),
@@ -4045,16 +5091,15 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 );
                               },
                             ),
-                            const Divider(height: 22),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Botón Cerrar',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
+                              ],
                             ),
-                            const SizedBox(height: 10),
-                            ListTile(
+                            const Divider(height: 22),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Botón Cerrar'),
+                              subtitle: const Text('Configura el botón inferior para salir del menú.'),
+                              children: [
+                                ListTile(
                               contentPadding: EdgeInsets.zero,
                               enabled: !_fsCloseHideText,
                               title: const Text('Texto'),
@@ -4129,12 +5174,15 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                   ? _toggleFsCloseDisableStickyWhenMediaActive
                                   : null,
                             ),
+                              ],
+                            ),
                           ],
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ],
+              ],
               ),
             ),
     );

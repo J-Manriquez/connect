@@ -1,0 +1,266 @@
+GUÍA DE ESTILOS - CONNECT (Emisor / Receptor)
+
+Objetivo
+Esta guía resume los colores y la composición de las 3 pantallas principales del Emisor y del Receptor para replicar el mismo look & feel en pantallas nuevas sin “inventar” estilos. La fuente de verdad son los widgets existentes en lib/ y el tema global de main.dart.
+
+============================================================
+1) Paleta de colores
+============================================================
+
+1.1 Color de marca (customColor)
+Definición: lib/theme_colors.dart
+
+- customColor (MaterialColor base): 0xFF177BBE
+- Mapa de tonos (usado con customColor[<shade>]):
+  - 50 : RGB(1, 68, 169) al 10% (Color.fromRGBO(1, 68, 169, 0.1))
+  - 100: RGB(1, 68, 169) al 20%
+  - 200: RGB(1, 68, 169) al 30%
+  - 300: RGB(1, 68, 169) al 40%
+  - 400: RGB(1, 68, 169) al 50%
+  - 500: RGB(1, 68, 169) al 100%
+  - 600: RGB(1, 60, 149) al 100%
+  - 700: RGB(1, 52, 129) al 100%
+  - 800: RGB(1, 44, 109) al 100%
+  - 900: RGB(1, 36, 89)  al 100%
+
+Uso recomendado en la app (según pantallas actuales)
+- customColor[700]: AppBar (fondo), divisor superior del BottomNavigationBar, ítem seleccionado del BottomNavigationBar.
+- customColor[600]: botones principales en pantallas de configuración y acciones “primarias”.
+- customColor[500]: botón destacado en Configuración Receptor (ej.: “Configurar conexión Bluetooth”).
+- customColor[400]: CTA “secundario” pero visible (ej.: “Usar App como Receptor”, “Desvincular Dispositivo”).
+- customColor[200]/customColor[100]: fondos suaves (chips/leading de ListTile) y track inactivo de Switch.
+
+1.2 Neutros
+- Fondo/Surface: por defecto Material (ThemeData con useMaterial3: true).
+- Texto sobre customColor: blanco (Colors.white).
+- Texto secundario: gris (Colors.grey / Colors.grey[300..800]).
+- Separadores/ítems no seleccionados en BottomNavigationBar: negro (Colors.black).
+
+1.3 Estados (feedback)
+- Éxito: verde (Colors.green / Colors.green[100] como fondo suave).
+- Error/alerta: rojo (Colors.red / Colors.red[100] como fondo suave).
+- Información contextual: azules claros (Colors.blue[50] + borde Colors.blue[200]).
+
+1.4 Acciones destructivas
+- Swipe para borrar (Dismissible): fondo rojo (Colors.red) con icono blanco.
+
+============================================================
+2) Tipografía (tamaños y jerarquía)
+============================================================
+
+2.1 AppBar
+Definición global: main.dart (ThemeData.appBarTheme)
+- Título: tamaño 20, bold, color blanco.
+- Iconos y texto: blanco.
+- Título centrado.
+
+2.2 Encabezados de sección (Cards)
+Patrón común (Settings/Config Receptor)
+- Títulos de sección: tamaño 18–20, bold.
+
+2.3 Texto de contenido
+- Texto estándar: tamaño 16.
+- Texto de ayuda/subtítulo: tamaño 14, frecuentemente italic y gris.
+- Metadata (ID, fechas/horas): tamaño 12, gris.
+
+2.4 Botones
+- Etiqueta: tamaño 16, bold (en CTAs principales).
+
+============================================================
+3) Componentes reutilizables (patrones)
+============================================================
+
+3.1 Scaffold + AppBar
+Patrón base
+- Scaffold
+  - appBar: AppBar(título, actions opcionales)
+  - body: SingleChildScrollView + Column o ListView (según pantalla)
+  - bottomNavigationBar: Column con divisor + BottomNavigationBar (en pantallas “principales”)
+
+3.2 BottomNavigationBar con divisor
+Patrón repetido (Emisor y Receptor)
+- Encapsular en Column(mainAxisSize: MainAxisSize.min)
+- Divisor superior:
+  - Container(height: 3, color: customColor[700])
+- BottomNavigationBar:
+  - selectedItemColor: customColor[700]
+  - unselectedItemColor: Colors.black
+  - selectedIconTheme: size 37.5
+  - unselectedIconTheme: size 22.5
+  - selectedFontSize: 14
+  - unselectedFontSize: 12
+
+3.3 Botones principales (ElevatedButton / ElevatedButton.icon)
+Patrón visual predominante
+- Alto mínimo: 48 (Size.fromHeight(48))
+- Padding vertical: 12 o 16 (según pantalla)
+- BorderRadius: 8
+- Fondo: customColor[400]/[500]/[600] (según prioridad)
+- Texto/iconos: blanco
+- Texto de botón: bold cuando es CTA
+
+3.4 Cards como contenedores de sección
+Patrón común
+- Card con elevación baja–media (1–3)
+- Padding interno típico: 12–16
+- Separación vertical: SizedBox(height: 8–10) o margin del Card
+
+3.5 Banners de estado (servicio/vinculación)
+Usado principalmente en Emisor
+- Container con:
+  - margin horizontal 16, bottom ~10
+  - padding horizontal 8, vertical 16
+  - fondo: Colors.green[100] o Colors.red[100]
+  - borde: Colors.green o Colors.red
+  - icono + texto bold (color verde/rojo más oscuro)
+
+3.6 ListTile para navegación/ajustes
+Patrón en Receptor (y algunas acciones en Conexión)
+- leading:
+  - Icon simple, o
+  - Container(padding: 8, bg: customColor[100], radius: 8) + Icon(color: customColor[600], size 24)
+- title: tamaño ~17, fontWeight w500
+- subtitle: tamaño ~14, italic (cuando aplica)
+- trailing: Icons.arrow_forward_ios
+
+3.7 Switch
+Patrón consistente
+- inactiveTrackColor: customColor[200]
+- inactiveThumbColor: Colors.grey[300]
+- activeColor: Colors.green
+
+3.8 ToggleButtons (filtros/segmentos)
+Usado en Notificaciones (Receptor)
+- 2 opciones (No leídas / Leídas)
+- borderRadius: 12
+- minHeight: 40
+- ancho: 50% del contenedor (LayoutBuilder)
+
+============================================================
+4) Plantillas de pantalla (las 3 principales por rol)
+============================================================
+
+4.1 Emisor - Configuración (tab “Configuración”)
+Referencia: lib/screens/emisor/settings_screen.dart
+
+Estructura
+- AppBar “Configuración”
+- body:
+  - SingleChildScrollView
+  - Padding general: 8
+  - Column con Cards apiladas (secciones)
+
+Secciones típicas (Cards)
+- Estado del servicio / permiso:
+  - títulos bold 18
+  - estado centrado con color verde/rojo
+  - filas de botones (2 por fila) con radius 8 y customColor[600]
+- Firebase:
+  - SwitchListTile con activeColor verde y track inactivo customColor[200]
+- Configuración de vinculación:
+  - Row con texto (estado + descripción) y Switch
+  - bloque informativo con fondo azul claro (Colors.blue[50]) y borde azul
+
+4.2 Emisor - Emisor de Notificaciones (tab central)
+Referencia: lib/screens/emisor/emisor_screen.dart
+
+Estructura
+- AppBar “Emisor de Notificaciones”
+  - actions: icono filtro + icono cloud (verde/grey según estado)
+- body:
+  - SingleChildScrollView
+  - Column con:
+    1) CTA superior: ElevatedButton.icon “Usar App como Receptor”
+       - background: customColor[400], texto blanco bold, height 48
+    2) Banner “Estado del Servicio” (verde/rojo)
+    3) Banner “Estado de Vinculación” (verde/rojo), clickable si está vinculado
+    4) Card “ID del dispositivo”:
+       - Row con celdas por carácter (fondo blanco, sombra suave, texto grande)
+    5) Cards/listas adicionales (notificaciones agrupadas, etc.)
+
+4.3 Emisor - Apps (tab “Apps”)
+Referencia: lib/screens/emisor/app_list_screen.dart
+
+Estructura
+- Pantalla orientada a listas con Cards expandibles
+- Patrones clave para replicar:
+  - Card con título + IconButton (mostrar/ocultar)
+  - Contenido con AnimatedSwitcher + SizeTransition (expansión)
+  - ListTile por app:
+    - leading: icono de la app
+    - title + subtitle
+    - trailing: Switch con track inactivo customColor[200]
+  - Búsqueda por paquete:
+    - TextField con borde negro
+    - Botón cuadrado con fondo customColor[600]
+
+------------------------------------------------------------
+
+4.4 Receptor - Configuración (tab “Configuración”)
+Referencia: lib/screens/receptor/receptor_settings_screen.dart
+
+Estructura
+- AppBar “Configuración Receptor”
+- body:
+  - ListView padding 5
+  - Card principal “Opciones de Dispositivo”
+    - título 20 bold
+    - lista de ElevatedButton.icon con el mismo patrón:
+      - height 48, padding vertical 16, radius 8
+      - fondos: customColor[400]/[500]/[600]
+  - Cards de navegación tipo ListTile con leading en contenedor customColor[100]
+
+4.5 Receptor - Conexión (tab “Conexión”)
+Referencia: lib/screens/receptor/conexion_screen.dart
+
+Estructura
+- AppBar “Conexión”
+  - actions: filtro + borrar todo
+- body:
+  - Padding 5
+  - SingleChildScrollView + Column
+  - Cards en columna con spacing (SizedBox 10)
+
+Cards típicas
+- “Dispositivo vinculado” (tappable para expandir detalles)
+  - Icono verde + título verde bold 18
+  - metadata a la derecha (ID, BT peer) en tamaño 12 gris
+- “Buscar emisor” (ListTile con Icon search + flecha)
+- “Control multimedia” (Card con layout en Row/Column, mini carátula con radius 8)
+
+4.6 Receptor - Notificaciones (tab “Notificaciones”)
+Referencia: lib/screens/receptor/notifications_screen.dart
+
+Estructura
+- AppBar “notificaciones”
+  - action: filtro
+- body:
+  - ToggleButtons (No leídas / Leídas)
+  - Expanded con RefreshIndicator + ListView
+
+Ítem de notificación (lista)
+- Dismissible endToStart (borrar):
+  - background rojo + icono delete blanco
+- Card (margin 5) con ListTile:
+  - title: título
+  - subtitle: texto + “App: …” en italic 12
+  - trailing: timestamp 12 + (si no leída) icono para marcar como leída
+
+============================================================
+5) Reglas rápidas para replicar pantallas nuevas
+============================================================
+
+- Mantener el AppBar del tema (customColor[700], texto blanco, título centrado). Si se overridea, hacerlo igual que el resto.
+- Usar Cards como secciones (padding 12–16) y separar con SizedBox 8–10; evitar “bloques” sin Card cuando la pantalla es de ajustes.
+- Botones:
+  - CTAs con ElevatedButton.icon, height 48, radius 8, texto blanco bold.
+  - Elegir tono según prioridad: 600 (principal), 500 (destacado), 400 (secundario visible).
+- Para estados (on/off, activo/inactivo), usar pares verde/rojo:
+  - fondo suave (100) + borde sólido + icono coherente.
+- BottomNavigationBar principal siempre con divisor superior de 3px en customColor[700] y tamaños de icono/fuente consistentes.
+
+Referencias de implementación (archivos)
+- Tema global y AppBar: lib/main.dart
+- Paleta customColor: lib/theme_colors.dart
+- Emisor: lib/screens/emisor/settings_screen.dart, lib/screens/emisor/emisor_screen.dart, lib/screens/emisor/app_list_screen.dart
+- Receptor: lib/screens/receptor/receptor_settings_screen.dart, lib/screens/receptor/conexion_screen.dart, lib/screens/receptor/notifications_screen.dart

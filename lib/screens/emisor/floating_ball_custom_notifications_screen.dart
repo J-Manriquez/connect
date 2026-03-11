@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:connect/services/floating_ball_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -42,16 +41,14 @@ class _FloatingBallCustomNotificationsScreenState
   bool _liveRefreshEnabled = false;
 
   bool _fsBarEnabled = false;
-  int _fsBgColor = 0xCC111111;
   int _fsContainerPaddingHorzDp = 16;
   int _fsContainerPaddingVertDp = 16;
-  int _fsIconSizeDp = 26;
   int _fsTextSizeSp = 14;
-  int _fsStickyPaddingDp = 0;
   bool _fsCloseSticky = false;
   bool _fsCloseDisableStickyWhenMediaActive = true;
   int _fsCloseHeightDp = 120;
   int _fsCloseBgColor = 0xFFDC2626;
+  int _fsCloseBorderColor = 0x22FFFFFF;
   int _fsCloseTextColor = 0xFFFFFFFF;
   bool _fsCloseHideText = false;
   String _fsCloseIconId = 'close';
@@ -60,7 +57,7 @@ class _FloatingBallCustomNotificationsScreenState
   int _bottomButtonsIconHeightDp = 34;
   String _deleteButtonIconId = 'delete';
   String? _deleteButtonIconPngBase64;
-  String _deleteButtonText = 'Eliminar';
+  String _deleteButtonText = 'Eliminar todo';
 
   int _fsBarHeightDp = 54;
   int _fsBarBgColor = 0xCC111111;
@@ -91,6 +88,9 @@ class _FloatingBallCustomNotificationsScreenState
   int _textColor = 0xFFFFFFFF;
   int _titleSizeSp = 16;
   int _textSizeSp = 14;
+  int _bottomButtonsPaddingHorzDp = 14;
+  int _bottomButtonsPaddingVertDp = 10;
+  int _bottomButtonsGapDp = 10;
 
   @override
   void initState() {
@@ -105,6 +105,7 @@ class _FloatingBallCustomNotificationsScreenState
     _refreshSystemState();
     _systemTick = Timer.periodic(const Duration(seconds: 2), (_) {
       _refreshSystemState();
+      _refreshBottomButtonsLayout();
     });
   }
 
@@ -234,35 +235,112 @@ class _FloatingBallCustomNotificationsScreenState
     });
   }
 
+  Future<void> _refreshBottomButtonsLayout() async {
+    try {
+      final h = await FloatingBallService.getConversationBottomButtonsPaddingHorzDp();
+      final v = await FloatingBallService.getConversationBottomButtonsPaddingVertDp();
+      final g = await FloatingBallService.getConversationBottomButtonsGapDp();
+      final buttonsHideText =
+          await FloatingBallService.isCustomNotificationsButtonsHideTextEnabled();
+      final buttonsHeightDp =
+          await FloatingBallService.getCustomNotificationsButtonsHeightDp();
+      final buttonsBgColor =
+          await FloatingBallService.getCustomNotificationsButtonsBgColor();
+      final buttonsBorderColor =
+          await FloatingBallService.getCustomNotificationsButtonsBorderColor();
+      final buttonsContentColor =
+          await FloatingBallService.getCustomNotificationsButtonsContentColor();
+      final closeIconId =
+          await FloatingBallService.getCustomNotificationsCloseIconId();
+      final closeIconPngBase64 =
+          await FloatingBallService.getCustomNotificationsCloseIconPngBase64();
+      final closeText = await FloatingBallService.getCustomNotificationsCloseText();
+      final clearAllIconId =
+          await FloatingBallService.getCustomNotificationsClearAllIconId();
+      final clearAllIconPngBase64 =
+          await FloatingBallService.getCustomNotificationsClearAllIconPngBase64();
+      final clearAllText =
+          await FloatingBallService.getCustomNotificationsClearAllText();
+      final iconHeightDp =
+          await FloatingBallService.getCustomNotificationsButtonsIconHeightDp();
+      if (!mounted) return;
+      if (h == _bottomButtonsPaddingHorzDp &&
+          v == _bottomButtonsPaddingVertDp &&
+          g == _bottomButtonsGapDp &&
+          buttonsHideText == _fsCloseHideText &&
+          buttonsHeightDp == _fsCloseHeightDp &&
+          buttonsBgColor == _fsCloseBgColor &&
+          buttonsBorderColor == _fsCloseBorderColor &&
+          buttonsContentColor == _fsCloseTextColor &&
+          closeIconId == _fsCloseIconId &&
+          closeIconPngBase64 == _fsCloseIconPngBase64 &&
+          closeText == _fsCloseText &&
+          clearAllIconId == _deleteButtonIconId &&
+          clearAllIconPngBase64 == _deleteButtonIconPngBase64 &&
+          clearAllText == _deleteButtonText &&
+          iconHeightDp == _bottomButtonsIconHeightDp) {
+        return;
+      }
+      setState(() {
+        _bottomButtonsPaddingHorzDp = h;
+        _bottomButtonsPaddingVertDp = v;
+        _bottomButtonsGapDp = g;
+        _fsCloseHideText = buttonsHideText;
+        _fsCloseHeightDp = buttonsHeightDp;
+        _fsCloseBgColor = buttonsBgColor;
+        _fsCloseBorderColor = buttonsBorderColor;
+        _fsCloseTextColor = buttonsContentColor;
+        _fsCloseIconId = closeIconId;
+        _fsCloseIconPngBase64 = closeIconPngBase64;
+        _fsCloseText = closeText;
+        _deleteButtonIconId = clearAllIconId;
+        _deleteButtonIconPngBase64 = clearAllIconPngBase64;
+        _deleteButtonText = clearAllText;
+        _bottomButtonsIconHeightDp = iconHeightDp;
+      });
+    } catch (_) {}
+  }
+
   Future<void> _loadStyle() async {
     try {
       final fsBarEnabled = await FloatingBallService.isFullScreenBarEnabled();
-      final fsBgColor = await FloatingBallService.getFullScreenBgColor();
       final fsContainerPaddingHorzDp =
           await FloatingBallService.getFullScreenContainerPaddingHorzDp();
       final fsContainerPaddingVertDp =
           await FloatingBallService.getFullScreenContainerPaddingVertDp();
-      final fsIconSizeDp = await FloatingBallService.getFullScreenIconSizeDp();
       final fsTextSizeSp = await FloatingBallService.getFullScreenTextSizeSp();
-      final fsStickyPaddingDp = await FloatingBallService.getFullScreenStickyPaddingDp();
+      final bottomButtonsGapDp =
+          await FloatingBallService.getConversationBottomButtonsGapDp();
+      final bottomButtonsPaddingHorzDp = await FloatingBallService
+          .getConversationBottomButtonsPaddingHorzDp();
+      final bottomButtonsPaddingVertDp = await FloatingBallService
+          .getConversationBottomButtonsPaddingVertDp();
       final fsCloseSticky = await FloatingBallService.isFullScreenCloseStickyEnabled();
       final fsCloseDisableStickyWhenMediaActive =
           await FloatingBallService.isFullScreenCloseDisableStickyWhenMediaActiveEnabled();
-      final fsCloseHeightDp = await FloatingBallService.getFullScreenCloseHeightDp();
-      final fsCloseBgColor = await FloatingBallService.getFullScreenCloseBgColor();
-      final fsCloseTextColor = await FloatingBallService.getFullScreenCloseTextColor();
-      final fsCloseHideText = await FloatingBallService.isFullScreenCloseHideTextEnabled();
-      final fsCloseIconId = await FloatingBallService.getFullScreenCloseIconId();
-      final fsCloseIconPngBase64 = await FloatingBallService.getFullScreenCloseIconPngBase64();
-      final fsCloseText = await FloatingBallService.getFullScreenCloseText();
+      final buttonsHideText =
+          await FloatingBallService.isCustomNotificationsButtonsHideTextEnabled();
+      final buttonsHeightDp =
+          await FloatingBallService.getCustomNotificationsButtonsHeightDp();
+      final buttonsBgColor =
+          await FloatingBallService.getCustomNotificationsButtonsBgColor();
+      final buttonsBorderColor =
+          await FloatingBallService.getCustomNotificationsButtonsBorderColor();
+      final buttonsContentColor =
+          await FloatingBallService.getCustomNotificationsButtonsContentColor();
+      final closeIconId =
+          await FloatingBallService.getCustomNotificationsCloseIconId();
+      final closeIconPngBase64 =
+          await FloatingBallService.getCustomNotificationsCloseIconPngBase64();
+      final closeText = await FloatingBallService.getCustomNotificationsCloseText();
+      final clearAllIconId =
+          await FloatingBallService.getCustomNotificationsClearAllIconId();
+      final clearAllIconPngBase64 =
+          await FloatingBallService.getCustomNotificationsClearAllIconPngBase64();
+      final clearAllText =
+          await FloatingBallService.getCustomNotificationsClearAllText();
       final bottomButtonsIconHeightDp =
           await FloatingBallService.getCustomNotificationsButtonsIconHeightDp();
-      final deleteButtonIconId =
-          await FloatingBallService.getCustomNotificationsDeleteIconId();
-      final deleteButtonIconPngBase64 =
-          await FloatingBallService.getCustomNotificationsDeleteIconPngBase64();
-      final deleteButtonText =
-          await FloatingBallService.getCustomNotificationsDeleteText();
 
       final fsBarHeightDp = await FloatingBallService.getFullScreenBarHeightDp();
       final fsBarBgColor = await FloatingBallService.getFullScreenBarBgColor();
@@ -319,25 +397,26 @@ class _FloatingBallCustomNotificationsScreenState
       if (!mounted) return;
       setState(() {
         _fsBarEnabled = fsBarEnabled;
-        _fsBgColor = fsBgColor;
         _fsContainerPaddingHorzDp = fsContainerPaddingHorzDp;
         _fsContainerPaddingVertDp = fsContainerPaddingVertDp;
-        _fsIconSizeDp = fsIconSizeDp;
         _fsTextSizeSp = fsTextSizeSp;
-        _fsStickyPaddingDp = fsStickyPaddingDp;
+        _bottomButtonsGapDp = bottomButtonsGapDp;
+        _bottomButtonsPaddingHorzDp = bottomButtonsPaddingHorzDp;
+        _bottomButtonsPaddingVertDp = bottomButtonsPaddingVertDp;
         _fsCloseSticky = fsCloseSticky;
         _fsCloseDisableStickyWhenMediaActive = fsCloseDisableStickyWhenMediaActive;
-        _fsCloseHeightDp = fsCloseHeightDp;
-        _fsCloseBgColor = fsCloseBgColor;
-        _fsCloseTextColor = fsCloseTextColor;
-        _fsCloseHideText = fsCloseHideText;
-        _fsCloseIconId = fsCloseIconId;
-        _fsCloseIconPngBase64 = fsCloseIconPngBase64;
-        _fsCloseText = fsCloseText;
+        _fsCloseHeightDp = buttonsHeightDp;
+        _fsCloseBgColor = buttonsBgColor;
+        _fsCloseBorderColor = buttonsBorderColor;
+        _fsCloseTextColor = buttonsContentColor;
+        _fsCloseHideText = buttonsHideText;
+        _fsCloseIconId = closeIconId;
+        _fsCloseIconPngBase64 = closeIconPngBase64;
+        _fsCloseText = closeText;
         _bottomButtonsIconHeightDp = bottomButtonsIconHeightDp;
-        _deleteButtonIconId = deleteButtonIconId;
-        _deleteButtonIconPngBase64 = deleteButtonIconPngBase64;
-        _deleteButtonText = deleteButtonText;
+        _deleteButtonIconId = clearAllIconId;
+        _deleteButtonIconPngBase64 = clearAllIconPngBase64;
+        _deleteButtonText = clearAllText;
 
         _fsBarHeightDp = fsBarHeightDp;
         _fsBarBgColor = fsBarBgColor;
@@ -495,7 +574,9 @@ class _FloatingBallCustomNotificationsScreenState
 
     final scrollPadH = _fsContainerPaddingHorzDp.toDouble();
     final scrollPadV = _fsContainerPaddingVertDp.toDouble();
-    final stickyPad = _fsStickyPaddingDp.toDouble();
+    final bottomButtonsPadH = _bottomButtonsPaddingHorzDp.toDouble();
+    final bottomButtonsPadV = _bottomButtonsPaddingVertDp.toDouble();
+    final stickyBottomInset = MediaQuery.of(context).padding.bottom.toDouble();
 
     final content = _loading
         ? const Center(child: CircularProgressIndicator())
@@ -524,7 +605,9 @@ class _FloatingBallCustomNotificationsScreenState
                       0,
                       scrollPadV +
                           (_fsCloseSticky
-                              ? (_fsCloseHeightDp.toDouble() + stickyPad + 16)
+                              ? (_fsCloseHeightDp.toDouble() +
+                                  (bottomButtonsPadV * 2) +
+                                  stickyBottomInset)
                               : 0),
                     ),
                     itemCount: _items.length,
@@ -697,24 +780,31 @@ class _FloatingBallCustomNotificationsScreenState
                       final closeEnabled = !s.showMediaRestore ||
                           !_fsCloseDisableStickyWhenMediaActive;
                       if (!closeEnabled) return const SizedBox.shrink();
-                      return Padding(
-                        padding: EdgeInsets.fromLTRB(
-                            stickyPad, 0, stickyPad, stickyPad),
-                        child: _BottomButtonsRow(
-                          heightDp: _fsCloseHeightDp,
-                          bgColor: _fsCloseBgColor,
-                          textColor: _fsCloseTextColor,
-                          hideText: _fsCloseHideText,
-                          iconHeightDp: _bottomButtonsIconHeightDp,
-                          closeIconId: _fsCloseIconId,
-                          closeIconPngBase64: _fsCloseIconPngBase64,
-                          closeText: _fsCloseText,
-                          deleteIconId: _deleteButtonIconId,
-                          deleteIconPngBase64: _deleteButtonIconPngBase64,
-                          deleteText: _deleteButtonText,
-                          textSizeSp: _fsTextSizeSp,
-                          onClose: _closeScreen,
-                          onClearAll: _clearAll,
+                      return SafeArea(
+                        top: false,
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: bottomButtonsPadH,
+                            vertical: bottomButtonsPadV,
+                          ),
+                          child: _BottomButtonsRow(
+                            heightDp: _fsCloseHeightDp,
+                            bgColor: _fsCloseBgColor,
+                            borderColor: _fsCloseBorderColor,
+                            textColor: _fsCloseTextColor,
+                            hideText: _fsCloseHideText,
+                            iconHeightDp: _bottomButtonsIconHeightDp,
+                            gapDp: _bottomButtonsGapDp,
+                            closeIconId: _fsCloseIconId,
+                            closeIconPngBase64: _fsCloseIconPngBase64,
+                            closeText: _fsCloseText,
+                            deleteIconId: _deleteButtonIconId,
+                            deleteIconPngBase64: _deleteButtonIconPngBase64,
+                            deleteText: _deleteButtonText,
+                            textSizeSp: _fsTextSizeSp,
+                            onClose: _closeScreen,
+                            onClearAll: _clearAll,
+                          ),
                         ),
                       );
                     },
@@ -732,23 +822,31 @@ class _FloatingBallCustomNotificationsScreenState
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(stickyPad, 0, stickyPad, stickyPad),
-                      child: _BottomButtonsRow(
-                        heightDp: _fsCloseHeightDp,
-                        bgColor: _fsCloseBgColor,
-                        textColor: _fsCloseTextColor,
-                        hideText: _fsCloseHideText,
-                        iconHeightDp: _bottomButtonsIconHeightDp,
-                        closeIconId: _fsCloseIconId,
-                        closeIconPngBase64: _fsCloseIconPngBase64,
-                        closeText: _fsCloseText,
-                        deleteIconId: _deleteButtonIconId,
-                        deleteIconPngBase64: _deleteButtonIconPngBase64,
-                        deleteText: _deleteButtonText,
-                        textSizeSp: _fsTextSizeSp,
-                        onClose: _closeScreen,
-                        onClearAll: _clearAll,
+                    child: SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: bottomButtonsPadH,
+                          vertical: bottomButtonsPadV,
+                        ),
+                        child: _BottomButtonsRow(
+                          heightDp: _fsCloseHeightDp,
+                          bgColor: _fsCloseBgColor,
+                          borderColor: _fsCloseBorderColor,
+                          textColor: _fsCloseTextColor,
+                          hideText: _fsCloseHideText,
+                          iconHeightDp: _bottomButtonsIconHeightDp,
+                          gapDp: _bottomButtonsGapDp,
+                          closeIconId: _fsCloseIconId,
+                          closeIconPngBase64: _fsCloseIconPngBase64,
+                          closeText: _fsCloseText,
+                          deleteIconId: _deleteButtonIconId,
+                          deleteIconPngBase64: _deleteButtonIconPngBase64,
+                          deleteText: _deleteButtonText,
+                          textSizeSp: _fsTextSizeSp,
+                          onClose: _closeScreen,
+                          onClearAll: _clearAll,
+                        ),
                       ),
                     ),
                   );
@@ -1030,9 +1128,11 @@ class _FsBarState extends State<_FsBar> {
 class _BottomButtonsRow extends StatelessWidget {
   final int heightDp;
   final int bgColor;
+  final int borderColor;
   final int textColor;
   final bool hideText;
   final int iconHeightDp;
+  final int gapDp;
   final String closeIconId;
   final String? closeIconPngBase64;
   final String closeText;
@@ -1046,9 +1146,11 @@ class _BottomButtonsRow extends StatelessWidget {
   const _BottomButtonsRow({
     required this.heightDp,
     required this.bgColor,
+    required this.borderColor,
     required this.textColor,
     required this.hideText,
     required this.iconHeightDp,
+    required this.gapDp,
     required this.closeIconId,
     required this.closeIconPngBase64,
     required this.closeText,
@@ -1109,7 +1211,7 @@ class _BottomButtonsRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: Color(bgColor),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0x22FFFFFF), width: 1),
+          border: Border.all(color: Color(borderColor), width: 1),
         ),
         alignment: Alignment.center,
         child: hideText
@@ -1160,7 +1262,7 @@ class _BottomButtonsRow extends StatelessWidget {
             fallback: Icons.close,
           ),
         ),
-        const SizedBox(width: 10),
+        SizedBox(width: gapDp.toDouble()),
         Expanded(
           child: _button(
             onTap: onClearAll,
