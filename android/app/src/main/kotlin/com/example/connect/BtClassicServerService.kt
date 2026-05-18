@@ -111,6 +111,9 @@ class BtClassicServerService : Service() {
     private var lastMediaDebugAtMs: Long = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile
+    private var lastPeerDisconnectedAtMs: Long = 0L
+    private var clearMediaRunnable: Runnable? = null
+    @Volatile
     private var btHiveReady: Boolean = false
     @Volatile
     private var pendingMediaState: HashMap<String, Any?>? = null
@@ -133,10 +136,65 @@ class BtClassicServerService : Service() {
             ACTION_SEND_TO_PEERS -> {
                 val json = intent.getStringExtra(EXTRA_JSON)
                 if (!json.isNullOrBlank()) {
-                    val handled = tryHandleOutgoingLocalCommand(json)
+                    var handled = false
+                    try {
+                        val obj = JSONObject(json)
+                        val type = obj.optString("type", "").trim()
+                        if (type == "launch_default_media_app") {
+                            var pkg = obj.optString("packageName", "").trim()
+                            val forcePlay = obj.optBoolean("forcePlay", false)
+                            val pauseOthers = obj.optBoolean("pauseOthers", false)
+                            if (pkg.isBlank()) {
+                                try {
+                                    val prefs = applicationContext.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
+                                    val fallback = prefs.getString("flutter.media_default_app_package", null)?.trim().orEmpty()
+                                    if (fallback.isNotBlank()) {
+                                        pkg = fallback
+                                        obj.put("packageName", fallback)
+                                    }
+                                } catch (_: Exception) {
+                                }
+                            }
+                            val outgoingJson = try { obj.toString() } catch (_: Exception) { json }
+                            println("[btclassic][server][media_launch] request pkg='${pkg.take(120)}' forcePlay=$forcePlay pauseOthers=$pauseOthers peers=$connectedPeers")
+
+                            try {
+                                val localPaused = performLocalMediaCommand("pause", null)
+                                println("[btclassic][server][media_launch] local_pause attempted ok=$localPaused")
+                            } catch (t: Throwable) {
+                                println("[btclassic][server][media_launch] local_pause exception t=${t::class.java.simpleName} msg=${t.message}")
+                            }
+
+                            try {
+                                val pausePayload = JSONObject()
+                                pausePayload.put("type", "media_command")
+                                pausePayload.put("command", "pause")
+                                pausePayload.put("time", System.currentTimeMillis())
+                                startServerIfNeeded()
+                                sendToPeers(pausePayload.toString())
+                                println("[btclassic][server][media_launch] sent remote_pause to peers=$connectedPeers")
+                            } catch (t: Throwable) {
+                                println("[btclassic][server][media_launch] remote_pause exception t=${t::class.java.simpleName} msg=${t.message}")
+                            }
+
+                            try {
+                                startServerIfNeeded()
+                                sendToPeers(outgoingJson)
+                                println("[btclassic][server][media_launch] sent launch_default_media_app peers=$connectedPeers")
+                            } catch (t: Throwable) {
+                                println("[btclassic][server][media_launch] send launch exception t=${t::class.java.simpleName} msg=${t.message}")
+                            }
+                            handled = true
+                        }
+                    } catch (t: Throwable) {
+                        println("[btclassic][server] ACTION_SEND_TO_PEERS parse exception t=${t::class.java.simpleName} msg=${t.message}")
+                    }
                     if (!handled) {
-                        startServerIfNeeded()
-                        sendToPeers(json)
+                        val localHandled = tryHandleOutgoingLocalCommand(json)
+                        if (!localHandled) {
+                            startServerIfNeeded()
+                            sendToPeers(json)
+                        }
                     }
                 }
             }
@@ -317,7 +375,20 @@ class BtClassicServerService : Service() {
                 connectedPeers = sockets.size
                 sendDebugToPeers("receptor_server", "peer_disconnected peers=$connectedPeers")
                 if (connectedPeers <= 0) {
-                    clearMediaCache()
+                    val now = System.currentTimeMillis()
+                    lastPeerDisconnectedAtMs = now
+                    val r = clearMediaRunnable ?: Runnable {
+                        try {
+                            val stillDisconnected = connectedPeers <= 0
+                            val since = System.currentTimeMillis() - lastPeerDisconnectedAtMs
+                            if (stillDisconnected && since >= 20_000L) {
+                                clearMediaCache()
+                            }
+                        } catch (_: Exception) {
+                        }
+                    }.also { clearMediaRunnable = it }
+                    mainHandler.removeCallbacks(r)
+                    mainHandler.postDelayed(r, 20_000L)
                 }
             }
         }.start()
@@ -663,6 +734,26 @@ class BtClassicServerService : Service() {
                     }
                 } catch (_: Exception) {
                     sendDebugToPeers("volume_state", "error processing volume_state")
+                }
+                return
+            }
+            if (type == "default_media_app_status") {
+                try {
+                    val pkg = obj.optString("packageName", "").trim()
+                    val installed = obj.optBoolean("installed", true)
+                    if (pkg.isNotBlank()) {
+                        val prefs = applicationContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                        prefs.edit()
+                            .putString("flutter.media_default_app_installed_pkg", pkg)
+                            .putBoolean("flutter.media_default_app_installed", installed)
+                            .apply()
+                        try { MediaWidgetProvider.updateAll(applicationContext) } catch (_: Exception) {}
+                        try { MediaWidgetProviderStyle2.updateAll(applicationContext) } catch (_: Exception) {}
+                        try { MediaWidgetProviderStyle3.updateAll(applicationContext) } catch (_: Exception) {}
+                        try { MediaWidgetProviderStyle4.updateAll(applicationContext) } catch (_: Exception) {}
+                        try { MediaWidgetProviderStyle5.updateAll(applicationContext) } catch (_: Exception) {}
+                    }
+                } catch (_: Exception) {
                 }
                 return
             }

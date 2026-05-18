@@ -67,7 +67,12 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
  
         when (intent.action) {
             ACTION_TOGGLE -> {
-                sendMediaCommand(context, "toggle")
+                val hasPlayback = try { hasSelectedPlaybackFresh(context) } catch (_: Exception) { false }
+                if (hasPlayback) {
+                    sendMediaCommand(context, "toggle")
+                } else {
+                    sendLaunchDefaultMediaApp(context, forcePlay = true, pauseOthers = false)
+                }
                 updateAll(context)
             }
             ACTION_NEXT -> {
@@ -92,7 +97,11 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
                 updateAll(context)
             }
             ACTION_LAUNCH_DEFAULT_MEDIA_APP -> {
-                sendLaunchDefaultMediaApp(context)
+                sendLaunchDefaultMediaApp(context, forcePlay = false, pauseOthers = false)
+                updateAll(context)
+            }
+            ACTION_LAUNCH_DEFAULT_MEDIA_APP_PLAY -> {
+                sendLaunchDefaultMediaApp(context, forcePlay = true, pauseOthers = true)
                 updateAll(context)
             }
             ACTION_OPEN_APP -> {
@@ -118,6 +127,8 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
         private const val KEY_MEDIA_UPDATED_AT_MS = "updatedAtMs"
         private const val KEY_ART_BASE64 = "artBase64"
         private const val KEY_ART_KEY = "artKey"
+        private const val KEY_ART_PKG = "artPkg"
+        private const val KEY_ART_UPDATED_AT_MS = "artUpdatedAtMs"
 
         private const val PREFS_LOCAL_MEDIA_CACHE = "local_media_cache_v1"
         private const val PREFS_FLUTTER_SHARED = "FlutterSharedPreferences"
@@ -131,6 +142,10 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
         private const val KEY_FLUTTER_WIDGET_TEXT_SP = "flutter.widget_text_sp"
         private const val KEY_FLUTTER_WIDGET_ICON_SP = "flutter.widget_icon_sp"
         private const val KEY_FLUTTER_MEDIA_DEFAULT_APP_PACKAGE = "flutter.media_default_app_package"
+        private const val KEY_FLUTTER_MEDIA_DEFAULT_APP_ICON_BASE64 = "flutter.media_default_app_icon_base64"
+        private const val KEY_FLUTTER_MEDIA_DEFAULT_APP_WIDGET2_ICON_BASE64 = "flutter.media_default_app_widget2_icon_base64"
+        private const val KEY_FLUTTER_MEDIA_DEFAULT_APP_INSTALLED = "flutter.media_default_app_installed"
+        private const val KEY_FLUTTER_MEDIA_DEFAULT_APP_INSTALLED_PKG = "flutter.media_default_app_installed_pkg"
 
         private const val ACTION_PREFIX = "com.example.connect.widget.MEDIA"
         const val ACTION_TOGGLE = "$ACTION_PREFIX.TOGGLE"
@@ -140,6 +155,7 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
         const val ACTION_TOGGLE_VOLUME = "$ACTION_PREFIX.TOGGLE_VOLUME"
         const val ACTION_SET_VOLUME = "$ACTION_PREFIX.SET_VOLUME"
         const val ACTION_LAUNCH_DEFAULT_MEDIA_APP = "$ACTION_PREFIX.LAUNCH_DEFAULT_MEDIA_APP"
+        const val ACTION_LAUNCH_DEFAULT_MEDIA_APP_PLAY = "$ACTION_PREFIX.LAUNCH_DEFAULT_MEDIA_APP_PLAY"
 
         private const val EXTRA_PCT = "pct"
         private const val EXTRA_WIDGET_ID = "appWidgetId"
@@ -322,10 +338,27 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_next, nextPending)
             views.setOnClickPendingIntent(R.id.widget_volume_btn, toggleVolumePending)
 
+            if (layoutResId == R.layout.widget_media_style2) {
+                val defaultAppPending = PendingIntent.getBroadcast(
+                    context,
+                    stableRequestCode(providerClass.name, 700000, appWidgetId),
+                    Intent(context, providerClass)
+                        .setAction(ACTION_LAUNCH_DEFAULT_MEDIA_APP_PLAY)
+                        .putExtra(EXTRA_WIDGET_ID, appWidgetId),
+                    PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
+                )
+                try { views.setOnClickPendingIntent(R.id.widget_default_app, defaultAppPending) } catch (_: Exception) {}
+            }
+
             val uiPrefs = context.getSharedPreferences(uiPrefsName, Context.MODE_PRIVATE)
             val expandedKey = "volumeExpanded_$appWidgetId"
             val volumeExpanded = try { uiPrefs.getBoolean(expandedKey, false) } catch (_: Exception) { false }
-            views.setViewVisibility(R.id.widget_volume_panel, if (volumeExpanded) android.view.View.VISIBLE else android.view.View.GONE)
+            if (layoutResId == R.layout.widget_media_style2) {
+                views.setViewVisibility(R.id.widget_volume_panel, if (volumeExpanded) android.view.View.VISIBLE else android.view.View.INVISIBLE)
+                views.setViewVisibility(R.id.widget_default_app, if (volumeExpanded) android.view.View.GONE else android.view.View.VISIBLE)
+            } else {
+                views.setViewVisibility(R.id.widget_volume_panel, if (volumeExpanded) android.view.View.VISIBLE else android.view.View.GONE)
+            }
             if (layoutResId == R.layout.widget_media_style3) {
                 views.setViewVisibility(R.id.widget_title, if (volumeExpanded) android.view.View.GONE else android.view.View.VISIBLE)
                 views.setViewVisibility(R.id.widget_subtitle, if (volumeExpanded) android.view.View.GONE else android.view.View.VISIBLE)
@@ -364,8 +397,7 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             val remotePrefs = context.getSharedPreferences(PREFS_MEDIA_CACHE, Context.MODE_PRIVATE)
             val remoteJson = remotePrefs.getString(KEY_MEDIA_JSON, null)
             val remoteUpdatedAtMs = remotePrefs.getLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
-            val remoteConnected = try { BtClassicServerService.connectedPeers > 0 } catch (_: Exception) { false }
-            val remoteFresh = remoteConnected && !remoteJson.isNullOrBlank() && remoteUpdatedAtMs > 0L && now - remoteUpdatedAtMs <= 15_000L
+            val remoteFresh = !remoteJson.isNullOrBlank() && remoteUpdatedAtMs > 0L && now - remoteUpdatedAtMs <= 15_000L
 
             val localPrefs = context.getSharedPreferences(PREFS_LOCAL_MEDIA_CACHE, Context.MODE_PRIVATE)
             val localJson = localPrefs.getString(KEY_MEDIA_JSON, null)
@@ -377,6 +409,11 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             val json = if (useLocal) localJson else remoteJson
             val updatedAtMs = if (useLocal) localUpdatedAtMs else remoteUpdatedAtMs
             val stale = json.isNullOrBlank() || updatedAtMs <= 0L || now - updatedAtMs > 15_000L
+            if (prioritizeLocal && !localFresh) {
+                try {
+                    refreshLocalMediaCache(context)
+                } catch (_: Exception) {}
+            }
 
             val volumePrefs = context.getSharedPreferences(PREFS_VOLUME_CACHE, Context.MODE_PRIVATE)
             val volumeUpdatedAtMs = volumePrefs.getLong(KEY_VOLUME_UPDATED_AT_MS, 0L)
@@ -399,6 +436,9 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
                 )
                 views.setOnClickPendingIntent(R.id.widget_root, launchDefaultAppPending)
                 applyNoPlaybackBackground(views, layoutResId)
+                if (layoutResId == R.layout.widget_media_style2) {
+                    applyDefaultAppIcon(context, views, grayscaleIfMissing = true)
+                }
                 return views
             }
 
@@ -414,6 +454,9 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
                 )
                 views.setOnClickPendingIntent(R.id.widget_root, launchDefaultAppPending)
                 applyNoPlaybackBackground(views, layoutResId)
+                if (layoutResId == R.layout.widget_media_style2) {
+                    applyDefaultAppIcon(context, views, grayscaleIfMissing = true)
+                }
                 return views
             }
 
@@ -422,15 +465,14 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             val album = obj.optString("album", "").trim()
             val appName = obj.optString("appName", "").trim()
             val packageName = obj.optString("packageName", "").trim()
-            val sourceLabel = if (useLocal) "Local" else "Emisor"
             val subtitle = when (layoutResId) {
-                R.layout.widget_media_style2 -> artist.ifBlank { sourceLabel }
+                R.layout.widget_media_style2 -> artist.ifBlank { appName }
                 R.layout.widget_media_style3 -> artist
                 else -> when {
                     artist.isNotBlank() && appName.isNotBlank() -> "$artist • $appName"
                     artist.isNotBlank() -> artist
                     appName.isNotBlank() -> appName
-                    else -> sourceLabel
+                    else -> ""
                 }
             }
 
@@ -458,7 +500,7 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             }
             if (layoutResId == R.layout.widget_media_style3) {
                 try { views.setTextViewText(R.id.widget_time_current, formatMs(positionMs)) } catch (_: Exception) {}
-                try { views.setTextViewText(R.id.widget_time_app, appName.ifBlank { sourceLabel }) } catch (_: Exception) {}
+                try { views.setTextViewText(R.id.widget_time_app, appName) } catch (_: Exception) {}
                 try { views.setTextViewText(R.id.widget_time_total, formatMs(durationMs)) } catch (_: Exception) {}
             }
 
@@ -466,10 +508,17 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             val artBase64 = obj.optString("artBase64", "").trim()
             val storedArtKey = try { prefsMedia.getString(KEY_ART_KEY, null) } catch (_: Exception) { null }
             val storedArtBase64 = try { prefsMedia.getString(KEY_ART_BASE64, null) } catch (_: Exception) { null }
+            val storedArtPkg = try { prefsMedia.getString(KEY_ART_PKG, null) } catch (_: Exception) { null }
+            val storedArtUpdatedAtMs = try { prefsMedia.getLong(KEY_ART_UPDATED_AT_MS, 0L) } catch (_: Exception) { 0L }
 
             val effectiveArtBase64 = when {
                 artBase64.isNotBlank() -> artBase64
                 storedArtKey != null && storedArtKey == artKey && !storedArtBase64.isNullOrBlank() -> storedArtBase64
+                !storedArtBase64.isNullOrBlank() &&
+                    !storedArtPkg.isNullOrBlank() &&
+                    storedArtPkg == packageName &&
+                    storedArtUpdatedAtMs > 0L &&
+                    now - storedArtUpdatedAtMs <= 5 * 60_000L -> storedArtBase64
                 else -> ""
             }
 
@@ -478,6 +527,8 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
                     prefsMedia.edit()
                         .putString(KEY_ART_KEY, artKey)
                         .putString(KEY_ART_BASE64, artBase64)
+                        .putString(KEY_ART_PKG, packageName)
+                        .putLong(KEY_ART_UPDATED_AT_MS, now)
                         .apply()
                 } catch (_: Exception) {
                 }
@@ -492,7 +543,95 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
                 applyNoPlaybackBackground(views, layoutResId)
             }
 
+            if (layoutResId == R.layout.widget_media_style2) {
+                applyDefaultAppIcon(context, views, grayscaleIfMissing = true)
+            }
             return views
+        }
+
+        private fun hasSelectedPlaybackFresh(context: Context): Boolean {
+            val now = System.currentTimeMillis()
+            val flutterPrefs = context.getSharedPreferences(PREFS_FLUTTER_SHARED, Context.MODE_PRIVATE)
+            val prioritizeLocal = readFlutterBool(flutterPrefs, KEY_FLUTTER_PRIORITIZE_LOCAL_MEDIA, false)
+
+            val remotePrefs = context.getSharedPreferences(PREFS_MEDIA_CACHE, Context.MODE_PRIVATE)
+            val remoteJson = remotePrefs.getString(KEY_MEDIA_JSON, null)
+            val remoteUpdatedAtMs = remotePrefs.getLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
+            val remoteFresh = !remoteJson.isNullOrBlank() && remoteUpdatedAtMs > 0L && now - remoteUpdatedAtMs <= 15_000L
+
+            val localPrefs = context.getSharedPreferences(PREFS_LOCAL_MEDIA_CACHE, Context.MODE_PRIVATE)
+            val localJson = localPrefs.getString(KEY_MEDIA_JSON, null)
+            val localUpdatedAtMs = localPrefs.getLong(KEY_MEDIA_UPDATED_AT_MS, 0L)
+            val localFresh = !localJson.isNullOrBlank() && localUpdatedAtMs > 0L && now - localUpdatedAtMs <= 15_000L
+
+            val useLocal = if (prioritizeLocal) localFresh || !remoteFresh else !remoteFresh && localFresh
+            val json = if (useLocal) localJson else remoteJson
+            val updatedAtMs = if (useLocal) localUpdatedAtMs else remoteUpdatedAtMs
+            if (json.isNullOrBlank()) return false
+            if (updatedAtMs <= 0L || now - updatedAtMs > 15_000L) return false
+            val obj = try { JSONObject(json) } catch (_: Exception) { null } ?: return false
+            val title = obj.optString("title", "").trim()
+            val pkg = obj.optString("packageName", "").trim()
+            return title.isNotBlank() && pkg.isNotBlank()
+        }
+
+        private fun applyDefaultAppIcon(context: Context, views: RemoteViews, grayscaleIfMissing: Boolean) {
+            val prefs = context.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
+            val defaultPkg = try { prefs.getString(KEY_FLUTTER_MEDIA_DEFAULT_APP_PACKAGE, null)?.trim().orEmpty() } catch (_: Exception) { "" }
+            val widget2OverrideB64 = try { prefs.getString(KEY_FLUTTER_MEDIA_DEFAULT_APP_WIDGET2_ICON_BASE64, null)?.trim().orEmpty() } catch (_: Exception) { "" }
+            val appIconB64 = try { prefs.getString(KEY_FLUTTER_MEDIA_DEFAULT_APP_ICON_BASE64, null)?.trim().orEmpty() } catch (_: Exception) { "" }
+            val usingOverride = widget2OverrideB64.isNotBlank()
+            val iconB64 = if (usingOverride) widget2OverrideB64 else appIconB64
+            val installedFlag = try { prefs.getBoolean(KEY_FLUTTER_MEDIA_DEFAULT_APP_INSTALLED, true) } catch (_: Exception) { true }
+            val installedPkg = try { prefs.getString(KEY_FLUTTER_MEDIA_DEFAULT_APP_INSTALLED_PKG, null)?.trim().orEmpty() } catch (_: Exception) { "" }
+            val grayscale = !usingOverride && grayscaleIfMissing && !installedFlag && installedPkg.isNotBlank() && installedPkg == defaultPkg
+            println("$WIDGET_LOG_PREFIX default_app_icon pkg='${defaultPkg.take(120)}' usingOverride=$usingOverride overrideLen=${widget2OverrideB64.length} iconLen=${iconB64.length} grayscale=$grayscale installedFlag=$installedFlag installedPkg='${installedPkg.take(80)}'")
+
+            if (defaultPkg.isBlank()) {
+                try { views.setImageViewResource(R.id.widget_default_app, android.R.drawable.ic_media_play) } catch (_: Exception) {}
+                try { views.setInt(R.id.widget_default_app, "setColorFilter", Color.WHITE) } catch (_: Exception) {}
+                return
+            }
+
+            if (iconB64.isBlank()) {
+                println("$WIDGET_LOG_PREFIX default_app_icon missing icon base64, using fallback play icon")
+                try { views.setImageViewResource(R.id.widget_default_app, android.R.drawable.ic_media_play) } catch (_: Exception) {}
+                try { views.setInt(R.id.widget_default_app, "setColorFilter", Color.WHITE) } catch (_: Exception) {}
+                return
+            }
+
+            val bmp = decodeArtBitmap(iconB64, 128) ?: run {
+                println("$WIDGET_LOG_PREFIX default_app_icon decodeArtBitmap FAILED iconLen=${iconB64.length}")
+                try { views.setImageViewResource(R.id.widget_default_app, android.R.drawable.ic_media_play) } catch (_: Exception) {}
+                try { views.setInt(R.id.widget_default_app, "setColorFilter", Color.WHITE) } catch (_: Exception) {}
+                return
+            }
+            val finalBmp = if (grayscale) toGrayscale(bmp) ?: bmp else bmp
+            try {
+                views.setImageViewBitmap(R.id.widget_default_app, finalBmp)
+                println("$WIDGET_LOG_PREFIX default_app_icon setImageViewBitmap OK w=${finalBmp.width} h=${finalBmp.height}")
+            } catch (t: Throwable) {
+                println("$WIDGET_LOG_PREFIX default_app_icon setImageViewBitmap FAILED t=${t::class.java.simpleName} msg=${t.message}")
+            }
+            try { views.setInt(R.id.widget_default_app, "setColorFilter", 0) } catch (_: Exception) {}
+        }
+
+        private fun toGrayscale(src: Bitmap): Bitmap? {
+            return try {
+                val w = src.width
+                val h = src.height
+                if (w <= 0 || h <= 0) return src
+                val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(out)
+                val paint = android.graphics.Paint()
+                val matrix = android.graphics.ColorMatrix()
+                matrix.setSaturation(0f)
+                paint.colorFilter = android.graphics.ColorMatrixColorFilter(matrix)
+                canvas.drawBitmap(src, 0f, 0f, paint)
+                out
+            } catch (_: Exception) {
+                null
+            }
         }
 
         private fun applyMedia(
@@ -558,10 +697,27 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
         }
 
         private fun sendLaunchDefaultMediaApp(context: Context) {
+            sendLaunchDefaultMediaApp(context, forcePlay = false, pauseOthers = false)
+        }
+
+        private fun sendLaunchDefaultMediaApp(context: Context, forcePlay: Boolean, pauseOthers: Boolean) {
             try {
+                val prefs = try {
+                    context.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
+                } catch (_: Exception) {
+                    null
+                }
+                val selectedPkg = try {
+                    prefs?.getString(KEY_FLUTTER_MEDIA_DEFAULT_APP_PACKAGE, null)?.trim().orEmpty()
+                } catch (_: Exception) {
+                    ""
+                }
+                println("$WIDGET_LOG_PREFIX sendLaunchDefaultMediaApp forcePlay=$forcePlay pauseOthers=$pauseOthers pkg='${selectedPkg.take(120)}'")
                 val payload = org.json.JSONObject()
                 payload.put("type", "launch_default_media_app")
-                payload.put("packageName", "")
+                payload.put("packageName", selectedPkg)
+                payload.put("forcePlay", forcePlay)
+                payload.put("pauseOthers", pauseOthers)
                 payload.put("time", System.currentTimeMillis())
 
                 val i = Intent(context, BtClassicServerService::class.java)
@@ -659,6 +815,76 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
                 "$hours:$mm:$ss"
             } else {
                 "$minutes:$ss"
+            }
+        }
+
+        private fun refreshLocalMediaCache(context: Context) {
+            try {
+                val msm = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager ?: return
+                val component = ComponentName(context, NotificationListener::class.java)
+                val controllers = try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList<android.media.session.MediaController>() }
+                val controller = run {
+                    if (controllers.isEmpty()) null else {
+                        val playing = controllers.firstOrNull { c ->
+                            val st = c.playbackState?.state ?: android.media.session.PlaybackState.STATE_NONE
+                            st == android.media.session.PlaybackState.STATE_PLAYING || st == android.media.session.PlaybackState.STATE_BUFFERING
+                        }
+                        if (playing != null) playing else {
+                            controllers.firstOrNull { c ->
+                                val st = c.playbackState?.state ?: android.media.session.PlaybackState.STATE_NONE
+                                st == android.media.session.PlaybackState.STATE_PAUSED
+                            } ?: controllers.first()
+                        }
+                    }
+                } ?: return
+                val state = controller.playbackState
+                val metadata = controller.metadata
+                val playbackState = state?.state ?: android.media.session.PlaybackState.STATE_NONE
+                val isPlaying = playbackState == android.media.session.PlaybackState.STATE_PLAYING ||
+                        playbackState == android.media.session.PlaybackState.STATE_BUFFERING
+                val actions = state?.actions ?: 0L
+                val canPlayPause = (actions and android.media.session.PlaybackState.ACTION_PLAY) != 0L ||
+                        (actions and android.media.session.PlaybackState.ACTION_PAUSE) != 0L ||
+                        (actions and android.media.session.PlaybackState.ACTION_PLAY_PAUSE) != 0L
+                val canSkipNext = (actions and android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
+                val canSkipPrev = (actions and android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
+                val canSeek = (actions and android.media.session.PlaybackState.ACTION_SEEK_TO) != 0L
+                val title = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
+                    ?: metadata?.getString(android.media.MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+                val artist = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST)
+                    ?: metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+                val album = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM)
+                val durationMs = metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+                val positionMs = state?.position ?: 0L
+                val packageName = controller.packageName ?: ""
+                if (packageName.isBlank() || title.isNullOrBlank()) return
+                val appName = try {
+                    val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
+                    context.packageManager.getApplicationLabel(appInfo).toString()
+                } catch (_: Exception) {
+                    packageName
+                }
+                val obj = JSONObject()
+                obj.put("type", "media_state")
+                obj.put("time", System.currentTimeMillis())
+                obj.put("packageName", packageName)
+                obj.put("appName", appName)
+                obj.put("title", title)
+                obj.put("artist", artist ?: "")
+                obj.put("album", album ?: "")
+                obj.put("durationMs", durationMs)
+                obj.put("positionMs", positionMs)
+                obj.put("isPlaying", isPlaying)
+                obj.put("canPlayPause", canPlayPause)
+                obj.put("canSkipNext", canSkipNext)
+                obj.put("canSkipPrev", canSkipPrev)
+                obj.put("canSeek", canSeek)
+                val prefs = context.getSharedPreferences(PREFS_LOCAL_MEDIA_CACHE, Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putString(KEY_MEDIA_JSON, obj.toString())
+                    .putLong(KEY_MEDIA_UPDATED_AT_MS, System.currentTimeMillis())
+                    .apply()
+            } catch (_: Exception) {
             }
         }
     }

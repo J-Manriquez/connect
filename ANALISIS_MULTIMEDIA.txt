@@ -1,0 +1,444 @@
+ANÁLISIS DE LA FUNCIONALIDAD MULTIMEDIA (Bluetooth + Nativo + Flutter)
+Proyecto: Connect
+Fecha: 2026-03-11
+
+=====================================================================
+1) Qué se entiende por “multimedia” en esta app
+=====================================================================
+En este proyecto “multimedia” no significa “streaming” de audio/video entre dispositivos, sino:
+- Observación del estado de reproducción (metadata + posición + play/pause + carátula) vía MediaSession.
+- Control remoto (play/pause/next/prev/seek) y control de volumen.
+- Integración con:
+  - Bluetooth clásico (RFCOMM/SPP) para intercambio de mensajes JSON entre emisor y receptor.
+  - Widgets nativos (Home Screen Widget) y overlay nativo (Bola flotante) como interfaz de control rápida.
+  - Flutter como UI de configuración (preferencias y app multimedia por defecto) y persistencia (Hive/Firebase).
+
+=====================================================================
+2) Componentes principales y responsabilidades
+=====================================================================
+
+2.1 Android nativo - EMISOR (dispositivo que “tiene” la reproducción a controlar)
+Archivos clave:
+- android/app/src/main/kotlin/com/example/connect/NotificationListener.kt
+  - Monitoriza sesiones multimedia con MediaSessionManager:
+    - startMediaMonitoring() registra OnActiveSessionsChangedListener y un callback del MediaController.
+    - sendMediaState(force) construye el payload "media_state" (título, artista, duración, posición, isPlaying, etc.)
+  - Mantiene un cache LOCAL del estado multimedia del propio dispositivo:
+    - SharedPreferences: "local_media_cache_v1"
+    - Claves: "media_json" y "updatedAtMs"
+  - Intenta conectar el BtClassicClient usando las preferencias Flutter:
+    - "flutter.ble_enabled"
+    - "flutter.ble_peer_address"
+  - Envía el "media_state" por Bluetooth (BtClassicClient.send) cuando hay MAC configurada.
+
+- android/app/src/main/kotlin/com/example/connect/BtClassicClient.kt
+  - Cliente Bluetooth clásico (RFCOMM/SPP) con reconexión:
+    - Envía frames: [Int longitud] + [bytes UTF-8 JSON]
+    - Lee frames y procesa mensajes entrantes del receptor.
+  - Ejecuta comandos multimedia recibidos:
+    - "media_command" => usa MediaSession transportControls y fallback a media keys (especialmente para YouTube).
+    - "volume_command" / "volume_request".
+    - "launch_default_media_app" => abre la app predeterminada (o crea notificación de “abrir app” si no puede).
+
+2.2 Android nativo - RECEPTOR (dispositivo que muestra UI rápida y/o controla remoto)
+Archivos clave:
+- android/app/src/main/kotlin/com/example/connect/BtClassicServerService.kt
+  - Servicio en primer plano que mantiene el servidor RFCOMM/SPP.
+  - Recibe mensajes JSON del emisor:
+    - "media_state": valida, cachea y actualiza widgets.
+    - "volume_state": cachea y actualiza widgets.
+  - Envía mensajes JSON hacia los peers conectados (emisor) cuando UI nativa lo solicita.
+  - Implementa la “doble funcionalidad” (control local vs control al emisor):
+    - shouldUseLocalMedia(nowMs) decide si aplicar comandos localmente.
+    - tryHandleOutgoingLocalCommand(json) intercepta:
+      - "media_command"
+      - "volume_command"
+    - performLocalMediaCommand/performLocalVolumeCommand ejecutan el comando sobre el propio receptor.
+
+- android/app/src/main/kotlin/com/example/connect/MediaWidgetProvider.kt
+  - Widget de pantalla de inicio (5 estilos: MediaWidgetProvider + Style2..Style5).
+  - Muestra el estado “seleccionado” (local o emisor) según frescura y preferencia.
+  - Acciones del widget:
+    - Toggle / Next / Prev => envía "media_command".
+    - Panel de volumen => envía "volume_command" y "volume_request".
+    - Root en “sin reproducción” => envía "launch_default_media_app".
+
+- android/app/src/main/kotlin/com/example/connect/FloatingBallService.kt
+  - Servicio overlay nativo (“Bola flotante”).
+  - Incluye UI de controles multimedia (pantalla completa y modo compacto):
+    - Lectura de estado: obtiene estado multimedia (local/emisor) con la misma regla que el widget (freshness + preferencia).
+    - Estructura de la sección multimedia:
+      - Contenedor raíz del overlay con vista principal de la sección.
+      - Capas: fondo con carátula/imagen, máscara oscura (scrim) y contenido (título, artista, progreso, controles).
+      - Panel de volumen opcional con slider y botones +/- cuando el estado de volumen está disponible.
+    - Imagen de fondo:
+      - Usa artBase64/artMime del media_state si existe; fallback a gradiente de colores del tema.
+      - Aplica desenfoque ligero y una superposición semitransparente para mantener legibilidad del texto.
+    - Apertura y cierre:
+      - Apertura: al tocar la bola flotante o gesto de arrastre hacia arriba; animación de escala/alpha y bloqueo táctil del fondo.
+      - Cierre: botón dedicado, tap fuera del contenido, o gesto de arrastre hacia abajo; libera recursos y oculta overlay.
+    - Estilos:
+      - Variantes “compacta” (sobre la propia bola) y “expandida” (pantalla completa).
+      - Tipografía y espaciados adaptados al tamaño; botones con ripple y colores según tema.
+    - Gestos laterales desde el texto:
+      - Swipe izquierda sobre el bloque de texto/título: envía "launch_default_media_app" con forcePlay=true y pauseOthers=true.
+      - Swipe derecha: alterna la fuente seleccionada (local/remoto) o muestra acciones contextuales según configuración de la bola.
+    - Controles y comandos:
+      - Botones play/pause/toggle, next/previous y seekTo mediante barra de progreso arrastrable.
+      - Envía "media_command" y "volume_command" al BtClassicServerService; éste decide ejecutar localmente o reenviar al emisor.
+      - Puede solicitar snapshot con "media_command":"request_state" cuando falta carátula o metadata fresca.
+    - Selección de fuente:
+      - Aplica shouldUseLocalMediaForControls() para decidir entre local/remoto y lo refleja en la UI con una insignia.
+    - Estado vacío:
+      - Muestra “Sin reproducción” y sugerencia para abrir la app predeterminada; tap en el fondo puede disparar el launch.
+    - Persistencia ligera:
+      - Recuerda último modo (compacto/expandido) y restituye al recrear el overlay; maneja cambios de orientación.
+
+2.3 Flutter (Dart) - Configuración y persistencia
+Archivos clave:
+- lib/screens/emisor/media_reproduction_screen.dart
+  - Pantalla “Reproducción multimedia”.
+  - Permite:
+    - Seleccionar la app multimedia por defecto (packageName).
+    - Activar “Priorizar multimedia local” (preferencia clave para la doble funcionalidad).
+  - Persistencia de la app por defecto (cuando useLinkedDevice == false):
+    - SharedPreferences (Flutter) key: "media_default_app_package"
+      - En Android nativo se lee como: "flutter.media_default_app_package"
+    - Hive (BtHiveStorageService): box "bt_media_prefs_v1" key "default_app".
+    - Firestore (por deviceId): campo "media_default_app_package".
+  - Cuando useLinkedDevice == true (desde receptor_settings):
+    - Lee el deviceId vinculado (linked device) y opera principalmente contra Firestore,
+      permitiendo configurar la app por defecto del emisor desde el receptor.
+
+- lib/services/preferences_service.dart
+  - Preferencias relevantes para multimedia:
+    - KEY_PRIORITIZE_LOCAL_MEDIA = "prioritize_local_media"
+      - En Android se lee como "flutter.prioritize_local_media".
+
+- lib/services/ble_service.dart
+  - API Flutter->Android (MethodChannel "com.example.connect/ble") que, además de conexión Bluetooth, expone:
+    - getLastBtMediaState() => lee "bt_media_cache_v1" desde Android.
+    - getLastLocalMediaState() => lee "local_media_cache_v1" desde Android.
+    - updateWidget() => fuerza update de los widgets nativos.
+
+- lib/services/floating_ball_service.dart
+  - API Flutter->Android (MethodChannel "com.example.connect/floating_ball"):
+    - enable/disable/updateConfig.
+  - Persistencia de configuración de la bola (incluye parámetros de UI de multimedia del overlay).
+
+=====================================================================
+3) Conexión Bluetooth y transporte de mensajes
+=====================================================================
+
+IMPORTANTE: aunque en Dart se llama “BleService”, el flujo principal de multimedia/control remoto funciona hoy con:
+- Bluetooth clásico (RFCOMM/SPP), no BLE.
+
+Transporte:
+- BtClassicClient.kt (emisor) envía frames: Int length + bytes JSON UTF-8.
+- BtClassicServerService.kt (receptor) recibe frames, parsea JSON y actúa.
+- Límite de tamaño (aprox): se valida len <= 256KB (protección ante payloads enormes).
+
+=====================================================================
+4) Protocolo de mensajes (JSON) para multimedia
+=====================================================================
+
+4.1 Estado multimedia: "media_state" (EMISOR -> RECEPTOR)
+Origen:
+- NotificationListener.sendMediaState()
+Campos observados:
+- type = "media_state"
+- time (ms)
+- packageName, appName
+- title, artist, album
+- durationMs, positionMs
+- isPlaying
+- canPlayPause, canSkipNext, canSkipPrev, canSeek
+- artMime (p.ej. "image/jpeg") y artBase64 (opcional)
+- volumeLevel, volumeMax, volumePct (opcionales)
+Destino:
+- BtClassicServerService.handleIncomingPayload():
+  - Valida mínimos: title, packageName, positionMs>=0, durationMs>=0.
+  - Cachea en "bt_media_cache_v1" (media_json, updatedAtMs).
+  - Actualiza widgets (todas las variantes).
+
+4.2 Estado volumen: "volume_state" (EMISOR -> RECEPTOR)
+Origen:
+- BtClassicClient.sendVolumeState() (responde a "volume_request" o tras "volume_command").
+Campos:
+- type = "volume_state"
+- time, level, max, pct
+Destino:
+- BtClassicServerService.handleIncomingPayload():
+  - Cachea en "bt_volume_cache_v1".
+  - Actualiza widgets.
+
+4.3 Comandos multimedia: "media_command" (RECEPTOR -> EMISOR, salvo override local)
+Origen:
+- Widget (MediaWidgetProvider) o Bola flotante (FloatingBallService) en el receptor.
+Campos:
+- type = "media_command"
+- command: "play" | "pause" | "toggle" | "next" | "previous" | "seekTo" | "request_state"
+- positionMs (solo para seekTo)
+Destino:
+- BtClassicServerService:
+  - Si shouldUseLocalMedia(nowMs) == true: ejecuta el comando localmente y NO lo envía al emisor.
+  - Si no: lo reenvía al emisor (BtClassicClient lo ejecuta).
+- BtClassicClient.handleMediaCommand():
+  - Usa MediaSession transportControls.
+  - Fallback con AudioManager.dispatchMediaKeyEvent para YouTube si faltan actions.
+  - Envía snapshot de estado tras aplicar (sendMediaStateSnapshot).
+
+4.4 Comandos de volumen: "volume_command" y "volume_request" (RECEPTOR -> EMISOR, salvo override local)
+Origen:
+- Widget o Bola flotante.
+Destino:
+- BtClassicServerService:
+  - Puede ejecutar localmente si se eligió “local”.
+  - O reenviar al emisor.
+- BtClassicClient:
+  - Ajusta volumen STREAM_MUSIC.
+  - Responde con "volume_state".
+
+4.5 Apertura de app multimedia: "launch_default_media_app" (RECEPTOR -> EMISOR)
+Origen:
+- Widget (estilo 2):
+  - Tap en el botón "default_app" (R.id.widget_default_app) => ACTION_LAUNCH_DEFAULT_MEDIA_APP_PLAY.
+- Bola flotante (sección multimedia):
+  - Swipe izquierda sobre el texto/título de la reproducción => envía launch_default_media_app con forcePlay=true y pauseOthers=true.
+- Pantalla Flutter del receptor (conexión):
+  - Botón "Abrir y reproducir en app predeterminada" => envía launch_default_media_app con forcePlay=true y pauseOthers=true.
+Campos:
+- type = "launch_default_media_app"
+- packageName (opcional; si viene vacío el emisor resuelve desde preferencias)
+- forcePlay (bool): si true, tras abrir intenta iniciar reproducción (media key PLAY + fallback por sesión)
+- pauseOthers (bool): si true, intenta pausar la reproducción actual antes de abrir
+Destino:
+- BtClassicServerService (receptor):
+  - Antes de reenviar el launch:
+    - Intenta pausar localmente (performLocalMediaCommand("pause")).
+    - Envía a los peers un "media_command":"pause" (remote pause best-effort).
+  - Luego reenvía el payload launch_default_media_app al emisor.
+- BtClassicClient.handleLaunchDefaultMediaApp():
+  - Si el payload trae packageName lo usa; si viene vacío, lee "flutter.media_default_app_package".
+  - Si pauseOthers=true:
+    - Intenta pausar el controller activo (MediaSession transportControls.pause) y hace fallback con media key PAUSE.
+  - Intenta abrir la app (getLaunchIntentForPackage).
+  - Si falla, muestra notificación que al tocarla abre MainActivity con acción "MEDIA_LAUNCH_ACTION" y packageName.
+  - Si forcePlay=true:
+    - Tras el launch intenta iniciar reproducción (media key PLAY + intentos sobre sesiones) y envía snapshot (media_state/volume_state).
+- MainActivity.handleMediaLaunchIntent() ejecuta el launch final.
+
+=====================================================================
+5) Selección de “app multimedia predeterminada” en el emisor
+=====================================================================
+
+5.1 Dónde se configura
+- Flutter (emisor):
+  - Pantalla: lib/screens/emisor/media_reproduction_screen.dart
+  - El usuario elige una app (packageName) de la lista de apps sincronizadas.
+
+- Flutter (receptor):
+  - Pantalla: lib/screens/receptor/receptor_settings_screen.dart abre MediaReproductionScreen(useLinkedDevice:true)
+  - Permite configurar la preferencia del emisor vía Firestore, usando el deviceId vinculado.
+
+5.2 Dónde se guarda
+- Local (Flutter -> Android):
+  - SharedPreferences: "media_default_app_package"
+  - En Android nativo, al leerlo se usa el namespace: "flutter.media_default_app_package".
+  - SharedPreferences: "media_default_app_icon_base64" (cache del icono de la app seleccionada para mostrarlo en Widget 2).
+  - SharedPreferences: "media_default_app_widget2_icon_base64" (override opcional del icono del botón "abrir predeterminada" en Widget 2).
+
+- Hive (Flutter):
+  - BtHiveStorageService.setDefaultMediaAppPackage() guarda en:
+    - Box: "bt_media_prefs_v1"
+    - key: "default_app" => { packageName, updatedAtMs }
+
+- Firestore:
+  - Document: dispositivos/{deviceId}
+  - Campo: "media_default_app_package"
+
+5.3 Cómo se utiliza en ejecución
+- Cuando el receptor pide "launch_default_media_app":
+  - El emisor abre esa app para facilitar iniciar reproducción y luego poder controlarla.
+
+=====================================================================
+6) Doble funcionalidad: controlar “local” o “emisor” con el mismo widget/overlay
+=====================================================================
+
+Objetivo:
+- Los mismos controles del receptor (widget/bola) pueden actuar sobre:
+  A) La reproducción del emisor (control remoto), o
+  B) La reproducción local del receptor (control local),
+dependiendo del contexto.
+
+6.1 Caches de estado multimedia
+- Estado remoto (emisor visto por receptor):
+  - SharedPreferences receptor: "bt_media_cache_v1"
+  - Claves: media_json, updatedAtMs
+
+- Estado local (receptor):
+  - SharedPreferences: "local_media_cache_v1"
+  - Claves: media_json, updatedAtMs
+  - Se alimenta desde NotificationListener.kt (monitor de MediaSession) del propio dispositivo.
+
+Ventana de frescura:
+- 15 segundos (now - updatedAtMs <= 15000)
+
+6.2 Preferencia que decide el comportamiento
+- "prioritize_local_media" (Flutter) => "flutter.prioritize_local_media" en Android.
+Se configura desde:
+- lib/screens/emisor/media_reproduction_screen.dart (Checkbox “Priorizar multimedia local”)
+
+6.3 Regla de decisión (simplificada)
+Se calcula:
+- remoteFresh = connectedPeers > 0 && bt_media_cache_v1 fresh
+- localFresh = local_media_cache_v1 fresh
+
+Si prioritizeLocal == true:
+- usar local si localFresh OR no remoteFresh
+Si prioritizeLocal == false:
+- usar local solo si NO remoteFresh AND localFresh
+
+Esta regla aparece repetida (y consistente) en:
+- MediaWidgetProvider.buildRemoteViews()
+- FloatingBallService.readSelectedMediaFreshOrNull()/shouldUseLocalMediaForControls()
+- BtClassicServerService.shouldUseLocalMedia()
+
+6.4 Dónde se aplica la dualidad
+- Visualización:
+  - Widget y Bola flotante muestran el estado “seleccionado” (local o emisor) según la regla.
+- Controles:
+  - Widget/Bola siempre envían comandos al BtClassicServerService (receptor).
+  - BtClassicServerService puede:
+    - Ejecutarlos localmente (si decide local), o
+    - Reenviarlos al emisor por el socket conectado.
+
+Resultado:
+- El usuario no cambia de UI: la misma interfaz controla automáticamente el “target” correcto.
+
+=====================================================================
+7) Puente Nativo <-> Flutter (en multimedia)
+=====================================================================
+
+7.1 MethodChannel Flutter -> Android (canal BLE “misnomer”)
+Canal:
+- "com.example.connect/ble"
+Implementación Android:
+- MainActivity.kt
+Usos multimedia:
+- getLastBtMediaState / getLastLocalMediaState (para leer caches desde Flutter si se quisiera UI Flutter).
+- updateWidget (forzar refresh del widget desde Flutter).
+
+7.2 MethodChannel Flutter -> Android (bola flotante)
+Canal:
+- "com.example.connect/floating_ball"
+Implementación:
+- MainActivity.kt + FloatingBallService.kt
+Uso:
+- enable/disable/updateConfig, y la bola usa SharedPreferences con prefijos flutter.* para leer configuración.
+
+7.3 Bridge Android -> Flutter (persistencia en Hive, sin depender del UI)
+Canal:
+- "com.example.connect/bt_hive_bridge"
+Patrón:
+- BtClassicServerService crea un FlutterEngine en segundo plano y ejecuta el entrypoint Dart:
+  - lib/main.dart => btHiveMain()
+Luego invoca métodos hacia Dart:
+- onBtMediaState(payload)
+- onBtVolumeState(payload)
+
+En Dart, btHiveMain():
+- recibe esos mensajes y los guarda en Hive:
+  - BtHiveStorageService.setBtMediaState()
+  - BtHiveStorageService.setBtVolumeState()
+
+Nota:
+- Actualmente Flutter UI no muestra un “reproductor” propio; el puente se usa para persistencia y trazabilidad.
+
+=====================================================================
+8) Widgets (Android) y su rol en multimedia
+=====================================================================
+
+Widgets nativos disponibles:
+- MediaWidgetProvider (layout: widget_media.xml)
+- MediaWidgetProviderStyle2 (widget_media_style2.xml)
+- MediaWidgetProviderStyle3 (widget_media_style3.xml)
+- MediaWidgetProviderStyle4 (widget_media_style4.xml)
+- MediaWidgetProviderStyle5 (widget_media_style5.xml)
+Código:
+- android/app/src/main/kotlin/com/example/connect/MediaWidgetProvider.kt
+
+Comportamiento general:
+- Si no hay estado fresco:
+  - Muestra “Sin reproducción”.
+  - El root al tocarlo manda "launch_default_media_app".
+- Si hay estado:
+  - Muestra título/subtítulo, progreso y play/pause.
+  - Botones mandan "media_command".
+  - Panel de volumen manda "volume_command" y actualiza según:
+    - volumen remoto (bt_volume_cache_v1) o
+    - volumen local (AudioManager) si se eligió local.
+
+=====================================================================
+9) Pantallas Flutter relacionadas con multimedia
+=====================================================================
+
+- Reproducción multimedia:
+  - lib/screens/emisor/media_reproduction_screen.dart
+  - Se usa en emisor (ruta '/media_reproduction') y en receptor (useLinkedDevice:true).
+
+- Configuración bola flotante:
+  - lib/screens/emisor/floating_ball_settings_screen.dart
+  - Ajusta qué apps aparecen y propiedades del overlay; la bola incluye controles multimedia en nativo.
+
+- Conexión Bluetooth (receptor):
+  - lib/screens/receptor/receptor_ble_signal_screen.dart
+  - No es “multimedia UI”, pero es la pieza operativa para iniciar BtClassicServerService.
+
+=====================================================================
+10) Dependencias y permisos relevantes (multimedia)
+=====================================================================
+- Acceso a notificaciones / NotificationListener:
+  - Requerido para poder llamar MediaSessionManager.getActiveSessions(component).
+  - Impacta tanto al emisor (para monitorizar) como al receptor (si se quiere control local real).
+
+- Bluetooth:
+  - Permisos runtime en MainActivity.requestBlePermissions (realmente BT clásico/BLE según versión).
+
+- Foreground services:
+  - BtClassicServerService y FloatingBallService trabajan como servicios que deben sobrevivir en background.
+
+- Overlay:
+  - FloatingBallService requiere permiso de “draw over other apps”.
+
+=====================================================================
+11) Archivos clave (lista rápida)
+=====================================================================
+Flutter:
+- lib/screens/emisor/media_reproduction_screen.dart
+- lib/services/preferences_service.dart
+- lib/services/ble_service.dart
+- lib/services/floating_ball_service.dart
+- lib/main.dart (btHiveMain)
+
+Android:
+- android/app/src/main/kotlin/com/example/connect/NotificationListener.kt
+- android/app/src/main/kotlin/com/example/connect/BtClassicClient.kt
+- android/app/src/main/kotlin/com/example/connect/BtClassicServerService.kt
+- android/app/src/main/kotlin/com/example/connect/MediaWidgetProvider.kt
+- android/app/src/main/kotlin/com/example/connect/FloatingBallService.kt
+- android/app/src/main/kotlin/com/example/connect/MainActivity.kt
+
+=====================================================================
+12) Conclusión (modelo mental)
+=====================================================================
+Piensa la funcionalidad como un bus de “estado + comandos”:
+- El EMISOR publica estado multimedia ("media_state") desde MediaSession.
+- El RECEPTOR muestra ese estado en:
+  - Widget nativo, y
+  - Bola flotante nativa,
+y genera comandos ("media_command"/"volume_command").
+- La doble funcionalidad permite que esos comandos apunten automáticamente a:
+  - el emisor (remoto) o
+  - el propio receptor (local),
+según frescura y la preferencia “Priorizar multimedia local”.

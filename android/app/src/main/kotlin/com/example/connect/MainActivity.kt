@@ -877,6 +877,14 @@ class MainActivity: FlutterActivity() {
         }
         bleChannel.setMethodCallHandler { call, result ->
             when (call.method) {
+                "refreshLocalMediaState" -> {
+                    try {
+                        val ok = tryRefreshLocalMediaState()
+                        result.success(ok)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
                 "requestBlePermissions" -> {
                     try {
                         val adapter = (getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager).adapter
@@ -1216,6 +1224,89 @@ class MainActivity: FlutterActivity() {
         
         // Verificar si se debe navegar a una pantalla específica
         handleNavigationIntent(intent)
+    }
+
+    private fun tryRefreshLocalMediaState(): Boolean {
+        return try {
+            val msm = getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager
+            if (msm == null) return false
+            val component = ComponentName(this, NotificationListener::class.java)
+            val controllers = try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList<android.media.session.MediaController>() }
+            val controller = selectBestController(controllers) ?: return false
+            val state = controller.playbackState
+            val metadata = controller.metadata
+            val playbackState = state?.state ?: android.media.session.PlaybackState.STATE_NONE
+            val isPlaying = playbackState == android.media.session.PlaybackState.STATE_PLAYING ||
+                    playbackState == android.media.session.PlaybackState.STATE_BUFFERING
+            val actions = state?.actions ?: 0L
+            val baseCanPlayPause = (actions and android.media.session.PlaybackState.ACTION_PLAY) != 0L ||
+                    (actions and android.media.session.PlaybackState.ACTION_PAUSE) != 0L ||
+                    (actions and android.media.session.PlaybackState.ACTION_PLAY_PAUSE) != 0L
+            val baseCanSkipNext = (actions and android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
+            val baseCanSkipPrev = (actions and android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
+            val canSeek = (actions and android.media.session.PlaybackState.ACTION_SEEK_TO) != 0L
+            val title = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
+                ?: metadata?.getString(android.media.MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+            val artist = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST)
+                ?: metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+            val album = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM)
+            val durationMs = metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+            val positionMs = state?.position ?: 0L
+            val packageName = controller.packageName ?: ""
+            if (packageName.isBlank() || title.isNullOrBlank()) return false
+            val appName = try {
+                val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                packageManager.getApplicationLabel(appInfo).toString()
+            } catch (_: Exception) {
+                packageName
+            }
+            val payload = org.json.JSONObject()
+            payload.put("type", "media_state")
+            payload.put("time", System.currentTimeMillis())
+            payload.put("packageName", packageName)
+            payload.put("appName", appName)
+            payload.put("title", title)
+            payload.put("artist", artist ?: "")
+            payload.put("album", album ?: "")
+            payload.put("durationMs", durationMs)
+            payload.put("positionMs", positionMs)
+            payload.put("isPlaying", isPlaying)
+            payload.put("canPlayPause", baseCanPlayPause)
+            payload.put("canSkipNext", baseCanSkipNext)
+            payload.put("canSkipPrev", baseCanSkipPrev)
+            payload.put("canSeek", canSeek)
+            val am = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+            val level = am?.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) ?: -1
+            val max = am?.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) ?: -1
+            if (level >= 0 && max > 0) {
+                val pct = ((level.toDouble() / max.toDouble()) * 100.0).toInt().coerceIn(0, 100)
+                payload.put("volumeLevel", level)
+                payload.put("volumeMax", max)
+                payload.put("volumePct", pct)
+            }
+            val prefs = applicationContext.getSharedPreferences("local_media_cache_v1", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("media_json", payload.toString())
+                .putLong("updatedAtMs", System.currentTimeMillis())
+                .apply()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun selectBestController(controllers: List<android.media.session.MediaController>): android.media.session.MediaController? {
+        if (controllers.isEmpty()) return null
+        val playing = controllers.firstOrNull { c ->
+            val state = c.playbackState?.state ?: android.media.session.PlaybackState.STATE_NONE
+            state == android.media.session.PlaybackState.STATE_PLAYING || state == android.media.session.PlaybackState.STATE_BUFFERING
+        }
+        if (playing != null) return playing
+        val paused = controllers.firstOrNull { c ->
+            val state = c.playbackState?.state ?: android.media.session.PlaybackState.STATE_NONE
+            state == android.media.session.PlaybackState.STATE_PAUSED
+        }
+        return paused ?: controllers.first()
     }
 
     private fun startBtDiscovery() {

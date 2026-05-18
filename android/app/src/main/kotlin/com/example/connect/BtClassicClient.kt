@@ -44,6 +44,7 @@ import kotlin.math.roundToInt
 object BtClassicClient {
     private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     private const val MEDIA_LAUNCH_CHANNEL_ID = "media_launch_channel"
+    private var lastMediaLaunchNotifAtMs: Long = 0L
 
     private var appContext: Context? = null
     private val ioExecutor = Executors.newSingleThreadExecutor()
@@ -204,7 +205,9 @@ object BtClassicClient {
                 "launch_default_media_app" -> {
                     val ctx = appContext ?: return
                     val pkg = obj.optString("packageName", "").trim()
-                    handleLaunchDefaultMediaApp(ctx, pkg)
+                    val forcePlay = obj.optBoolean("forcePlay", false)
+                    val pauseOthers = obj.optBoolean("pauseOthers", false)
+                    handleLaunchDefaultMediaApp(ctx, pkg, forcePlay = forcePlay, pauseOthers = pauseOthers)
                 }
                 "visualization_update" -> {
                     val deviceId = obj.optString("deviceId", "")
@@ -277,7 +280,13 @@ object BtClassicClient {
         }
     }
 
-    private fun handleLaunchDefaultMediaApp(ctx: Context, pkgFromPayload: String) {
+    private fun handleLaunchDefaultMediaApp(
+        ctx: Context,
+        pkgFromPayload: String,
+        forcePlay: Boolean,
+        pauseOthers: Boolean
+    ) {
+        println("[btclassic][client][media_launch] rx pkgFromPayload='${pkgFromPayload.take(120)}' forcePlay=$forcePlay pauseOthers=$pauseOthers")
         val pkg = if (pkgFromPayload.isNotBlank()) {
             pkgFromPayload
         } else {
@@ -288,29 +297,157 @@ object BtClassicClient {
                 ""
             }
         }
-        if (pkg.isBlank()) return
+        if (pkg.isBlank()) {
+            println("[btclassic][client][media_launch] abort pkg is blank (no selection)")
+            return
+        }
+        println("[btclassic][client][media_launch] resolved pkg='${pkg.take(160)}'")
 
         val pm = try { ctx.packageManager } catch (_: Exception) { null } ?: return
-        val appLabel = try {
-            val appInfo = pm.getApplicationInfo(pkg, 0)
-            pm.getApplicationLabel(appInfo).toString()
+        val installed = try {
+            pm.getApplicationInfo(pkg, 0)
+            true
         } catch (_: Exception) {
+            false
+        }
+        println("[btclassic][client][media_launch] installed=$installed pkg='${pkg.take(160)}'")
+        val appLabel = if (installed) {
+            try {
+                val appInfo = pm.getApplicationInfo(pkg, 0)
+                pm.getApplicationLabel(appInfo).toString()
+            } catch (_: Exception) {
+                pkg
+            }
+        } else {
             pkg
         }
 
-        val launch = try { pm.getLaunchIntentForPackage(pkg) } catch (_: Exception) { null }
-        if (launch != null) {
+        if (pauseOthers) {
+            println("[btclassic][client][media_launch] pauseOthers=true attempting pause current sessions")
             try {
-                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ctx.startActivity(launch)
-                return
+                val msm = ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+                if (msm != null) {
+                    val component = ComponentName(ctx, NotificationListener::class.java)
+                    val controllers = try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList<MediaController>() }
+                    val playing = controllers.firstOrNull { c ->
+                        val st = c.playbackState?.state ?: PlaybackState.STATE_NONE
+                        st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
+                    }
+                    try { playing?.transportControls?.pause() } catch (_: Exception) {}
+                }
             } catch (_: Exception) {
+            }
+            try { dispatchMediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PAUSE) } catch (_: Exception) {}
+        }
+
+        var launchAttempted = false
+        var launchSucceeded = false
+        if (installed) {
+            val launch = try { pm.getLaunchIntentForPackage(pkg) } catch (_: Exception) { null }
+            if (launch != null) {
+                try {
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(launch)
+                    launchAttempted = true
+                    launchSucceeded = true
+                    println("[btclassic][client][media_launch] startActivity(getLaunchIntentForPackage) OK pkg='${pkg.take(160)}'")
+                } catch (_: Exception) {
+                    launchAttempted = true
+                    println("[btclassic][client][media_launch] startActivity(getLaunchIntentForPackage) FAILED pkg='${pkg.take(160)}'")
+                }
+            }
+        }
+
+        if (installed && (!launchSucceeded || forcePlay)) {
+            try {
+                val openIntent = Intent(ctx, MainActivity::class.java).apply {
+                    action = "MEDIA_LAUNCH_ACTION"
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    putExtra("packageName", pkg)
+                }
+                val pi = PendingIntent.getActivity(
+                    ctx,
+                    pkg.hashCode(),
+                    openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
+                )
+                pi.send()
+                launchAttempted = true
+                launchSucceeded = true
+                println("[btclassic][client][media_launch] PendingIntent MEDIA_LAUNCH_ACTION sent pkg='${pkg.take(160)}'")
+            } catch (_: Exception) {
+                println("[btclassic][client][media_launch] PendingIntent MEDIA_LAUNCH_ACTION FAILED pkg='${pkg.take(160)}'")
+            }
+        }
+
+        val shouldShowLaunchNotif = (!installed) || forcePlay || (!launchSucceeded && launchAttempted)
+        if (shouldShowLaunchNotif) {
+            val now = System.currentTimeMillis()
+            if (now - lastMediaLaunchNotifAtMs > 1500L) {
+                lastMediaLaunchNotifAtMs = now
+                try {
+                    showMediaLaunchNotification(ctx, pkg, appLabel)
+                } catch (_: Exception) {
+                }
             }
         }
 
         try {
-            showMediaLaunchNotification(ctx, pkg, appLabel)
+            val status = JSONObject()
+            status.put("type", "default_media_app_status")
+            status.put("packageName", pkg)
+            status.put("installed", installed)
+            status.put("time", System.currentTimeMillis())
+            send(status.toString())
         } catch (_: Exception) {
+        }
+
+        if (forcePlay) {
+            val main = Handler(Looper.getMainLooper())
+            fun tryPlayWithSession(attempt: Int) {
+                try {
+                    val msm = ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+                    if (msm != null) {
+                        val component = ComponentName(ctx, NotificationListener::class.java)
+                        val controllers =
+                            try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList<MediaController>() }
+                        val target = controllers.firstOrNull { it.packageName == pkg }
+                        if (target != null) {
+                            val st = target.playbackState?.state ?: PlaybackState.STATE_NONE
+                            val playing = st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
+                            println("[btclassic][client][media_launch] tryPlayWithSession attempt=$attempt found controller playing=$playing pkg='${pkg.take(120)}'")
+                            if (!playing) {
+                                try { target.transportControls.play() } catch (_: Exception) {}
+                            }
+                            return
+                        }
+                        println("[btclassic][client][media_launch] tryPlayWithSession attempt=$attempt controller not found yet pkg='${pkg.take(120)}' controllers=${controllers.size}")
+                    } else {
+                        println("[btclassic][client][media_launch] tryPlayWithSession attempt=$attempt msm=null pkg='${pkg.take(120)}'")
+                    }
+                } catch (t: Throwable) {
+                    println("[btclassic][client][media_launch] tryPlayWithSession attempt=$attempt exception t=${t::class.java.simpleName} msg=${t.message}")
+                }
+                if (attempt < 6) {
+                    main.postDelayed({ tryPlayWithSession(attempt + 1) }, 250L)
+                }
+            }
+
+            main.postDelayed({
+                try {
+                    println("[btclassic][client][media_launch] forcePlay dispatchMediaKey PLAY pkg='${pkg.take(160)}'")
+                    dispatchMediaKey(ctx, KeyEvent.KEYCODE_MEDIA_PLAY)
+                } catch (_: Exception) {
+                    println("[btclassic][client][media_launch] forcePlay dispatchMediaKey PLAY FAILED pkg='${pkg.take(160)}'")
+                }
+            }, 650L)
+            main.postDelayed({
+                tryPlayWithSession(0)
+            }, 800L)
+            main.postDelayed({
+                try { sendMediaStateSnapshot(ctx) } catch (_: Exception) {}
+                try { sendVolumeState(ctx) } catch (_: Exception) {}
+            }, 1100L)
         }
     }
 
@@ -392,22 +529,26 @@ object BtClassicClient {
                     }
 
                     val shouldFallbackToMediaKey = when (command) {
-                        "play" -> controller == null || (isYouTube &&
-                                (actions and PlaybackState.ACTION_PLAY) == 0L &&
-                                (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L)
-                        "pause" -> controller == null || (isYouTube &&
-                                (actions and PlaybackState.ACTION_PAUSE) == 0L &&
-                                (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L)
-                        "toggle" -> controller == null || (isYouTube && (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L)
-                        "next" -> controller == null || (isYouTube && (actions and PlaybackState.ACTION_SKIP_TO_NEXT) == 0L)
-                        "previous" -> controller == null || (isYouTube && (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) == 0L)
+                        "play" -> controller == null ||
+                                ((actions and PlaybackState.ACTION_PLAY) == 0L &&
+                                        (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L)
+                        "pause" -> controller == null ||
+                                ((actions and PlaybackState.ACTION_PAUSE) == 0L &&
+                                        (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L)
+                        "toggle" -> controller == null || (actions and PlaybackState.ACTION_PLAY_PAUSE) == 0L
+                        "next" -> controller == null || (actions and PlaybackState.ACTION_SKIP_TO_NEXT) == 0L
+                        "previous" -> controller == null || (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) == 0L
                         else -> false
                     }
                     if (shouldFallbackToMediaKey) {
                         val key = when (command) {
                             "play" -> KeyEvent.KEYCODE_MEDIA_PLAY
                             "pause" -> KeyEvent.KEYCODE_MEDIA_PAUSE
-                            "toggle" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                            "toggle" -> {
+                                val st = controller?.playbackState?.state ?: PlaybackState.STATE_NONE
+                                val playing = st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
+                                if (playing) KeyEvent.KEYCODE_MEDIA_PAUSE else KeyEvent.KEYCODE_MEDIA_PLAY
+                            }
                             "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
                             "previous" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
                             else -> null
@@ -434,6 +575,20 @@ object BtClassicClient {
         command: String
     ): MediaController? {
         if (controllers.isEmpty()) return null
+        val playing = controllers.filter { c ->
+            val st = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            st == PlaybackState.STATE_PLAYING || st == PlaybackState.STATE_BUFFERING
+        }
+        val paused = controllers.filter { c ->
+            val st = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            st == PlaybackState.STATE_PAUSED
+        }
+        val rest = controllers.filter { c ->
+            val st = c.playbackState?.state ?: PlaybackState.STATE_NONE
+            st != PlaybackState.STATE_PLAYING &&
+                st != PlaybackState.STATE_BUFFERING &&
+                st != PlaybackState.STATE_PAUSED
+        }
 
         fun isActive(c: MediaController): Boolean {
             val st = c.playbackState?.state ?: PlaybackState.STATE_NONE
@@ -445,21 +600,39 @@ object BtClassicClient {
         fun supports(c: MediaController): Boolean {
             val st = c.playbackState?.state ?: PlaybackState.STATE_NONE
             val actions = c.playbackState?.actions ?: 0L
+            val pkg = try { c.packageName.orEmpty() } catch (_: Exception) { "" }
+            val isYouTube =
+                pkg == "com.google.android.youtube" || pkg == "com.google.android.apps.youtube.music"
             return when (command) {
+                "play", "pause", "toggle" -> {
+                    if (isYouTube && isActive(c)) return true
+                    if (isActive(c) && st != PlaybackState.STATE_NONE) return true
+                    (actions and PlaybackState.ACTION_PLAY) != 0L ||
+                        (actions and PlaybackState.ACTION_PAUSE) != 0L ||
+                        (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L
+                }
                 "seekTo" -> (actions and PlaybackState.ACTION_SEEK_TO) != 0L
-                "next" -> (actions and PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
-                "previous" -> (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
-                "pause" -> (actions and PlaybackState.ACTION_PAUSE) != 0L || (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L
-                "play" -> (actions and PlaybackState.ACTION_PLAY) != 0L || (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L
-                "toggle" -> (actions and PlaybackState.ACTION_PLAY_PAUSE) != 0L || st != PlaybackState.STATE_NONE
+                "next" -> if (isYouTube && isActive(c)) true else (actions and PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
+                "previous" -> if (isYouTube && isActive(c)) true else (actions and PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
                 else -> true
             }
         }
 
-        val active = controllers.filter(::isActive)
-        val pool = if (active.isNotEmpty()) active else controllers
-        val supporting = pool.firstOrNull(::supports)
-        return supporting ?: selectBestController(pool)
+        val prioritized = when (command) {
+            "toggle", "play", "pause" -> {
+                val activeOrdered = (playing + paused + rest)
+                if (activeOrdered.any(::isActive)) activeOrdered.filter(::isActive) + activeOrdered.filter { !isActive(it) }
+                else activeOrdered
+            }
+            else -> {
+                val activeOrdered = (playing + paused + rest)
+                if (activeOrdered.any(::isActive)) activeOrdered.filter(::isActive) + activeOrdered.filter { !isActive(it) }
+                else activeOrdered
+            }
+        }
+
+        val supporting = prioritized.firstOrNull(::supports)
+        return supporting ?: selectBestController(prioritized)
     }
 
     private fun dispatchMediaKey(ctx: Context, keyCode: Int) {

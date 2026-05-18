@@ -188,6 +188,11 @@ class BleService {
     return map;
   }
 
+  static Future<bool> refreshLocalMediaState() async {
+    final res = await _channel.invokeMethod('refreshLocalMediaState');
+    return res == true;
+  }
+
   static Future<bool> sendBtServerMessage(Map<String, dynamic> data) async {
     final res = await _channel.invokeMethod('sendBtServerMessage', data);
     return res == true;

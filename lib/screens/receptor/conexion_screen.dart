@@ -342,6 +342,11 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
           nowMs - localServiceUpdatedAtMs <= 15000 &&
           (localServiceState['title'] ?? '').toString().trim().isNotEmpty;
       final localCandidate = localFresh ? localServiceState : null;
+      if (prioritizeLocal && !localFresh) {
+        try {
+          await BleService.refreshLocalMediaState();
+        } catch (_) {}
+      }
 
       Map<String, dynamic>? state;
       bool useLocal = false;
@@ -533,6 +538,49 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
       print('[conexion][media][cmd] send via ble_notification fallback');
       await BleService.sendNotification(payload);
     } catch (_) {}
+  }
+
+  Future<void> _sendLaunchDefaultMediaAppPlay() async {
+    try {
+      final enabled = await PreferencesService.getBleEnabled();
+      print('[conexion][media_launch] request enabled=$enabled');
+      await _relayDebugToEmisor('receptor_ui', 'media_launch request enabled=$enabled');
+      if (!enabled) return;
+
+      await _ensureBtServerRunning();
+
+      final payload = <String, dynamic>{
+        'type': 'launch_default_media_app',
+        'packageName': '',
+        'forcePlay': true,
+        'pauseOthers': true,
+        'time': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      try {
+        final status = await BleService.getBtServerStatus();
+        final running = status['running'] == true;
+        final connectedCount = (status['connectedCount'] as num?)?.toInt() ?? 0;
+        print('[conexion][media_launch] bt_server running=$running peers=$connectedCount');
+        await _relayDebugToEmisor(
+          'receptor_ui',
+          'media_launch bt_server running=$running peers=$connectedCount',
+        );
+        if (running && connectedCount > 0) {
+          await BleService.sendBtServerMessage(payload);
+          print('[conexion][media_launch] sent via bt_server');
+          await _relayDebugToEmisor('receptor_ui', 'media_launch sent via bt_server');
+          return;
+        }
+      } catch (_) {}
+
+      await BleService.sendNotification(payload);
+      print('[conexion][media_launch] sent via ble_notification fallback');
+      await _relayDebugToEmisor('receptor_ui', 'media_launch sent via ble_notification fallback');
+    } catch (_) {
+      print('[conexion][media_launch] error');
+      await _relayDebugToEmisor('receptor_ui', 'media_launch error');
+    }
   }
 
   Future<void> _sendVolumeRequest() async {
@@ -1198,6 +1246,32 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                                       );
                                     },
                                   ),
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: _sendLaunchDefaultMediaAppPlay,
+                                    icon: const Icon(Icons.play_circle_outline),
+                                    label: const Text(
+                                      'Abrir y reproducir en app predeterminada',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      minimumSize: const Size.fromHeight(46),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      backgroundColor: customColor[500],
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ],
                             );
                           },

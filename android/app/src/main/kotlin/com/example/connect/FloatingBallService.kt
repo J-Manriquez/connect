@@ -316,6 +316,75 @@ class FloatingBallService : Service() {
         }
     }
 
+    private fun tryRefreshLocalMediaCache() {
+        try {
+            val msm = getSystemService(Context.MEDIA_SESSION_SERVICE) as? android.media.session.MediaSessionManager ?: return
+            val component = ComponentName(this, NotificationListener::class.java)
+            val controllers = try { msm.getActiveSessions(component) } catch (_: Exception) { emptyList<android.media.session.MediaController>() }
+            val controller = run {
+                if (controllers.isEmpty()) null else {
+                    val playing = controllers.firstOrNull { c ->
+                        val st = c.playbackState?.state ?: android.media.session.PlaybackState.STATE_NONE
+                        st == android.media.session.PlaybackState.STATE_PLAYING || st == android.media.session.PlaybackState.STATE_BUFFERING
+                    }
+                    if (playing != null) playing else {
+                        controllers.firstOrNull { c ->
+                            val st = c.playbackState?.state ?: android.media.session.PlaybackState.STATE_NONE
+                            st == android.media.session.PlaybackState.STATE_PAUSED
+                        } ?: controllers.first()
+                    }
+                }
+            } ?: return
+            val state = controller.playbackState
+            val metadata = controller.metadata
+            val playbackState = state?.state ?: android.media.session.PlaybackState.STATE_NONE
+            val isPlaying = playbackState == android.media.session.PlaybackState.STATE_PLAYING ||
+                    playbackState == android.media.session.PlaybackState.STATE_BUFFERING
+            val actions = state?.actions ?: 0L
+            val canPlayPause = (actions and android.media.session.PlaybackState.ACTION_PLAY) != 0L ||
+                    (actions and android.media.session.PlaybackState.ACTION_PAUSE) != 0L ||
+                    (actions and android.media.session.PlaybackState.ACTION_PLAY_PAUSE) != 0L
+            val canSkipNext = (actions and android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT) != 0L
+            val canSkipPrev = (actions and android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS) != 0L
+            val canSeek = (actions and android.media.session.PlaybackState.ACTION_SEEK_TO) != 0L
+            val title = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_TITLE)
+                ?: metadata?.getString(android.media.MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
+            val artist = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ARTIST)
+                ?: metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+            val album = metadata?.getString(android.media.MediaMetadata.METADATA_KEY_ALBUM)
+            val durationMs = metadata?.getLong(android.media.MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+            val positionMs = state?.position ?: 0L
+            val packageName = controller.packageName ?: ""
+            if (packageName.isBlank() || title.isNullOrBlank()) return
+            val appName = try {
+                val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                packageManager.getApplicationLabel(appInfo).toString()
+            } catch (_: Exception) {
+                packageName
+            }
+            val obj = JSONObject()
+            obj.put("type", "media_state")
+            obj.put("time", System.currentTimeMillis())
+            obj.put("packageName", packageName)
+            obj.put("appName", appName)
+            obj.put("title", title)
+            obj.put("artist", artist ?: "")
+            obj.put("album", album ?: "")
+            obj.put("durationMs", durationMs)
+            obj.put("positionMs", positionMs)
+            obj.put("isPlaying", isPlaying)
+            obj.put("canPlayPause", canPlayPause)
+            obj.put("canSkipNext", canSkipNext)
+            obj.put("canSkipPrev", canSkipPrev)
+            obj.put("canSeek", canSeek)
+            val prefs = getSharedPreferences("local_media_cache_v1", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("media_json", obj.toString())
+                .putLong("updatedAtMs", System.currentTimeMillis())
+                .apply()
+        } catch (_: Exception) {
+        }
+    }
     private var wm: WindowManager? = null
     private var ballView: View? = null
     private var ballLp: WindowManager.LayoutParams? = null
@@ -1457,6 +1526,27 @@ class FloatingBallService : Service() {
         }
     }
 
+    private fun sendLaunchDefaultMediaApp(forcePlay: Boolean, pauseOthers: Boolean) {
+        try {
+            val prefs = try { getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE) } catch (_: Exception) { null }
+            val selectedPkg = try {
+                prefs?.getString("flutter.media_default_app_package", null)?.trim().orEmpty()
+            } catch (_: Exception) {
+                ""
+            }
+            println("[floating_ball][media_launch] send forcePlay=$forcePlay pauseOthers=$pauseOthers pkg='${selectedPkg.take(120)}'")
+            val payload = JSONObject()
+            payload.put("type", "launch_default_media_app")
+            payload.put("packageName", selectedPkg)
+            payload.put("forcePlay", forcePlay)
+            payload.put("pauseOthers", pauseOthers)
+            payload.put("time", System.currentTimeMillis())
+            sendBtServerJson(payload.toString())
+        } catch (t: Throwable) {
+            println("[floating_ball][media_launch] send exception t=${t::class.java.simpleName} msg=${t.message}")
+        }
+    }
+
     private fun formatMs(ms: Long): String {
         if (ms <= 0L) return "0:00"
         val totalSeconds = (ms / 1000L).coerceAtLeast(0L)
@@ -2168,7 +2258,7 @@ class FloatingBallService : Service() {
                 playPauseBtn?.setOnClickListener { sendMediaCommand("toggle") }
 
                 var swiping = false
-                val dismissThresholdPx = dp(110).toFloat()
+                val dismissThresholdPx = dp(70).toFloat()
                 fun dismissMedia(animated: Boolean) {
                     val t = mediaModalTick
                     if (t != null) {
@@ -2212,11 +2302,10 @@ class FloatingBallService : Service() {
                             if (abs(dx) < dp(6) || abs(dx) < abs(dy)) return false
                             swiping = true
                         }
-                        if (dx <= 0f) return true
                         val endX = (mediaView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).toFloat()
-                        val clampedDx = dx.coerceIn(0f, endX)
+                        val clampedDx = dx.coerceIn(-endX, endX)
                         mediaView.translationX = clampedDx
-                        val frac = (clampedDx / (endX * 0.85f)).coerceIn(0f, 1f)
+                        val frac = (abs(clampedDx) / (endX * 0.85f)).coerceIn(0f, 1f)
                         mediaView.alpha = (1f - (0.35f * frac)).coerceIn(0.65f, 1f)
                         return true
                     }
@@ -2224,6 +2313,14 @@ class FloatingBallService : Service() {
                     override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
                         if (e1 == null) return false
                         val dx = e2.x - e1.x
+                        if (dx < -dismissThresholdPx && abs(velocityX) > abs(velocityY) && abs(velocityX) > 500f) {
+                            println("[floating_ball][media_launch] fling_left dx=$dx vX=$velocityX vY=$velocityY")
+                            sendLaunchDefaultMediaApp(forcePlay = true, pauseOthers = true)
+                            mediaView.animate().cancel()
+                            mediaView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
+                            swiping = false
+                            return true
+                        }
                         if (dx > dismissThresholdPx && abs(velocityX) > abs(velocityY) && abs(velocityX) > 500f) {
                             dismissMedia(true)
                             return true
@@ -2247,6 +2344,13 @@ class FloatingBallService : Service() {
                             val tx = mediaView.translationX
                             if (tx > dismissThresholdPx) {
                                 dismissMedia(true)
+                                swiping = false
+                                true
+                            } else if (tx < -dismissThresholdPx) {
+                                println("[floating_ball][media_launch] swipe_left tx=$tx threshold=$dismissThresholdPx")
+                                sendLaunchDefaultMediaApp(forcePlay = true, pauseOthers = true)
+                                mediaView.animate().cancel()
+                                mediaView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
                                 swiping = false
                                 true
                             } else {
@@ -2343,6 +2447,9 @@ class FloatingBallService : Service() {
                         if (!useLocal && connected && now - lastMediaStateRequestAtMs > 1500L) {
                             lastMediaStateRequestAtMs = now
                             sendMediaCommand("request_state")
+                        } else if (useLocal && now - lastMediaStateRequestAtMs > 1500L) {
+                            lastMediaStateRequestAtMs = now
+                            tryRefreshLocalMediaCache()
                         }
                     }
 
@@ -3496,7 +3603,7 @@ class FloatingBallService : Service() {
         playPauseBtn?.setOnClickListener { sendMediaCommand("toggle") }
 
         var swiping = false
-        val dismissThresholdPx = dp(110).toFloat()
+        val dismissThresholdPx = dp(70).toFloat()
         fun dismissMedia(animated: Boolean) {
             val t = mediaModalTick
             if (t != null) {
@@ -3540,17 +3647,24 @@ class FloatingBallService : Service() {
                     if (abs(dx) < dp(6) || abs(dx) < abs(dy)) return false
                     swiping = true
                 }
-                if (dx <= 0f) return true
                 val endX = (mediaView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels).toFloat()
-                val clampedDx = dx.coerceIn(0f, endX)
+                val clampedDx = dx.coerceIn(-endX, endX)
                 mediaView.translationX = clampedDx
-                mediaView.alpha = (1f - (clampedDx / endX)).coerceIn(0.15f, 1f)
+                mediaView.alpha = (1f - (abs(clampedDx) / endX)).coerceIn(0.15f, 1f)
                 return true
             }
 
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
                 if (e1 == null) return false
                 val dx = e2.x - e1.x
+                if (dx < -dismissThresholdPx && abs(velocityX) > abs(velocityY) && abs(velocityX) > 500f) {
+                    println("[floating_ball][media_launch] fling_left dx=$dx vX=$velocityX vY=$velocityY")
+                    sendLaunchDefaultMediaApp(forcePlay = true, pauseOthers = true)
+                    mediaView.animate().cancel()
+                    mediaView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
+                    swiping = false
+                    return true
+                }
                 if (dx > dismissThresholdPx || velocityX > 1800f) {
                     dismissMedia(animated = true)
                     return true
@@ -3576,6 +3690,11 @@ class FloatingBallService : Service() {
                     val dx = mediaView.translationX
                     if (dx > dismissThresholdPx) {
                         dismissMedia(animated = true)
+                    } else if (dx < -dismissThresholdPx) {
+                        println("[floating_ball][media_launch] swipe_left tx=$dx threshold=$dismissThresholdPx")
+                        sendLaunchDefaultMediaApp(forcePlay = true, pauseOthers = true)
+                        mediaView.animate().cancel()
+                        mediaView.animate().translationX(0f).alpha(1f).setDuration(140L).start()
                     } else {
                         mediaView.animate().cancel()
                         mediaView.animate().translationX(0f).alpha(1f).setDuration(140L).start()
@@ -3660,6 +3779,9 @@ class FloatingBallService : Service() {
                         if (!useLocal && connected && now - lastMediaStateRequestAtMs > 1500L) {
                             lastMediaStateRequestAtMs = now
                             sendMediaCommand("request_state")
+                        } else if (useLocal && now - lastMediaStateRequestAtMs > 1500L) {
+                            lastMediaStateRequestAtMs = now
+                            tryRefreshLocalMediaCache()
                         }
                     }
                 } else {
@@ -3669,6 +3791,9 @@ class FloatingBallService : Service() {
                     if (!useLocal && connected && now - lastMediaStateRequestAtMs > 1500L) {
                         lastMediaStateRequestAtMs = now
                         sendMediaCommand("request_state")
+                    } else if (useLocal && now - lastMediaStateRequestAtMs > 1500L) {
+                        lastMediaStateRequestAtMs = now
+                        tryRefreshLocalMediaCache()
                     }
                 }
             } catch (_: Exception) {

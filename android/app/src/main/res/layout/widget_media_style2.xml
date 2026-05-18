@@ -69,6 +69,15 @@
                     <TextView android:id="@+id/widget_vol_100" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:text="" android:background="@android:color/transparent" />
                 </LinearLayout>
             </FrameLayout>
+
+            <ImageView
+                android:id="@+id/widget_default_app"
+                android:layout_width="88dp"
+                android:layout_height="88dp"
+                android:layout_marginStart="10dp"
+                android:adjustViewBounds="true"
+                android:scaleType="centerInside"
+                android:src="@android:drawable/ic_media_play" />
         </LinearLayout>
 
         <LinearLayout

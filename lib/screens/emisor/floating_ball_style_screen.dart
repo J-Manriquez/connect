@@ -7,6 +7,7 @@ import 'package:connect/screens/emisor/floating_ball_reorder_screen.dart';
 import 'package:connect/screens/emisor/svg_icon_gallery_screen.dart';
 import 'package:connect/services/floating_ball_service.dart';
 import 'package:connect/theme_colors.dart';
+import 'package:connect/widgets/fs_media_section.dart';
 import 'package:connect/widgets/color_input_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart' as vg;
@@ -20,6 +21,7 @@ class FloatingBallStyleScreen extends StatefulWidget {
 
 class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
   bool _loading = true;
+  bool _mediaVisible = false;
   int _ballColor = 0xCC000000;
   String _ballIcon = 'info';
   String? _ballIconPngBase64;
@@ -299,6 +301,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    bool nextMediaVisible = _mediaVisible;
     int nextBallColor = _ballColor;
     String nextBallIcon = _ballIcon;
     String? nextBallIconPngBase64 = _ballIconPngBase64;
@@ -487,6 +490,12 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     String? nextMediaPauseIconPngBase64 = _mediaPauseIconPngBase64;
     String? nextMediaNextIconPngBase64 = _mediaNextIconPngBase64;
     try {
+      try {
+        nextMediaVisible = await FloatingBallService.isFullScreenMediaAutoShowEnabled();
+        print('[floating_ball_style] mediaVisible init autoShow=$nextMediaVisible');
+      } catch (e) {
+        print('[floating_ball_style] mediaVisible init error=$e');
+      }
       nextBallColor = await FloatingBallService.getBallColor();
       nextBallIcon = await FloatingBallService.getBallIcon();
       nextBallIconPngBase64 = await FloatingBallService.getBallIconPngBase64();
@@ -788,6 +797,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     } catch (_) {}
     if (!mounted) return;
     setState(() {
+      _mediaVisible = nextMediaVisible;
       _ballColor = nextBallColor;
       _ballIcon = nextBallIcon;
       _ballIconPngBase64 = nextBallIconPngBase64;
@@ -3178,6 +3188,19 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       appBar: AppBar(
         title: const Text('Personalizar bola'),
         backgroundColor: customColor[700],
+        actions: [
+          IconButton(
+            onPressed: () {
+              final next = !_mediaVisible;
+              print('[floating_ball_style] mediaVisible -> $next (from appbar)');
+              setState(() {
+                _mediaVisible = next;
+              });
+            },
+            icon: Icon(_mediaVisible ? Icons.music_off : Icons.music_note),
+            tooltip: _mediaVisible ? 'Ocultar multimedia' : 'Mostrar multimedia',
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -3185,6 +3208,15 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
               padding: const EdgeInsets.all(8),
               child: Column(
                 children: [
+                  FsMediaSection(
+                    visible: _mediaVisible,
+                    onVisibleChanged: (v) {
+                      print('[floating_ball_style] mediaVisible -> $v (from section)');
+                      setState(() {
+                        _mediaVisible = v;
+                      });
+                    },
+                  ),
                   Card(
                     elevation: 3,
                     child: ExpansionTile(

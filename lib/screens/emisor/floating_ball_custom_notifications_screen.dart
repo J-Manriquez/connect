@@ -92,6 +92,8 @@ class _FloatingBallCustomNotificationsScreenState
   int _bottomButtonsPaddingVertDp = 10;
   int _bottomButtonsGapDp = 10;
 
+  bool _mediaVisible = false;
+
   @override
   void initState() {
     super.initState();
@@ -101,12 +103,26 @@ class _FloatingBallCustomNotificationsScreenState
             WidgetsBinding.instance.lifecycleState != AppLifecycleState.detached;
     if (_liveRefreshEnabled) _startLiveRefresh();
     _loadStyle();
+    _initMediaVisibility();
     _refresh();
     _refreshSystemState();
     _systemTick = Timer.periodic(const Duration(seconds: 2), (_) {
       _refreshSystemState();
       _refreshBottomButtonsLayout();
     });
+  }
+
+  Future<void> _initMediaVisibility() async {
+    try {
+      final autoShow = await FloatingBallService.isFullScreenMediaAutoShowEnabled();
+      print('[floating_ball_custom_notifications] mediaVisible init autoShow=$autoShow');
+      if (!mounted) return;
+      setState(() {
+        _mediaVisible = autoShow;
+      });
+    } catch (e) {
+      print('[floating_ball_custom_notifications] mediaVisible init error=$e');
+    }
   }
 
   @override
@@ -754,9 +770,17 @@ class _FloatingBallCustomNotificationsScreenState
                         locationEnabled: s.locationEnabled,
                         batteryPct: s.batteryPct,
                         showMediaRestore: s.showMediaRestore,
+                        onMediaPressed: () {
+                          final next = !_mediaVisible;
+                          print('[floating_ball_custom_notifications] mediaVisible -> $next (from fsBar)');
+                          setState(() {
+                            _mediaVisible = next;
+                          });
+                        },
                       );
                     },
                   ),
+                
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: _refresh,
@@ -854,6 +878,7 @@ class _FloatingBallCustomNotificationsScreenState
 
                 },
               ),
+            
           ],
         ),
       ),
@@ -938,6 +963,7 @@ class _FsBar extends StatefulWidget {
   final bool locationEnabled;
   final int? batteryPct;
   final bool showMediaRestore;
+  final VoidCallback? onMediaPressed;
 
   const _FsBar({
     super.key,
@@ -968,6 +994,7 @@ class _FsBar extends StatefulWidget {
     required this.locationEnabled,
     required this.batteryPct,
     required this.showMediaRestore,
+    required this.onMediaPressed,
   });
 
   @override
@@ -1057,19 +1084,23 @@ class _FsBarState extends State<_FsBar> {
           ),
           const SizedBox(width: 10),
           if (widget.showMediaRestore)
-            Container(
-              width: size + 10,
-              height: size + 10,
-              decoration: BoxDecoration(
-                color: Color(widget.restoreBgColor),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              alignment: Alignment.center,
-              child: _pngOrIcon(
-                base64Png: widget.restoreIconPngBase64,
-                fallback: Icons.play_arrow,
-                tint: Color(widget.restoreIconColor),
-                size: size,
+            InkWell(
+              onTap: widget.onMediaPressed,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: size + 10,
+                height: size + 10,
+                decoration: BoxDecoration(
+                  color: Color(widget.restoreBgColor),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: _pngOrIcon(
+                  base64Png: widget.restoreIconPngBase64,
+                  fallback: Icons.play_arrow,
+                  tint: Color(widget.restoreIconColor),
+                  size: size,
+                ),
               ),
             ),
           const Spacer(),
