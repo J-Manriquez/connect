@@ -1,4 +1,5 @@
 import 'package:connect/screens/emisor/floating_ball_app_picker_screen.dart';
+import 'package:connect/screens/emisor/floating_ball_tool_picker_screen.dart';
 import 'package:connect/services/floating_ball_service.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +20,9 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
   bool _batteryIgnored = false;
   bool _loading = true;
   List<String> _selectedApps = <String>[];
+  List<String> _selectedTools = <String>[];
+  final Map<String, int> _toolOffsetsX = {};
+  final Map<String, int> _toolOffsetsY = {};
   bool _gesturesEnabled = false;
   int _gestureLongPressMs = 450;
   int _gestureVibrationMs = 35;
@@ -74,6 +78,14 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
       final acc = await FloatingBallService.isAccessibilityEnabled();
       final batt = await FloatingBallService.isBatteryOptimizationIgnored();
       final apps = await FloatingBallService.getSelectedApps();
+      final tools = await FloatingBallService.getSelectedTools();
+      const toolIds = ['tool:tts', 'tool:dict', 'tool:trans', 'tool:search'];
+      final toolOffX = <String, int>{};
+      final toolOffY = <String, int>{};
+      for (final id in toolIds) {
+        toolOffX[id] = await FloatingBallService.getToolOffsetX(id);
+        toolOffY[id] = await FloatingBallService.getToolOffsetY(id);
+      }
       final gesturesEnabled = await FloatingBallService.isGesturesEnabled();
       final longPressMs = await FloatingBallService.getGestureLongPressMs();
       final upAction = await FloatingBallService.getGestureUpAction();
@@ -95,6 +107,13 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
           _accessibilityEnabled = acc;
           _batteryIgnored = batt;
           _selectedApps = apps;
+          _selectedTools = tools;
+          _toolOffsetsX
+            ..clear()
+            ..addAll(toolOffX);
+          _toolOffsetsY
+            ..clear()
+            ..addAll(toolOffY);
           _gesturesEnabled = gesturesEnabled;
           _gestureLongPressMs = longPressMs;
           _gestureUpAction = upAction;
@@ -138,6 +157,26 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Aplicaciones actualizadas')),
       );
+    }
+  }
+
+  Future<void> _pickTools() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const FloatingBallToolPickerScreen(),
+      ),
+    );
+    await _loadState();
+  }
+
+  String _toolLabel(String toolId) {
+    switch (toolId) {
+      case 'tool:tts':    return 'Lector TTS';
+      case 'tool:dict':   return 'Diccionario';
+      case 'tool:trans':  return 'Traductor';
+      case 'tool:search': return 'Buscar';
+      default:            return toolId;
     }
   }
 
@@ -253,6 +292,63 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
     );
   }
 
+  IconData _toolIcon(String toolId) {
+    switch (toolId) {
+      case 'tool:tts':    return Icons.record_voice_over;
+      case 'tool:dict':   return Icons.menu_book;
+      case 'tool:trans':  return Icons.translate;
+      case 'tool:search': return Icons.search;
+      default:            return Icons.build;
+    }
+  }
+
+  Widget _buildOffsetRow(
+      String label, String toolId, String axis, ButtonStyle linkBtnStyle) {
+    final value =
+        axis == 'x' ? (_toolOffsetsX[toolId] ?? 40) : (_toolOffsetsY[toolId] ?? 200);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$label: $value dp',
+                    style: const TextStyle(fontSize: 13)),
+                Slider(
+                  min: 0,
+                  max: 800,
+                  divisions: 80,
+                  value: value.toDouble().clamp(0, 800),
+                  activeColor: customColor[600],
+                  onChanged: (v) {
+                    setState(() {
+                      if (axis == 'x') {
+                        _toolOffsetsX[toolId] = v.toInt();
+                      } else {
+                        _toolOffsetsY[toolId] = v.toInt();
+                      }
+                    });
+                  },
+                  onChangeEnd: (v) async {
+                    if (axis == 'x') {
+                      await FloatingBallService.setToolOffsetX(
+                          toolId, v.toInt());
+                    } else {
+                      await FloatingBallService.setToolOffsetY(
+                          toolId, v.toInt());
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusText = _enabled ? 'Activada' : 'Desactivada';
@@ -299,29 +395,87 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
                       ),
                       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       children: [
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            _enabled ? Icons.check_circle : Icons.cancel,
-                            color: _enabled ? Colors.green : Colors.red,
-                          ),
-                          title: Text(statusText),
-                          subtitle: Text(statusDesc),
-                          trailing: Column(
-                            mainAxisSize: MainAxisSize.min,
+                        // Estado actual
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
                             children: [
-                              ElevatedButton(
+                              Icon(
+                                _enabled ? Icons.check_circle : Icons.cancel,
+                                color: _enabled ? Colors.green : Colors.red,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      statusText,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                    Text(
+                                      statusDesc,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600]),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Botones Activar / Desactivar en fila
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
                                 onPressed: _enabled ? null : _activate,
                                 style: primaryBtnStyle,
                                 child: const Text('Activar'),
                               ),
-                              const SizedBox(height: 8),
-                              ElevatedButton(
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton(
                                 onPressed: _enabled ? _deactivate : null,
                                 style: destructiveBtnStyle,
                                 child: const Text('Desactivar'),
                               ),
-                            ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Botón centrar bola
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _enabled
+                                ? () async {
+                                    await FloatingBallService.centerBall();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content:
+                                              Text('Bola centrada en pantalla'),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: customColor[500],
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size.fromHeight(44),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                              textStyle: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w600),
+                            ),
+                            icon: const Icon(Icons.my_location, size: 18),
+                            label: const Text('Centrar bola flotante'),
                           ),
                         ),
                         const Divider(),
@@ -435,11 +589,69 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
                                       .toList(),
                                 ),
                               ),
+                            const Divider(),
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Herramientas del menú'),
+                              subtitle: Text(
+                                _selectedTools.isEmpty
+                                    ? 'Sin herramientas seleccionadas'
+                                    : '${_selectedTools.length} seleccionada(s): ${_selectedTools.map(_toolLabel).join(', ')}',
+                              ),
+                              trailing: TextButton(
+                                onPressed: _pickTools,
+                                style: linkBtnStyle,
+                                child: const Text('Seleccionar'),
+                              ),
+                            ),
                           ],
                         ),
                       ],
                     ),
                   ),
+                  if (_selectedTools.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Card(
+                      child: ExpansionTile(
+                        title: const Text('Posición de widgets flotantes'),
+                        subtitle: const Text(
+                          'Ajusta dónde aparece cada widget al abrirse.',
+                        ),
+                        childrenPadding:
+                            const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        children: [
+                          for (final toolId in _selectedTools) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12, bottom: 4),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _toolIcon(toolId),
+                                    color: customColor[600],
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _toolLabel(toolId),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: customColor[700],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            _buildOffsetRow(
+                                'Posición X', toolId, 'x', linkBtnStyle),
+                            _buildOffsetRow(
+                                'Posición Y', toolId, 'y', linkBtnStyle),
+                            if (toolId != _selectedTools.last)
+                              const Divider(height: 20),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Card(
                     child: ExpansionTile(

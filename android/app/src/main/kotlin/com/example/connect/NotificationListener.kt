@@ -75,6 +75,13 @@ class NotificationListener : NotificationListenerService() {
                 .sortedByDescending { it.postTime }
         }
 
+        /// True si la notificación con [sbnKey] sigue presente en la barra.
+        fun isNotificationActive(sbnKey: String): Boolean {
+            val k = sbnKey.trim()
+            if (k.isEmpty()) return false
+            return activeNotificationsMap.containsKey(k)
+        }
+
         fun cancelNotificationByKey(key: String): Boolean {
             val inst = serviceInstance ?: return false
             return try {

@@ -49,24 +49,46 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.EditText
+import android.widget.Button
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.LayerDrawable
 import androidx.core.app.NotificationCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 class FloatingBallService : Service() {
     companion object {
+        @Volatile var instance: FloatingBallService? = null
         const val ACTION_START = "com.example.connect.FLOATING_BALL_START"
         const val ACTION_UPDATE_CONFIG = "com.example.connect.FLOATING_BALL_UPDATE_CONFIG"
         const val ACTION_DISMISS_MENU = "com.example.connect.FLOATING_BALL_DISMISS_MENU"
+        const val ACTION_CENTER_BALL = "com.example.connect.FLOATING_BALL_CENTER"
         private const val CHANNEL_ID = "floating_ball_channel"
         private const val NOTIFICATION_ID = 10031
         private const val PREFS_FLUTTER = "FlutterSharedPreferences"
         private const val KEY_ENABLED = "flutter.floating_ball_enabled"
         private const val KEY_APPS_JSON = "flutter.floating_ball_selected_apps_json"
+        private const val KEY_TOOLS_JSON = "flutter.floating_ball_selected_tools_json"
+        private const val KEY_TOOL_TTS_OFFSET_X    = "flutter.floating_ball_tool_tts_offset_x"
+        private const val KEY_TOOL_TTS_OFFSET_Y    = "flutter.floating_ball_tool_tts_offset_y"
+        private const val KEY_TOOL_DICT_OFFSET_X   = "flutter.floating_ball_tool_dict_offset_x"
+        private const val KEY_TOOL_DICT_OFFSET_Y   = "flutter.floating_ball_tool_dict_offset_y"
+        private const val KEY_TOOL_TRANS_OFFSET_X  = "flutter.floating_ball_tool_trans_offset_x"
+        private const val KEY_TOOL_TRANS_OFFSET_Y  = "flutter.floating_ball_tool_trans_offset_y"
+        private const val KEY_TOOL_SEARCH_OFFSET_X = "flutter.floating_ball_tool_search_offset_x"
+        private const val KEY_TOOL_SEARCH_OFFSET_Y = "flutter.floating_ball_tool_search_offset_y"
+        private const val KEY_TOOL_TTS_ICON_PNG    = "flutter.floating_ball_tool_tts_icon_png_base64"
+        private const val KEY_TOOL_DICT_ICON_PNG   = "flutter.floating_ball_tool_dict_icon_png_base64"
+        private const val KEY_TOOL_TRANS_ICON_PNG  = "flutter.floating_ball_tool_trans_icon_png_base64"
+        private const val KEY_TOOL_SEARCH_ICON_PNG = "flutter.floating_ball_tool_search_icon_png_base64"
         private const val KEY_USE_AS_RECEPTOR = "flutter.use_as_receptor"
         private const val KEY_BALL_COLOR = "flutter.floating_ball_color"
         private const val KEY_BALL_ICON = "flutter.floating_ball_icon"
@@ -217,6 +239,10 @@ class FloatingBallService : Service() {
         private const val KEY_POPUP_VOLUME_ICON_PNG_BASE64 = "flutter.floating_ball_popup_volume_icon_png_base64"
         private const val KEY_POPUP_BRIGHTNESS_ICON_PNG_BASE64 = "flutter.floating_ball_popup_brightness_icon_png_base64"
         private const val KEY_POPUP_SETTINGS_ICON_PNG_BASE64 = "flutter.floating_ball_popup_settings_icon_png_base64"
+        private const val KEY_POPUP_BUTTON_RADIUS_DP = "flutter.floating_ball_popup_button_radius_dp"
+        private const val KEY_POPUP_BUTTON_PADDING_DP = "flutter.floating_ball_popup_button_padding_dp"
+        private const val KEY_POPUP_APP_BUTTON_PADDING_DP = "flutter.floating_ball_popup_app_button_padding_dp"
+        private const val KEY_POPUP_ORDER_JSON = "flutter.floating_ball_popup_order_json"
 
         private const val ACTION_ACTIVE_NOTIFICATIONS_CHANGED = "com.example.connect.ACTIVE_NOTIFICATIONS_CHANGED"
 
@@ -424,6 +450,8 @@ class FloatingBallService : Service() {
     private var lastAccessibilityEnabled: Boolean? = null
     private var lastAccessibilityPromptAtMs: Long = 0L
     private var selectedApps: List<String> = emptyList()
+    private var selectedTools: List<String> = emptyList()
+    private val toolOverlays = mutableMapOf<String, android.view.View?>()
     private var ballColor: Int = 0xCC000000.toInt()
     private var ballIconId: String = "info"
     private var ballIconPngBase64: String? = null
@@ -575,6 +603,10 @@ class FloatingBallService : Service() {
     private var popupVolumeIconPngBase64: String? = null
     private var popupBrightnessIconPngBase64: String? = null
     private var popupSettingsIconPngBase64: String? = null
+    private var popupButtonRadiusDp: Int = 14
+    private var popupButtonPaddingDp: Int = 14
+    private var popupAppButtonPaddingDp: Int = 14
+    private var popupOrder: List<String> = emptyList()
     private var mediaHeightDp: Int = 320
     private var mediaIconSizeDp: Int = 34
     private var mediaTitleSizeSp: Int = 18
@@ -594,6 +626,7 @@ class FloatingBallService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         wm = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildForegroundNotification())
@@ -618,14 +651,19 @@ class FloatingBallService : Service() {
             ACTION_DISMISS_MENU -> {
                 hideMenu()
             }
+            ACTION_CENTER_BALL -> {
+                centerBall()
+            }
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
+        instance = null
         try { stopAccessibilityWatchdog() } catch (_: Exception) {}
         try { hideMenu() } catch (_: Exception) {}
         try { removeBall() } catch (_: Exception) {}
+        try { closeAllToolOverlays() } catch (_: Exception) {}
         try { scheduleRestartIfEnabled() } catch (_: Exception) {}
         super.onDestroy()
     }
@@ -652,6 +690,7 @@ class FloatingBallService : Service() {
 
     private fun loadConfig() {
         selectedApps = readSelectedApps()
+        selectedTools = readSelectedTools()
         loadStyleConfig()
     }
 
@@ -810,6 +849,10 @@ class FloatingBallService : Service() {
             popupVolumeIconPngBase64 = prefs.getString(KEY_POPUP_VOLUME_ICON_PNG_BASE64, null) ?: fsVolumeIconPngBase64
             popupBrightnessIconPngBase64 = prefs.getString(KEY_POPUP_BRIGHTNESS_ICON_PNG_BASE64, null) ?: fsBrightnessIconPngBase64
             popupSettingsIconPngBase64 = prefs.getString(KEY_POPUP_SETTINGS_ICON_PNG_BASE64, null) ?: fsSettingsIconPngBase64
+            popupButtonRadiusDp = readIntPref(prefs, KEY_POPUP_BUTTON_RADIUS_DP, 14).coerceIn(0, 50)
+            popupButtonPaddingDp = readIntPref(prefs, KEY_POPUP_BUTTON_PADDING_DP, 14).coerceIn(0, 50)
+            popupAppButtonPaddingDp = readIntPref(prefs, KEY_POPUP_APP_BUTTON_PADDING_DP, 14).coerceIn(0, 50)
+            popupOrder = readStringListJson(prefs.getString(KEY_POPUP_ORDER_JSON, null))
 
             mediaHeightDp = readIntPref(prefs, KEY_MEDIA_HEIGHT_DP, 320)
             mediaIconSizeDp = readIntPref(prefs, KEY_MEDIA_ICON_SIZE_DP, 34)
@@ -949,6 +992,26 @@ class FloatingBallService : Service() {
             for (i in 0 until arr.length()) {
                 val pkg = arr.optString(i, "").trim()
                 if (pkg.isNotEmpty()) out.add(pkg)
+            }
+            out
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun readSelectedTools(): List<String> {
+        val raw = try {
+            val prefs = getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
+            prefs.getString(KEY_TOOLS_JSON, null)
+        } catch (_: Exception) {
+            null
+        } ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            val out = ArrayList<String>(arr.length())
+            for (i in 0 until arr.length()) {
+                val t = arr.optString(i, "").trim()
+                if (t.isNotEmpty()) out.add(t)
             }
             out
         } catch (_: Exception) {
@@ -1575,7 +1638,7 @@ class FloatingBallService : Service() {
 
         fun buttonBgDrawable(): GradientDrawable {
             return GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
+                cornerRadius = dp(popupButtonRadiusDp).toFloat()
                 setColor(fsButtonColor)
                 setStroke(dp(1), Color.parseColor("#22FFFFFF"))
             }
@@ -1858,20 +1921,22 @@ class FloatingBallService : Service() {
 
         fun buttonBgDrawable(): GradientDrawable {
             return GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
+                cornerRadius = dp(popupButtonRadiusDp).toFloat()
                 setColor(popupButtonColor)
                 setStroke(dp(1), Color.parseColor("#22FFFFFF"))
             }
         }
 
-        val boxSize = dp(54)
-        val iconSizePx = dp(popupIconSizeDp.coerceIn(10, 120)).coerceAtMost(boxSize - dp(18))
+        val iconSizePx = dp(popupIconSizeDp.coerceIn(10, 120))
+        val boxSize = iconSizePx + dp(popupButtonPaddingDp) * 2
+        val appBoxSize = iconSizePx + dp(popupAppButtonPaddingDp) * 2
 
         fun buildPopupButton(
             iconId: String?,
             iconPngBase64: String?,
             appIcon: Drawable?,
             dismissOnClick: Boolean = true,
+            btnBoxSize: Int = boxSize,
             onClick: () -> Unit
         ): View {
             val box = FrameLayout(this).apply {
@@ -1896,39 +1961,41 @@ class FloatingBallService : Service() {
                 }
             }
             box.addView(iv, FrameLayout.LayoutParams(iconSizePx, iconSizePx, Gravity.CENTER))
-            box.layoutParams = LinearLayout.LayoutParams(boxSize, boxSize).apply {
+            box.layoutParams = LinearLayout.LayoutParams(btnBoxSize, btnBoxSize).apply {
                 bottomMargin = dp(10)
             }
             return box
         }
 
-        content.addView(
-            buildPopupButton(popupBackIconId, popupBackIconPngBase64, null) {
+        // Build a map of all button builders, then render in configured order
+        val popupItems = linkedMapOf<String, () -> Unit>()
+        popupItems["back"] = {
+            content.addView(buildPopupButton(popupBackIconId, popupBackIconPngBase64, null) {
                 performGlobal(AccessibilityService.GLOBAL_ACTION_BACK)
-            }
-        )
-        content.addView(
-            buildPopupButton(popupHomeIconId, popupHomeIconPngBase64, null) {
+            })
+        }
+        popupItems["home"] = {
+            content.addView(buildPopupButton(popupHomeIconId, popupHomeIconPngBase64, null) {
                 performGlobal(AccessibilityService.GLOBAL_ACTION_HOME)
-            }
-        )
-        content.addView(
-            buildPopupButton(popupRecentsIconId, popupRecentsIconPngBase64, null) {
+            })
+        }
+        popupItems["recents"] = {
+            content.addView(buildPopupButton(popupRecentsIconId, popupRecentsIconPngBase64, null) {
                 performGlobal(AccessibilityService.GLOBAL_ACTION_RECENTS)
-            }
-        )
-        content.addView(
-            buildPopupButton(popupVolumeIconId, popupVolumeIconPngBase64, null, dismissOnClick = false) {
+            })
+        }
+        popupItems["volume"] = {
+            content.addView(buildPopupButton(popupVolumeIconId, popupVolumeIconPngBase64, null, dismissOnClick = false) {
                 showVolumeModal(root)
-            }
-        )
-        content.addView(
-            buildPopupButton(popupBrightnessIconId, popupBrightnessIconPngBase64, null, dismissOnClick = false) {
+            })
+        }
+        popupItems["brightness"] = {
+            content.addView(buildPopupButton(popupBrightnessIconId, popupBrightnessIconPngBase64, null, dismissOnClick = false) {
                 showBrightnessModal(root)
-            }
-        )
-        content.addView(
-            buildPopupButton(popupSettingsIconId, popupSettingsIconPngBase64, null) {
+            })
+        }
+        popupItems["settings"] = {
+            content.addView(buildPopupButton(popupSettingsIconId, popupSettingsIconPngBase64, null) {
                 try {
                     val i = Intent(Settings.ACTION_SETTINGS).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -1936,34 +2003,41 @@ class FloatingBallService : Service() {
                     startActivity(i)
                 } catch (_: Exception) {
                 }
-            }
-        )
-
-        if (selectedApps.isNotEmpty()) {
-            val divider = View(this).apply {
-                setBackgroundColor(Color.parseColor("#22FFFFFF"))
-            }
-            content.addView(
-                divider,
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
-                    topMargin = dp(6)
-                    bottomMargin = dp(12)
-                }
-            )
+            })
         }
-
         for (pkg in selectedApps) {
             val icon = try {
                 packageManager.getApplicationIcon(pkg)
             } catch (_: Exception) {
                 null
             } ?: continue
-            content.addView(
-                buildPopupButton(null, null, icon) {
+            popupItems["pkg:$pkg"] = {
+                content.addView(buildPopupButton(null, null, icon, btnBoxSize = appBoxSize) {
                     launchPackage(pkg)
-                }
-            )
+                })
+            }
         }
+        for (toolId in selectedTools) {
+            val toolIconDrawable = toolIconDrawable(toolId, popupIconColor, dp(popupIconSizeDp))
+            popupItems[toolId] = {
+                content.addView(buildPopupButton(null, null, toolIconDrawable, btnBoxSize = appBoxSize) {
+                    hideMenu()
+                    openToolOverlay(toolId)
+                })
+            }
+        }
+
+        val defaultPopupOrder = listOf("back", "home", "recents", "volume", "brightness", "settings")
+        val order = if (popupOrder.isNotEmpty()) popupOrder else defaultPopupOrder
+        val used = HashSet<String>()
+        fun add(id: String) {
+            if (!used.add(id)) return
+            popupItems[id]?.invoke()
+        }
+        for (id in order) add(id)
+        for (id in defaultPopupOrder) add(id)
+        for (pkg in selectedApps) add("pkg:$pkg")
+        for (toolId in selectedTools) add(toolId)
 
         scroll.addView(
             content,
@@ -2016,7 +2090,6 @@ class FloatingBallService : Service() {
         menuLp = lp
         try {
             windowManager.addView(root, lp)
-            mainHandler.postDelayed({ hideMenu() }, 4500L)
         } catch (_: Exception) {
             menuView = null
             menuLp = null
@@ -2551,6 +2624,26 @@ class FloatingBallService : Service() {
                 launchPackage(pkg)
             }
         }
+        for (toolId in selectedTools) {
+            val toolLabel = toolLabel(toolId)
+            val pngKey = when (toolId) {
+                "tool:tts"    -> KEY_TOOL_TTS_ICON_PNG
+                "tool:dict"   -> KEY_TOOL_DICT_ICON_PNG
+                "tool:trans"  -> KEY_TOOL_TRANS_ICON_PNG
+                "tool:search" -> KEY_TOOL_SEARCH_ICON_PNG
+                else          -> null
+            }
+            val toolPng = pngKey?.let { try { getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE).getString(it, null) } catch (_: Exception) { null } }
+            byId[toolId] = FsItem(
+                id = toolId,
+                title = toolLabel,
+                iconId = toolIconId(toolId),
+                iconPngBase64 = toolPng
+            ) {
+                hideMenu()
+                openToolOverlay(toolId)
+            }
+        }
 
         val defaultOrder = listOf("back", "home", "volume", "brightness", "recents", "settings")
         val order = if (fsOrder.isNotEmpty()) fsOrder else defaultOrder
@@ -2567,6 +2660,7 @@ class FloatingBallService : Service() {
         for (id in order) addOrdered(id)
         for (id in defaultOrder) addOrdered(id)
         for (pkg in selectedApps) addOrdered("pkg:$pkg")
+        for (toolId in selectedTools) addOrdered(toolId)
 
         val gapSystem = dp(fsTileGapDp.coerceIn(0, 40))
         val gapApps = dp(fsAppsTileGapDp.coerceIn(0, 40))
@@ -4279,12 +4373,723 @@ class FloatingBallService : Service() {
         return (value.toFloat() * density).toInt()
     }
 
+    fun centerBall() {
+        mainHandler.post {
+            val container = ballView ?: return@post
+            val lp = ballLp ?: return@post
+            val windowManager = wm ?: return@post
+            val metrics = resources.displayMetrics
+            val screenW = metrics.widthPixels
+            val screenH = metrics.heightPixels
+            val sizePx = dp(ballSizeDp.coerceIn(36, 120))
+            val targetX = (screenW - sizePx) / 2
+            val targetY = (screenH - sizePx) / 2
+            val fromX = lp.x
+            val fromY = lp.y
+            if (fromX == targetX && fromY == targetY) return@post
+            val anim = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 300L
+                interpolator = DecelerateInterpolator()
+                addUpdateListener { a ->
+                    val t = a.animatedFraction
+                    lp.x = (fromX + ((targetX - fromX).toFloat() * t)).roundToInt()
+                    lp.y = (fromY + ((targetY - fromY).toFloat() * t)).roundToInt()
+                    try { windowManager.updateViewLayout(container, lp) } catch (_: Exception) {}
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                        savePosition(lp.x, lp.y)
+                    }
+                })
+            }
+            try { anim.start() } catch (_: Exception) {}
+        }
+    }
+
     private fun savePosition(x: Int, y: Int) {
         try {
             val prefs = getSharedPreferences(PREFS_POS, Context.MODE_PRIVATE)
             prefs.edit().putInt(KEY_POS_X, x).putInt(KEY_POS_Y, y).apply()
         } catch (_: Exception) {
         }
+    }
+
+    // ─── Tool overlay helpers ────────────────────────────────────────────────
+
+    private fun toolLabel(toolId: String) = when (toolId) {
+        "tool:tts"    -> "Lector TTS"
+        "tool:dict"   -> "Diccionario"
+        "tool:trans"  -> "Traductor"
+        "tool:search" -> "Buscar"
+        else          -> toolId
+    }
+
+    private fun toolIconId(toolId: String) = when (toolId) {
+        "tool:tts"    -> "record_voice_over"
+        "tool:dict"   -> "menu_book"
+        "tool:trans"  -> "translate"
+        "tool:search" -> "search"
+        else          -> "info"
+    }
+
+    private fun toolIconDrawable(toolId: String, color: Int, sizePx: Int): android.graphics.drawable.Drawable {
+        // Try stored PNG first
+        val pngKey = when (toolId) {
+            "tool:tts"    -> KEY_TOOL_TTS_ICON_PNG
+            "tool:dict"   -> KEY_TOOL_DICT_ICON_PNG
+            "tool:trans"  -> KEY_TOOL_TRANS_ICON_PNG
+            "tool:search" -> KEY_TOOL_SEARCH_ICON_PNG
+            else          -> null
+        }
+        if (pngKey != null) {
+            val b64 = try { getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE).getString(pngKey, null) } catch (_: Exception) { null }
+            if (!b64.isNullOrBlank()) {
+                try {
+                    val bytes = Base64.decode(b64, Base64.DEFAULT)
+                    val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    if (bmp != null) {
+                        val scaled = android.graphics.Bitmap.createScaledBitmap(bmp, sizePx, sizePx, true)
+                        val d = android.graphics.drawable.BitmapDrawable(resources, scaled)
+                        d.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN)
+                        return d
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+        // Fallback: render emoji
+        val text = when (toolId) {
+            "tool:tts"    -> "🎙"
+            "tool:dict"   -> "📖"
+            "tool:trans"  -> "🔤"
+            "tool:search" -> "🔍"
+            else          -> "?"
+        }
+        val tv = TextView(this).apply {
+            this.text = text
+            textSize = sizePx / resources.displayMetrics.density * 0.6f
+            setTextColor(color)
+            gravity = Gravity.CENTER
+        }
+        tv.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(sizePx, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(sizePx, android.view.View.MeasureSpec.EXACTLY)
+        )
+        tv.layout(0, 0, sizePx, sizePx)
+        val bmp = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bmp)
+        tv.draw(canvas)
+        return android.graphics.drawable.BitmapDrawable(resources, bmp)
+    }
+
+    private fun getToolOffsetX(toolId: String): Int {
+        val key = when (toolId) {
+            "tool:tts"    -> KEY_TOOL_TTS_OFFSET_X
+            "tool:dict"   -> KEY_TOOL_DICT_OFFSET_X
+            "tool:trans"  -> KEY_TOOL_TRANS_OFFSET_X
+            "tool:search" -> KEY_TOOL_SEARCH_OFFSET_X
+            else          -> null
+        } ?: return 40
+        return readIntPref(getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE), key, 40)
+    }
+
+    private fun getToolOffsetY(toolId: String): Int {
+        val key = when (toolId) {
+            "tool:tts"    -> KEY_TOOL_TTS_OFFSET_Y
+            "tool:dict"   -> KEY_TOOL_DICT_OFFSET_Y
+            "tool:trans"  -> KEY_TOOL_TRANS_OFFSET_Y
+            "tool:search" -> KEY_TOOL_SEARCH_OFFSET_Y
+            else          -> null
+        } ?: return 200
+        return readIntPref(getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE), key, 200)
+    }
+
+    private fun makeToolDragListener(lp: WindowManager.LayoutParams, onRelease: (Int, Int) -> Unit): View.OnTouchListener {
+        var dx = 0f; var dy = 0f; var startX = 0; var startY = 0; var moved = false
+        return View.OnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    dx = lp.x - event.rawX
+                    dy = lp.y - event.rawY
+                    startX = lp.x; startY = lp.y
+                    moved = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val nx = (event.rawX + dx).toInt()
+                    val ny = (event.rawY + dy).toInt()
+                    if (abs(nx - startX) > 8 || abs(ny - startY) > 8) moved = true
+                    lp.x = nx; lp.y = ny
+                    try { wm?.updateViewLayout(toolOverlays[lp.title as? String ?: ""], lp) } catch (_: Exception) {}
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (moved) onRelease(lp.x, lp.y)
+                    moved
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun overlayLayoutParams(toolId: String): WindowManager.LayoutParams {
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else
+            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+        val lp = WindowManager.LayoutParams(
+            dp(300), WindowManager.LayoutParams.WRAP_CONTENT,
+            type,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        )
+        lp.gravity = Gravity.TOP or Gravity.START
+        lp.x = dp(getToolOffsetX(toolId))
+        lp.y = dp(getToolOffsetY(toolId))
+        lp.title = toolId
+        return lp
+    }
+
+    private fun overlayContainer(toolId: String, onClose: () -> Unit, draggableView: View? = null): Pair<LinearLayout, WindowManager.LayoutParams> {
+        val lp = overlayLayoutParams(toolId)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = GradientDrawable().apply {
+                setColor(popupBgColor)
+                cornerRadius = dp(12).toFloat()
+            }
+            elevation = dp(8).toFloat()
+        }
+        // Title bar with drag + close
+        val titleBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val titleTv = TextView(this).apply {
+            text = toolLabel(toolId)
+            setTextColor(popupIconColor)
+            textSize = 14f
+            setPadding(dp(4), 0, 0, 0)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val closeBtn = TextView(this).apply {
+            text = "✕"
+            setTextColor(0xFFFF6B6B.toInt())
+            textSize = 16f
+            setPadding(dp(8), dp(2), dp(4), dp(2))
+            setOnClickListener { onClose() }
+        }
+        titleBar.addView(titleTv)
+        titleBar.addView(closeBtn)
+        container.addView(titleBar)
+
+        // Draggable via title bar
+        val dragListener = View.OnTouchListener { v, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> { v.tag = floatArrayOf(lp.x - event.rawX, lp.y - event.rawY, 0f); true }
+                MotionEvent.ACTION_MOVE -> {
+                    val tag = v.tag as? FloatArray ?: return@OnTouchListener false
+                    val nx = (event.rawX + tag[0]).toInt()
+                    val ny = (event.rawY + tag[1]).toInt()
+                    tag[2] = 1f
+                    lp.x = nx; lp.y = ny
+                    try { wm?.updateViewLayout(container, lp) } catch (_: Exception) {}
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val tag = v.tag as? FloatArray ?: return@OnTouchListener false
+                    if (tag[2] > 0f) saveToolOffset(toolId, lp.x, lp.y)
+                    tag[2] > 0f
+                }
+                else -> false
+            }
+        }
+        titleBar.setOnTouchListener(dragListener)
+        titleTv.setOnTouchListener(dragListener)
+
+        return Pair(container, lp)
+    }
+
+    private fun saveToolOffset(toolId: String, x: Int, y: Int) {
+        try {
+            val xKey = when (toolId) {
+                "tool:tts"    -> KEY_TOOL_TTS_OFFSET_X
+                "tool:dict"   -> KEY_TOOL_DICT_OFFSET_X
+                "tool:trans"  -> KEY_TOOL_TRANS_OFFSET_X
+                "tool:search" -> KEY_TOOL_SEARCH_OFFSET_X
+                else          -> return
+            }
+            val yKey = when (toolId) {
+                "tool:tts"    -> KEY_TOOL_TTS_OFFSET_Y
+                "tool:dict"   -> KEY_TOOL_DICT_OFFSET_Y
+                "tool:trans"  -> KEY_TOOL_TRANS_OFFSET_Y
+                "tool:search" -> KEY_TOOL_SEARCH_OFFSET_Y
+                else          -> return
+            }
+            val density = resources.displayMetrics.density
+            val xDp = (x / density).toInt()
+            val yDp = (y / density).toInt()
+            getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE).edit()
+                .putInt(xKey, xDp).putInt(yKey, yDp).apply()
+        } catch (_: Exception) {}
+    }
+
+    private fun closeAllToolOverlays() {
+        toolOverlays.forEach { (_, view) ->
+            view?.let { try { wm?.removeView(it) } catch (_: Exception) {} }
+        }
+        toolOverlays.clear()
+    }
+
+    private fun closeToolOverlay(toolId: String) {
+        toolOverlays[toolId]?.let { view ->
+            try { wm?.removeView(view) } catch (_: Exception) {}
+        }
+        toolOverlays.remove(toolId)
+    }
+
+    private fun openToolOverlay(toolId: String) {
+        if (!canDrawOverlays()) return
+        // Close existing instance of the same tool first
+        closeToolOverlay(toolId)
+        when (toolId) {
+            "tool:tts"    -> openTtsOverlay()
+            "tool:dict"   -> openDictionaryOverlay()
+            "tool:trans"  -> openTranslatorOverlay()
+            "tool:search" -> openSearchOverlay()
+        }
+    }
+
+    // ─── Search overlay ──────────────────────────────────────────────────────
+
+    private fun openSearchOverlay() {
+        val toolId = "tool:search"
+        val (container, lp) = overlayContainer(toolId, { closeToolOverlay(toolId) })
+        val hintColor = (popupIconColor and 0x00FFFFFF) or 0x66000000.toInt()
+
+        val input = EditText(this).apply {
+            hint = "Buscar en Google..."
+            setTextColor(popupIconColor)
+            setHintTextColor(hintColor)
+            background = GradientDrawable().apply {
+                setColor(popupButtonColor)
+                cornerRadius = dp(8).toFloat()
+            }
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            isSingleLine = true
+        }
+
+        val searchBtn = Button(this).apply {
+            text = "Buscar"
+            setTextColor(popupIconColor)
+            background = GradientDrawable().apply {
+                setColor(popupButtonColor)
+                cornerRadius = dp(8).toFloat()
+            }
+            textSize = 13f
+            setPadding(dp(8), dp(4), dp(8), dp(4))
+        }
+
+        // Allow keyboard input by toggling FLAG_NOT_FOCUSABLE
+        input.setOnFocusChangeListener { _, hasFocus ->
+            val flags = if (hasFocus)
+                lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            else
+                lp.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            lp.flags = flags
+            try { wm?.updateViewLayout(container, lp) } catch (_: Exception) {}
+        }
+
+        val doSearch = {
+            val q = input.text.toString().trim()
+            if (q.isNotEmpty()) {
+                try {
+                    val uri = android.net.Uri.parse("https://www.google.com/search?q=${URLEncoder.encode(q, "UTF-8")}")
+                    startActivity(Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+                } catch (_: Exception) {}
+            }
+        }
+
+        input.setOnEditorActionListener { _, _, _ -> doSearch(); true }
+        searchBtn.setOnClickListener { doSearch() }
+
+        container.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)).apply { topMargin = dp(8) })
+        container.addView(searchBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)).apply { topMargin = dp(6) })
+
+        try {
+            wm?.addView(container, lp)
+            toolOverlays[toolId] = container
+        } catch (_: Exception) {}
+    }
+
+    // ─── Dictionary overlay ──────────────────────────────────────────────────
+
+    private fun openDictionaryOverlay() {
+        val toolId = "tool:dict"
+        val (container, lp) = overlayContainer(toolId, { closeToolOverlay(toolId) })
+
+        val hintColor = (popupIconColor and 0x00FFFFFF) or 0x66000000.toInt()
+        var currentLang = "es"
+        val langToggle = TextView(this).apply {
+            text = "ES"
+            setTextColor(popupIconColor)
+            background = GradientDrawable().apply {
+                setColor(popupButtonColor)
+                cornerRadius = dp(6).toFloat()
+            }
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+            gravity = Gravity.CENTER
+            textSize = 12f
+        }
+
+        val input = EditText(this).apply {
+            hint = "Escribe una palabra..."
+            setTextColor(popupIconColor)
+            setHintTextColor(hintColor)
+            background = GradientDrawable().apply {
+                setColor(popupButtonColor)
+                cornerRadius = dp(8).toFloat()
+            }
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            isSingleLine = true
+        }
+
+        val resultTv = TextView(this).apply {
+            setTextColor(popupIconColor)
+            textSize = 12f
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+        }
+
+        val searchBtn = Button(this).apply {
+            text = "Buscar"
+            setTextColor(popupIconColor)
+            background = GradientDrawable().apply {
+                setColor(popupButtonColor)
+                cornerRadius = dp(8).toFloat()
+            }
+            textSize = 13f
+        }
+
+        input.setOnFocusChangeListener { _, hasFocus ->
+            lp.flags = if (hasFocus)
+                lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            else
+                lp.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            try { wm?.updateViewLayout(container, lp) } catch (_: Exception) {}
+        }
+
+        langToggle.setOnClickListener {
+            currentLang = if (currentLang == "es") "en" else "es"
+            langToggle.text = currentLang.uppercase(Locale.ROOT)
+        }
+
+        val doSearch = {
+            val word = input.text.toString().trim()
+            if (word.isNotEmpty()) {
+                resultTv.text = "Buscando..."
+                val lang = currentLang
+                Thread {
+                    try {
+                        val result = if (lang == "es") {
+                            searchWiktionary(word)
+                        } else {
+                            val url = URL("https://api.dictionaryapi.dev/api/v2/entries/en/${URLEncoder.encode(word, "UTF-8")}")
+                            val conn = url.openConnection() as java.net.HttpURLConnection
+                            conn.connectTimeout = 5000; conn.readTimeout = 5000
+                            val code = conn.responseCode
+                            val body = if (code == 200) conn.inputStream.bufferedReader().readText()
+                                       else conn.errorStream?.bufferedReader()?.readText() ?: ""
+                            conn.disconnect()
+                            if (code == 200) parseDictResponse(body) else "No se encontró la palabra."
+                        }
+                        mainHandler.post { resultTv.text = result }
+                    } catch (e: Exception) {
+                        mainHandler.post { resultTv.text = "Error de conexión." }
+                    }
+                }.start()
+            }
+        }
+
+        input.setOnEditorActionListener { _, _, _ -> doSearch(); true }
+        searchBtn.setOnClickListener { doSearch() }
+
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        topRow.addView(langToggle, LinearLayout.LayoutParams(dp(44), dp(36)))
+        topRow.addView(input, LinearLayout.LayoutParams(0, dp(40), 1f).apply { leftMargin = dp(6) })
+
+        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
+        scroll.addView(resultTv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        container.addView(topRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        container.addView(searchBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(38)).apply { topMargin = dp(6) })
+        container.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(200)).apply { topMargin = dp(8) })
+
+        try {
+            wm?.addView(container, lp)
+            toolOverlays[toolId] = container
+        } catch (_: Exception) {}
+    }
+
+    private fun parseDictResponse(json: String): String {
+        return try {
+            val arr = JSONArray(json)
+            val sb = StringBuilder()
+            for (i in 0 until arr.length().coerceAtMost(2)) {
+                val entry = arr.getJSONObject(i)
+                if (i == 0) sb.append(entry.optString("word", "")).append("\n\n")
+                val meanings = entry.optJSONArray("meanings") ?: continue
+                for (j in 0 until meanings.length().coerceAtMost(3)) {
+                    val m = meanings.getJSONObject(j)
+                    val pos = m.optString("partOfSpeech", "")
+                    if (pos.isNotEmpty()) sb.append("[$pos]\n")
+                    val defs = m.optJSONArray("definitions") ?: continue
+                    for (k in 0 until defs.length().coerceAtMost(2)) {
+                        val d = defs.getJSONObject(k)
+                        sb.append("• ").append(d.optString("definition", "")).append("\n")
+                        val ex = d.optString("example", "")
+                        if (ex.isNotEmpty()) sb.append("  ej: \"$ex\"\n")
+                    }
+                    sb.append("\n")
+                }
+            }
+            sb.toString().trimEnd()
+        } catch (_: Exception) {
+            "Error al interpretar la respuesta."
+        }
+    }
+
+    private fun searchWiktionary(word: String): String {
+        return try {
+            val encoded = URLEncoder.encode(word, "UTF-8")
+            val url = URL("https://es.wiktionary.org/w/api.php?action=query&titles=$encoded&prop=extracts&format=json&explaintext=true&redirects=1")
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 6000; conn.readTimeout = 6000
+            conn.setRequestProperty("User-Agent", "Connect-App/1.0")
+            val code = conn.responseCode
+            if (code != 200) { conn.disconnect(); return "No se encontró la palabra." }
+            val body = conn.inputStream.bufferedReader().readText()
+            conn.disconnect()
+            val root = JSONObject(body)
+            val pages = root.optJSONObject("query")?.optJSONObject("pages") ?: return "No se encontró la palabra."
+            val page = pages.optJSONObject(pages.keys().next()) ?: return "No se encontró la palabra."
+            if (page.has("missing")) return "No se encontró \"$word\" en el diccionario."
+            val extract = page.optString("extract", "").trim()
+            if (extract.isEmpty()) return "No se encontró la definición."
+            parseWiktionaryExtract(word, extract)
+        } catch (_: Exception) {
+            "Error de conexión."
+        }
+    }
+
+    private fun parseWiktionaryExtract(word: String, extract: String): String {
+        val sb = StringBuilder()
+        sb.append(word).append("\n\n")
+        val lines = extract.split("\n")
+        var currentPos = ""
+        var defCount = 0
+        val headerRegex = Regex("""^={2,4}\s*(.+?)\s*={2,4}$""")
+        val defRegex = Regex("""^[#\d][.:)\s]\s*(.+)""")
+        val langHeaders = setOf("Español", "English", "Inglés", "Francés", "Alemán", "Portugués")
+        for (line in lines) {
+            val t = line.trim()
+            if (t.isEmpty()) continue
+            val headerMatch = headerRegex.find(t)
+            if (headerMatch != null) {
+                val h = headerMatch.groupValues[1]
+                if (!langHeaders.contains(h)) {
+                    if (currentPos != h) {
+                        if (defCount > 0) sb.append("\n")
+                        sb.append("[").append(h).append("]\n")
+                        currentPos = h; defCount = 0
+                    }
+                }
+                continue
+            }
+            val defMatch = defRegex.find(t)
+            if (defMatch != null && currentPos.isNotEmpty()) {
+                val def = defMatch.groupValues[1].trim()
+                if (def.isNotEmpty() && !def.startsWith("=")) {
+                    sb.append("• ").append(def).append("\n")
+                    defCount++
+                }
+                continue
+            }
+            if ((t.startsWith("•") || t.startsWith("-")) && currentPos.isNotEmpty()) {
+                val def = t.removePrefix("•").removePrefix("-").trim()
+                if (def.isNotEmpty()) { sb.append("• ").append(def).append("\n"); defCount++ }
+            }
+        }
+        val result = sb.toString().trimEnd()
+        if (result == word) return "No se encontró una definición estructurada para \"$word\"."
+        return result
+    }
+
+    // ─── Translator overlay ──────────────────────────────────────────────────
+
+    private fun openTranslatorOverlay() {
+        val toolId = "tool:trans"
+        val (container, lp) = overlayContainer(toolId, { closeToolOverlay(toolId) })
+
+        var fromLang = "es"; var toLang = "en"
+
+        val langRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val hintColor = (popupIconColor and 0x00FFFFFF) or 0x66000000.toInt()
+        val fromBtn = TextView(this).apply {
+            text = "ES"
+            setTextColor(popupIconColor)
+            background = GradientDrawable().apply { setColor(popupButtonColor); cornerRadius = dp(6).toFloat() }
+            setPadding(dp(10), dp(4), dp(10), dp(4)); gravity = Gravity.CENTER; textSize = 13f
+        }
+        val swapBtn = TextView(this).apply {
+            text = "⇄"
+            setTextColor(popupIconColor)
+            setPadding(dp(10), 0, dp(10), 0); gravity = Gravity.CENTER; textSize = 18f
+        }
+        val toBtn = TextView(this).apply {
+            text = "EN"
+            setTextColor(popupIconColor)
+            background = GradientDrawable().apply { setColor(popupButtonColor); cornerRadius = dp(6).toFloat() }
+            setPadding(dp(10), dp(4), dp(10), dp(4)); gravity = Gravity.CENTER; textSize = 13f
+        }
+
+        fun updateLangBtns() { fromBtn.text = fromLang.uppercase(Locale.ROOT); toBtn.text = toLang.uppercase(Locale.ROOT) }
+
+        swapBtn.setOnClickListener { val t = fromLang; fromLang = toLang; toLang = t; updateLangBtns() }
+
+        langRow.addView(fromBtn)
+        langRow.addView(swapBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        langRow.addView(toBtn)
+
+        val input = EditText(this).apply {
+            hint = "Texto a traducir..."
+            setTextColor(popupIconColor)
+            setHintTextColor(hintColor)
+            background = GradientDrawable().apply { setColor(popupButtonColor); cornerRadius = dp(8).toFloat() }
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13f)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 2; maxLines = 4
+        }
+
+        val resultTv = TextView(this).apply {
+            setTextColor(popupIconColor); textSize = 13f
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+        }
+
+        val translateBtn = Button(this).apply {
+            text = "Traducir"
+            setTextColor(popupIconColor)
+            background = GradientDrawable().apply { setColor(popupButtonColor); cornerRadius = dp(8).toFloat() }
+            textSize = 13f
+        }
+
+        input.setOnFocusChangeListener { _, hasFocus ->
+            lp.flags = if (hasFocus)
+                lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            else
+                lp.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            try { wm?.updateViewLayout(container, lp) } catch (_: Exception) {}
+        }
+
+        translateBtn.setOnClickListener {
+            val text = input.text.toString().trim()
+            if (text.isEmpty()) return@setOnClickListener
+            resultTv.text = "Traduciendo..."
+            val from = fromLang; val to = toLang
+            Thread {
+                try {
+                    val q = URLEncoder.encode(text, "UTF-8")
+                    val url = URL("https://api.mymemory.translated.net/get?q=$q&langpair=$from|$to")
+                    val conn = url.openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 5000; conn.readTimeout = 5000
+                    val body = conn.inputStream.bufferedReader().readText()
+                    conn.disconnect()
+                    val translated = JSONObject(body)
+                        .getJSONObject("responseData")
+                        .getString("translatedText")
+                    mainHandler.post { resultTv.text = translated }
+                } catch (_: Exception) {
+                    mainHandler.post { resultTv.text = "Error de traducción." }
+                }
+            }.start()
+        }
+
+        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false }
+        scroll.addView(resultTv, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+
+        container.addView(langRow, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        container.addView(input, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        container.addView(translateBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)).apply { topMargin = dp(6) })
+        container.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(100)).apply { topMargin = dp(8) })
+
+        try {
+            wm?.addView(container, lp)
+            toolOverlays[toolId] = container
+        } catch (_: Exception) {}
+    }
+
+    // ─── TTS overlay ─────────────────────────────────────────────────────────
+
+    private fun openTtsOverlay() {
+        val toolId = "tool:tts"
+        val (container, lp) = overlayContainer(toolId, { closeToolOverlay(toolId) })
+
+        val hintColor = (popupIconColor and 0x00FFFFFF) or 0x66000000.toInt()
+        val input = EditText(this).apply {
+            hint = "Pega el texto a leer aquí..."
+            setTextColor(popupIconColor)
+            setHintTextColor(hintColor)
+            background = GradientDrawable().apply { setColor(popupButtonColor); cornerRadius = dp(8).toFloat() }
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13f)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 2; maxLines = 4
+        }
+        input.setOnFocusChangeListener { _, hasFocus ->
+            lp.flags = if (hasFocus)
+                lp.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            else
+                lp.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            try { wm?.updateViewLayout(container, lp) } catch (_: Exception) {}
+        }
+
+        val toggleBtn = Button(this).apply {
+            text = "Abrir lector Piper"
+            setTextColor(0xFFFFFFFF.toInt())
+            background = GradientDrawable().apply { setColor(0xFF50FA7B.toInt()); cornerRadius = dp(8).toFloat() }
+            textSize = 12f
+        }
+
+        toggleBtn.setOnClickListener {
+            val rawText = input.text.toString().trim()
+            if (rawText.isEmpty()) return@setOnClickListener
+            try {
+                getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE).edit()
+                    .putString("flutter.floating_ball_tts_pending_text", rawText)
+                    .apply()
+                val launchIntent = Intent(this, MainActivity::class.java).apply {
+                    action = "DEVICE_FINDER_ACTION"
+                    putExtra("navigate_to", "/lector_tts")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                startActivity(launchIntent)
+                closeToolOverlay(toolId)
+            } catch (_: Exception) {}
+        }
+
+        val matchWrap = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        container.addView(input, matchWrap.also { it.topMargin = dp(8) })
+        container.addView(toggleBtn, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40)).also { it.topMargin = dp(8) })
+
+        try {
+            wm?.addView(container, lp)
+            toolOverlays[toolId] = container
+        } catch (_: Exception) {}
     }
 
     private fun readSavedPosition(): Pair<Int, Int> {

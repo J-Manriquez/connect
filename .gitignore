@@ -1,3 +1,6 @@
+# APKs de release (demasiado grandes para git; subir como assets de GitHub Release)
+releases/*.apk
+
 # Miscellaneous
 *.class
 *.log
@@ -32,6 +35,9 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+
+# Variables de entorno (contiene el PAT de GitHub para auto-actualización)
+.env
 
 # Symbolication related
 app.*.symbols

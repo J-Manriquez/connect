@@ -345,6 +345,7 @@ class BtClassicServerService : Service() {
                         "engine_ready=${flutterEngine != null} btHiveChannel_ready=${btHiveChannel != null} btHiveReady=$btHiveReady"
                     )
                     startReaderThread(socket)
+                    maybeSendFirebaseLink()
                 } catch (_: Exception) {
                     break
                 }
@@ -410,6 +411,25 @@ class BtClassicServerService : Service() {
         try { MediaWidgetProviderStyle3.updateAll(applicationContext) } catch (_: Exception) {}
         try { MediaWidgetProviderStyle4.updateAll(applicationContext) } catch (_: Exception) {}
         try { MediaWidgetProviderStyle5.updateAll(applicationContext) } catch (_: Exception) {}
+    }
+
+    /// Si este dispositivo es EMISOR (no receptor), envía su device_id de
+    /// Firestore al peer para que se auto-vincule por Firebase.
+    private fun maybeSendFirebaseLink() {
+        try {
+            // Solo el EMISOR (el que captura notificaciones) ofrece su device_id.
+            if (!NotificationListener.isRunning) return
+            val prefs = applicationContext
+                .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val deviceId = prefs.getString("flutter.device_id", null)?.trim() ?: ""
+            if (deviceId.isEmpty()) return
+            val obj = JSONObject()
+            obj.put("type", "firebase_link")
+            obj.put("deviceId", deviceId)
+            obj.put("timestamp", System.currentTimeMillis())
+            sendToPeers(obj.toString())
+            println("[btclassic][server] firebase_link enviado deviceId=$deviceId")
+        } catch (_: Exception) {}
     }
 
     private fun sendDebugToPeers(source: String, message: String) {
@@ -762,6 +782,72 @@ class BtClassicServerService : Service() {
                 val message = obj.optString("message", "")
                 val ts = try { obj.optLong("timestamp", 0L) } catch (_: Exception) { 0L }
                 println("[btclassic][server][peer_debug][$source][$ts] $message")
+                return
+            }
+            if (type == "firebase_link") {
+                // El emisor nos envía su device_id (= código de Firestore). Si
+                // somos receptor, lo guardamos como dispositivo vinculado y
+                // avisamos a Dart para actualizar el estado en Firebase.
+                val deviceId = obj.optString("deviceId", "").trim()
+                val prefs = applicationContext
+                    .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                // Solo guardamos si NO somos el emisor (no capturamos notificaciones).
+                if (!NotificationListener.isRunning && deviceId.isNotEmpty()) {
+                    prefs.edit().putString("flutter.linked_device_id", deviceId).apply()
+                    println("[btclassic][server] firebase_link guardado linked=$deviceId")
+                    ensureFlutterEngine()
+                    val channel = btHiveChannel
+                    if (channel != null && btHiveReady) {
+                        try {
+                            mainHandler.post {
+                                try {
+                                    channel.invokeMethod(
+                                        "onFirebaseLink",
+                                        hashMapOf<String, Any?>("deviceId" to deviceId)
+                                    )
+                                } catch (_: Exception) {}
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+                return
+            }
+            if (type == "query_notif_active") {
+                // El peer pregunta si una notificación sigue en la barra de ESTE
+                // dispositivo. Respondemos con su estado actual.
+                val sbnKey = obj.optString("sbnKey", "").trim()
+                val requestId = obj.optString("requestId", "").trim()
+                val active = try {
+                    NotificationListener.isNotificationActive(sbnKey)
+                } catch (_: Exception) { false }
+                val resp = JSONObject()
+                resp.put("type", "notif_active_state")
+                resp.put("sbnKey", sbnKey)
+                resp.put("active", active)
+                resp.put("requestId", requestId)
+                resp.put("timestamp", System.currentTimeMillis())
+                sendToPeers(resp.toString())
+                return
+            }
+            if (type == "notif_active_state") {
+                // Respuesta a nuestra consulta. La guardamos en SharedPreferences
+                // (puente fiable entre isletas) para que la UI Flutter la lea.
+                val sbnKey = obj.optString("sbnKey", "").trim()
+                val active = obj.optBoolean("active", false)
+                val ts = try { obj.optLong("timestamp", System.currentTimeMillis()) } catch (_: Exception) { System.currentTimeMillis() }
+                if (sbnKey.isNotBlank()) {
+                    try {
+                        val resp = JSONObject()
+                        resp.put("sbnKey", sbnKey)
+                        resp.put("active", active)
+                        resp.put("timestamp", ts)
+                        applicationContext
+                            .getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                            .edit()
+                            .putString("flutter.bt_notif_active_last", resp.toString())
+                            .apply()
+                    } catch (_: Exception) {}
+                }
                 return
             }
             val title = obj.optString("title", "Nueva notificación")

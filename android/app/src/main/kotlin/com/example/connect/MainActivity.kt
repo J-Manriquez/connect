@@ -44,6 +44,7 @@ class MainActivity: FlutterActivity() {
     private val BATTERY_CHANNEL = "com.example.connect/battery" // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
     private val BLE_CHANNEL = "com.example.connect/ble"
     private val FLOATING_BALL_CHANNEL = "com.example.connect/floating_ball"
+    private val TTS_AUDIO_CHANNEL = "com.example.connect/tts_audio"
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
@@ -54,6 +55,7 @@ class MainActivity: FlutterActivity() {
     private lateinit var batteryChannel: MethodChannel // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
     private lateinit var bleChannel: MethodChannel
     private lateinit var floatingBallChannel: MethodChannel
+    private lateinit var ttsAudioChannel: MethodChannel
     private lateinit var activeNotificationsEventsChannel: EventChannel
     private var activeNotificationsEventsSink: EventChannel.EventSink? = null
     private lateinit var appListService: AppListService
@@ -218,6 +220,7 @@ class MainActivity: FlutterActivity() {
         batteryChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_CHANNEL)
         bleChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BLE_CHANNEL)
         floatingBallChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FLOATING_BALL_CHANNEL)
+        ttsAudioChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, TTS_AUDIO_CHANNEL)
         btAdapter = BluetoothAdapter.getDefaultAdapter()
         
         // Iniciar automáticamente el servicio si el permiso está concedido
@@ -709,6 +712,52 @@ class MainActivity: FlutterActivity() {
             }
         }
 
+        ttsAudioChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "cacheAndSetMusicVolumePercent" -> {
+                    try {
+                        val audio = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                        if (audio == null) {
+                            result.error("NO_AUDIO", "AudioManager no disponible", null)
+                            return@setMethodCallHandler
+                        }
+
+                        val max = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                        val current = audio.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                        val percent = (call.argument<Int>("percent") ?: 100).coerceIn(0, 100)
+                        val target = ((max * percent) / 100).coerceIn(0, max)
+                        audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, target, 0)
+                        result.success(current)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Error ajustando volumen TTS: ${e.message}", null)
+                    }
+                }
+                "restoreMusicVolume" -> {
+                    try {
+                        val previous = call.argument<Int>("volume")
+                        if (previous == null) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+
+                        val audio = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                        if (audio == null) {
+                            result.error("NO_AUDIO", "AudioManager no disponible", null)
+                            return@setMethodCallHandler
+                        }
+
+                        val max = audio.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                        val safeLevel = previous.coerceIn(0, max)
+                        audio.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, safeLevel, 0)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", "Error restaurando volumen TTS: ${e.message}", null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         floatingBallChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getFsBarSystemState" -> {
@@ -868,6 +917,32 @@ class MainActivity: FlutterActivity() {
                         setFloatingBallEnabledFalse()
                         stopFloatingBallService()
                         result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "centerBall" -> {
+                    try {
+                        val svc = FloatingBallService.instance
+                        if (svc != null) {
+                            svc.centerBall()
+                        } else {
+                            // Fallback: service not running, ignore
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "getDeviceAbis" -> {
+                    try {
+                        val abis = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            Build.SUPPORTED_ABIS.toList()
+                        } else {
+                            @Suppress("DEPRECATION")
+                            listOfNotNull(Build.CPU_ABI, Build.CPU_ABI2).filter { it.isNotBlank() }
+                        }
+                        result.success(abis)
                     } catch (e: Exception) {
                         result.error("ERROR", e.message, null)
                     }

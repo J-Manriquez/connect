@@ -270,6 +270,10 @@ class FloatingBallService {
   static const String _keyPopupOffsetYDp = 'floating_ball_popup_offset_y_dp';
   static const String _keyPopupMediaOffsetXDp = 'floating_ball_popup_media_offset_x_dp';
   static const String _keyPopupMediaOffsetYDp = 'floating_ball_popup_media_offset_y_dp';
+  static const String _keyPopupButtonRadiusDp = 'floating_ball_popup_button_radius_dp';
+  static const String _keyPopupButtonPaddingDp = 'floating_ball_popup_button_padding_dp';
+  static const String _keyPopupAppButtonPaddingDp = 'floating_ball_popup_app_button_padding_dp';
+  static const String _keyPopupOrderJson = 'floating_ball_popup_order_json';
   static const String _keyPopupBackIconId = 'floating_ball_popup_back_icon_id';
   static const String _keyPopupHomeIconId = 'floating_ball_popup_home_icon_id';
   static const String _keyPopupRecentsIconId = 'floating_ball_popup_recents_icon_id';
@@ -338,6 +342,25 @@ class FloatingBallService {
   static const String _keyFullScreenOrderJson = 'floating_ball_fs_order_json';
   static const String _keyFullScreenAppLabelsJson =
       'floating_ball_fs_app_labels_json';
+
+  // Herramientas del menú
+  static const String _keySelectedToolsJson = 'floating_ball_selected_tools_json';
+
+  // Iconos PNG de las 4 herramientas
+  static const String _keyToolTtsIconPngBase64    = 'floating_ball_tool_tts_icon_png_base64';
+  static const String _keyToolDictIconPngBase64   = 'floating_ball_tool_dict_icon_png_base64';
+  static const String _keyToolTransIconPngBase64  = 'floating_ball_tool_trans_icon_png_base64';
+  static const String _keyToolSearchIconPngBase64 = 'floating_ball_tool_search_icon_png_base64';
+
+  // Offsets X/Y de los widgets flotantes de herramientas (en dp)
+  static const String _keyToolTtsOffsetX    = 'floating_ball_tool_tts_offset_x';
+  static const String _keyToolTtsOffsetY    = 'floating_ball_tool_tts_offset_y';
+  static const String _keyToolDictOffsetX   = 'floating_ball_tool_dict_offset_x';
+  static const String _keyToolDictOffsetY   = 'floating_ball_tool_dict_offset_y';
+  static const String _keyToolTransOffsetX  = 'floating_ball_tool_trans_offset_x';
+  static const String _keyToolTransOffsetY  = 'floating_ball_tool_trans_offset_y';
+  static const String _keyToolSearchOffsetX = 'floating_ball_tool_search_offset_x';
+  static const String _keyToolSearchOffsetY = 'floating_ball_tool_search_offset_y';
 
   static const String _keyGesturesEnabled = 'floating_ball_gestures_enabled';
   static const String _keyGestureLongPressMs =
@@ -497,6 +520,9 @@ class FloatingBallService {
   static const int _defaultPopupOffsetYDp = 0;
   static const int _defaultPopupMediaOffsetXDp = 0;
   static const int _defaultPopupMediaOffsetYDp = 0;
+  static const int _defaultPopupButtonRadiusDp = 14;
+  static const int _defaultPopupButtonPaddingDp = 14;
+  static const int _defaultPopupAppButtonPaddingDp = 14;
   static const int _defaultMediaHeightDp = 320;
   static const int _defaultMediaIconSizeDp = 34;
   static const int _defaultMediaTitleSizeSp = 18;
@@ -3008,6 +3034,61 @@ class FloatingBallService {
     await _channel.invokeMethod('updateConfig');
   }
 
+  static Future<int> getPopupButtonRadiusDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyPopupButtonRadiusDp) ?? _defaultPopupButtonRadiusDp).clamp(0, 50);
+  }
+
+  static Future<void> setPopupButtonRadiusDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyPopupButtonRadiusDp, dp.clamp(0, 50));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getPopupButtonPaddingDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyPopupButtonPaddingDp) ?? _defaultPopupButtonPaddingDp).clamp(0, 50);
+  }
+
+  static Future<void> setPopupButtonPaddingDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyPopupButtonPaddingDp, dp.clamp(0, 50));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getPopupAppButtonPaddingDp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyPopupAppButtonPaddingDp) ?? _defaultPopupAppButtonPaddingDp).clamp(0, 50);
+  }
+
+  static Future<void> setPopupAppButtonPaddingDp(int dp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyPopupAppButtonPaddingDp, dp.clamp(0, 50));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<List<String>> getPopupOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keyPopupOrderJson);
+    if (raw == null || raw.trim().isEmpty) return <String>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      }
+      return <String>[];
+    } catch (_) {
+      return <String>[];
+    }
+  }
+
+  static Future<void> setPopupOrder(List<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cleaned = ids.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    await prefs.setString(_keyPopupOrderJson, jsonEncode(cleaned));
+    await _channel.invokeMethod('updateConfig');
+  }
+
   static Future<bool> isGesturesEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_keyGesturesEnabled) ?? _defaultGesturesEnabled;
@@ -3208,5 +3289,114 @@ class FloatingBallService {
   static Future<void> enableAndStart() async {
     await setEnabledTrue();
     await _channel.invokeMethod('enableAndStart');
+  }
+
+  static Future<void> centerBall() async {
+    await _channel.invokeMethod('centerBall');
+  }
+
+  // ─── Herramientas seleccionadas ──────────────────────────────────────────
+
+  static Future<List<String>> getSelectedTools() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_keySelectedToolsJson);
+    if (raw == null || raw.trim().isEmpty) return <String>[];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+      }
+      return <String>[];
+    } catch (_) {
+      return <String>[];
+    }
+  }
+
+  static Future<void> setSelectedTools(List<String> tools) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cleaned = tools.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    await prefs.setString(_keySelectedToolsJson, jsonEncode(cleaned));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  // ─── Offsets X/Y de widgets flotantes de herramientas ────────────────────
+
+  static String _offsetXKeyFor(String toolId) {
+    switch (toolId) {
+      case 'tool:tts':    return _keyToolTtsOffsetX;
+      case 'tool:dict':   return _keyToolDictOffsetX;
+      case 'tool:trans':  return _keyToolTransOffsetX;
+      case 'tool:search': return _keyToolSearchOffsetX;
+      default:            return '';
+    }
+  }
+
+  static String _offsetYKeyFor(String toolId) {
+    switch (toolId) {
+      case 'tool:tts':    return _keyToolTtsOffsetY;
+      case 'tool:dict':   return _keyToolDictOffsetY;
+      case 'tool:trans':  return _keyToolTransOffsetY;
+      case 'tool:search': return _keyToolSearchOffsetY;
+      default:            return '';
+    }
+  }
+
+  static Future<int> getToolOffsetX(String toolId) async {
+    final key = _offsetXKeyFor(toolId);
+    if (key.isEmpty) return 40;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(key) ?? 40;
+  }
+
+  static Future<int> getToolOffsetY(String toolId) async {
+    final key = _offsetYKeyFor(toolId);
+    if (key.isEmpty) return 200;
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(key) ?? 200;
+  }
+
+  static Future<void> setToolOffsetX(String toolId, int value) async {
+    final key = _offsetXKeyFor(toolId);
+    if (key.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(key, value);
+  }
+
+  static Future<void> setToolOffsetY(String toolId, int value) async {
+    final key = _offsetYKeyFor(toolId);
+    if (key.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(key, value);
+  }
+
+  static String _iconPngKeyFor(String toolId) {
+    switch (toolId) {
+      case 'tool:tts':    return _keyToolTtsIconPngBase64;
+      case 'tool:dict':   return _keyToolDictIconPngBase64;
+      case 'tool:trans':  return _keyToolTransIconPngBase64;
+      case 'tool:search': return _keyToolSearchIconPngBase64;
+      default:            return '';
+    }
+  }
+
+  static Future<String?> getToolIconPngBase64(String toolId) async {
+    final key = _iconPngKeyFor(toolId);
+    if (key.isEmpty) return null;
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(key);
+    if (v == null || v.trim().isEmpty) return null;
+    return v;
+  }
+
+  static Future<void> setToolIconPngBase64(String toolId, String? png) async {
+    final key = _iconPngKeyFor(toolId);
+    if (key.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (png == null || png.trim().isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, png);
+    }
+    await _channel.invokeMethod('updateConfig');
   }
 }

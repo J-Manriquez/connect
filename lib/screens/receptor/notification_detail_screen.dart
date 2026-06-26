@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:connect/theme_colors.dart';
 import 'package:connect/services/ble_service.dart';
+import 'package:connect/widgets/stt_mic_button.dart';
 import 'package:connect/services/receptor_service.dart';
 import 'package:connect/services/local_notification_service.dart';
 import 'package:connect/services/notification_cache_service.dart';
@@ -12,6 +13,7 @@ import 'package:connect/services/notification_filter_service.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationDetailScreen extends StatefulWidget {
   final Map<String, dynamic> notificationData;
@@ -56,6 +58,11 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   int _lastBtDebugMs = 0;
   String _lastBtDebugSig = '';
 
+  /// Estado "¿la notificación sigue en la barra del emisor?":
+  /// null = desconocido, true = sigue, false = ya no está.
+  bool? _notifStillActive;
+  Timer? _notifActiveTimer;
+
   void _goBackToConexion() {
     Navigator.of(context).pushNamedAndRemoveUntil(
       '/notificaciones',
@@ -96,6 +103,11 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     _markAsRead();
     _initConversation();
     _conversationScrollController.addListener(_onConversationScroll);
+    // Sondea cada 4s si la notificación sigue en la barra del emisor.
+    _pollNotifActive();
+    _notifActiveTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _pollNotifActive();
+    });
   }
 
   @override
@@ -103,7 +115,101 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     _conversationScrollController.removeListener(_onConversationScroll);
     _conversationScrollController.dispose();
     _replyController.dispose();
+    _notifActiveTimer?.cancel();
+    _notifActiveTimer = null;
     super.dispose();
+  }
+
+  /// Pregunta al emisor (por BT) si la notificación de esta conversación sigue
+  /// en su barra, y refresca el indicador con el último estado conocido.
+  Future<void> _pollNotifActive() async {
+    final sbnKey = _pickBestSbnKeyForReply().trim();
+    if (sbnKey.isEmpty) return;
+    try {
+      unawaited(BleService.sendBtServerMessage({
+        'type': 'query_notif_active',
+        'sbnKey': sbnKey,
+        'requestId': DateTime.now().millisecondsSinceEpoch.toString(),
+      }));
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final raw = prefs.getString('bt_notif_active_last');
+      if (!mounted || raw == null || raw.isEmpty) return;
+      final Map<String, dynamic> st = jsonDecode(raw) as Map<String, dynamic>;
+      if ((st['sbnKey'] ?? '').toString().trim() != sbnKey) return;
+      final active = st['active'] == true;
+      if (_notifStillActive != active) {
+        setState(() => _notifStillActive = active);
+      }
+    } catch (_) {}
+  }
+
+  Color _notifActiveDotColor() {
+    switch (_notifStillActive) {
+      case true:
+        return Colors.green;
+      case false:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  /// Modal explicativo del indicador de estado de la notificación.
+  void _showNotifActiveInfo() {
+    final active = _notifStillActive;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Estado de la notificación'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _legendRow(Colors.green,
+                'Verde: la notificación sigue en la barra del emisor. Puedes responder.'),
+            const SizedBox(height: 10),
+            _legendRow(Colors.red,
+                'Rojo: la notificación ya no está en la barra del emisor. Es posible que la respuesta no se entregue.'),
+            const SizedBox(height: 10),
+            _legendRow(Colors.grey,
+                'Gris: estado aún desconocido (sin respuesta del emisor todavía).'),
+            const SizedBox(height: 14),
+            Text(
+              active == null
+                  ? 'Estado actual: desconocido'
+                  : active
+                      ? 'Estado actual: en la barra'
+                      : 'Estado actual: ya no está',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendRow(Color color, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          margin: const EdgeInsets.only(top: 3, right: 8),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        Expanded(child: Text(text)),
+      ],
+    );
   }
 
   Future<void> _initConversation() async {
@@ -272,6 +378,29 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                   ],
                 ),
                 actions: [
+                  // Indicador "¿notificación aún en la barra del emisor?":
+                  // verde = sí, rojo = no, gris = desconocido. Toque → explicación.
+                  Center(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _showNotifActiveInfo,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: _notifActiveDotColor(),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   IconButton(
                     onPressed: _toggleDynamicPadding,
                     icon: Icon(
@@ -738,7 +867,11 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
             if (pkg != _packageName) return false;
             if (title != _conversationTitle) return false;
             if (textNorm.isEmpty) return false;
-            return textNorm.contains(rtextNorm) || rtextNorm.contains(textNorm);
+            // Match EXACTO (no `contains`): solo se considera que la respuesta
+            // local ya está en el remoto si el texto coincide por completo. El
+            // `contains` difuso borraba respuestas cortas ("ok", "sí") al
+            // coincidir con cualquier mensaje entrante que las incluyera.
+            return textNorm == rtextNorm;
           });
 
           if (hasRemote) {
@@ -809,28 +942,24 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
         );
       }
 
-      filtered.sort((a, b) {
-        final ta = _messageTimestamp(a) ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        final tb = _messageTimestamp(b) ??
-            DateTime.fromMillisecondsSinceEpoch(0);
-        return ta.compareTo(tb);
-      });
+      final loadNow = DateTime.now();
+      filtered.sort((a, b) =>
+          _sortKey(a, loadNow).compareTo(_sortKey(b, loadNow)));
 
       int selectedIndex = filtered.indexWhere((m) => _messageId(m) == currentId);
       if (selectedIndex < 0) {
         selectedIndex = filtered.isNotEmpty ? (filtered.length - 1) : 0;
       }
 
-      int start = (selectedIndex - 2).clamp(0, filtered.length);
-      int end = (start + 5).clamp(0, filtered.length);
-      start = (end - 5).clamp(0, filtered.length);
+      int end = filtered.length;
+      int start = (end - 20).clamp(0, end);
 
       final firstTs = filtered.isNotEmpty ? _messageTimestamp(filtered.first) : null;
       final lastTs = filtered.isNotEmpty ? _messageTimestamp(filtered.last) : null;
+      final nullTsCount = filtered.where((m) => _messageTimestamp(m) == null).length;
       _btDebug(
-        '_loadConversationMessages finalCount=${filtered.length} selectedIndex=$selectedIndex window=[$start,$end) firstTs=${firstTs?.toIso8601String()} lastTs=${lastTs?.toIso8601String()}',
-        sig: 'final:${filtered.length}:$selectedIndex:$start:$end',
+        '_loadConversationMessages finalCount=${filtered.length} selectedIndex=$selectedIndex window=[$start,$end) nullTs=$nullTsCount firstTs=${firstTs?.toIso8601String()} lastTs=${lastTs?.toIso8601String()}',
+        sig: 'final:${filtered.length}:$selectedIndex:$start:$end:$nullTsCount',
         throttleMs: 0,
       );
 
@@ -843,7 +972,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _ensureSelectedVisible();
+        _scrollToBottom();
         _markVisibleMessagesAsRead();
       });
     } catch (_) {
@@ -855,17 +984,12 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     }
   }
 
-  void _ensureSelectedVisible() {
-    final id = _selectedMessageId;
-    final key = _messageKeys[id];
-    final ctx = key?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      alignment: 0.5,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-    );
+  void _scrollToBottom() {
+    if (!_conversationScrollController.hasClients) return;
+    try {
+      _conversationScrollController
+          .jumpTo(_conversationScrollController.position.maxScrollExtent);
+    } catch (_) {}
   }
 
   void _onConversationScroll() {
@@ -898,13 +1022,13 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       final prevMax = pos.maxScrollExtent;
       final prevPixels = pos.pixels;
 
-      final newStart = (_windowStart - 5).clamp(0, _windowStart);
+      final newStart = (_windowStart - 10).clamp(0, _windowStart);
       setState(() {
         _isConversationPaging = true;
         _windowStart = newStart;
       });
       _btDebug(
-        '_maybeLoadMoreConversation expandTop prevStart=${_windowStart + 5} newStart=$_windowStart end=$_windowEnd',
+        '_maybeLoadMoreConversation expandTop prevStart=${_windowStart + 10} newStart=$_windowStart end=$_windowEnd',
         sig: 'expandTop:${_windowStart}:${_windowEnd}',
         throttleMs: 0,
       );
@@ -928,7 +1052,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       final canExpand = _windowEnd < _allConversationMessages.length;
       if (!canExpand) return;
 
-      final newEnd = (_windowEnd + 5).clamp(
+      final newEnd = (_windowEnd + 10).clamp(
         _windowEnd,
         _allConversationMessages.length,
       );
@@ -937,7 +1061,7 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
         _windowEnd = newEnd;
       });
       _btDebug(
-        '_maybeLoadMoreConversation expandBottom start=$_windowStart prevEnd=${_windowEnd - 5} newEnd=$_windowEnd total=${_allConversationMessages.length}',
+        '_maybeLoadMoreConversation expandBottom start=$_windowStart prevEnd=${_windowEnd - 10} newEnd=$_windowEnd total=${_allConversationMessages.length}',
         sig: 'expandBottom:${_windowStart}:${_windowEnd}:${_allConversationMessages.length}',
         throttleMs: 0,
       );
@@ -1030,7 +1154,21 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
+            SttMicButton(
+              size: 44,
+              color: customColor[600],
+              onResult: enabled
+                  ? (text) {
+                      final trimmed = text.trim();
+                      if (trimmed.isEmpty) return;
+                      _replyController.text = trimmed;
+                      // Enviar automáticamente al confirmar la transcripción.
+                      _sendConversationReply();
+                    }
+                  : (_) {},
+            ),
+            const SizedBox(width: 8),
             SizedBox(
               height: 44,
               width: 44,
@@ -1089,6 +1227,12 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     };
     final timeMs = (payload['time'] as int?) ?? DateTime.now().millisecondsSinceEpoch;
 
+    _btDebug(
+      'sendReply optimistic replyId=$replyId timeMs=$timeMs sbnKey=$sbnKey total_before=${_allConversationMessages.length}',
+      sig: 'sendOptimistic',
+      throttleMs: 0,
+    );
+
     final optimisticMessage = <String, dynamic>{
       'notificationId': replyId,
       'id': replyId,
@@ -1112,14 +1256,12 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
         _selectedMessageId = replyId;
         final next = List<Map<String, dynamic>>.from(_allConversationMessages);
         next.add(optimisticMessage);
-        next.sort((a, b) {
-          final ta = _messageTimestamp(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
-          final tb = _messageTimestamp(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
-          return ta.compareTo(tb);
-        });
+        final sortNow = DateTime.now();
+        next.sort((a, b) =>
+            _sortKey(a, sortNow).compareTo(_sortKey(b, sortNow)));
         _allConversationMessages = next;
         _windowEnd = next.length;
-        _windowStart = (_windowEnd - 15).clamp(0, _windowEnd);
+        _windowStart = (_windowEnd - 20).clamp(0, _windowEnd);
         _messageKeys.clear();
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1175,6 +1317,12 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
           timestampMs: payload['time'] as int?,
         );
       } catch (_) {}
+
+      _btDebug(
+        'sendReply result replyId=$replyId sent=$sent',
+        sig: 'sendResult',
+        throttleMs: 0,
+      );
 
       _replyController.clear();
       try {
@@ -1523,6 +1671,12 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
     if (v != null) return DateTime.fromMillisecondsSinceEpoch(v);
     return null;
   }
+
+  /// Clave de orden segura: si el mensaje no tiene timestamp, usa [fallback]
+  /// (capturado una sola vez por carga) en lugar de época 0, para que no salte
+  /// al inicio de la conversación. Determinista para no romper el comparador.
+  DateTime _sortKey(Map<String, dynamic> m, DateTime fallback) =>
+      _messageTimestamp(m) ?? fallback;
 
   int? _extractTimestampMsFromId(String id) {
     final raw = id.trim();

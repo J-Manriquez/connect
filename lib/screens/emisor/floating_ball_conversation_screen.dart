@@ -9,9 +9,11 @@ import 'package:connect/services/notification_cache_service.dart';
 import 'package:connect/services/notification_filter_service.dart';
 import 'package:connect/services/preferences_service.dart';
 import 'package:connect/services/receptor_service.dart';
+import 'package:connect/widgets/stt_mic_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FloatingBallConversationAutoOpenEntry extends StatefulWidget {
   const FloatingBallConversationAutoOpenEntry({super.key});
@@ -206,6 +208,11 @@ class _FloatingBallConversationScreenState
 
   bool _mediaVisible = false;
 
+  /// Estado "¿la notificación sigue en la barra del emisor?":
+  /// null = desconocido, true = sigue, false = ya no está.
+  bool? _notifStillActive;
+  Timer? _notifActiveTimer;
+
   @override
   void initState() {
     super.initState();
@@ -218,6 +225,11 @@ class _FloatingBallConversationScreenState
     });
     _conversationScrollController.addListener(_onConversationScroll);
     _initModeAndMaybeLoad();
+    // Sondea cada 4s si la notificación sigue en la barra del emisor.
+    _pollNotifActive();
+    _notifActiveTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _pollNotifActive();
+    });
   }
 
   Future<void> _initMediaVisibility() async {
@@ -238,12 +250,108 @@ class _FloatingBallConversationScreenState
     WidgetsBinding.instance.removeObserver(this);
     _systemTick?.cancel();
     _systemTick = null;
+    _notifActiveTimer?.cancel();
+    _notifActiveTimer = null;
     _systemState.dispose();
     _replyStatusTimer?.cancel();
     _replyStatusTimer = null;
     _conversationScrollController.removeListener(_onConversationScroll);
     _conversationScrollController.dispose();
     super.dispose();
+  }
+
+  /// Pregunta al emisor (por BT) si la notificación de esta conversación sigue
+  /// en su barra, y refresca el indicador con el último estado conocido.
+  Future<void> _pollNotifActive() async {
+    final sbnKey = _pickBestSbnKeyForReply().trim();
+    if (sbnKey.isEmpty) return;
+    try {
+      unawaited(BleService.sendBtServerMessage({
+        'type': 'query_notif_active',
+        'sbnKey': sbnKey,
+        'requestId': DateTime.now().millisecondsSinceEpoch.toString(),
+      }));
+    } catch (_) {}
+    try {
+      // El nativo guarda la última respuesta en SharedPreferences (puente entre
+      // isletas). La respuesta llega async; el próximo tick ya la verá.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final raw = prefs.getString('bt_notif_active_last');
+      if (!mounted || raw == null || raw.isEmpty) return;
+      final Map<String, dynamic> st = jsonDecode(raw) as Map<String, dynamic>;
+      if ((st['sbnKey'] ?? '').toString().trim() != sbnKey) return;
+      final active = st['active'] == true;
+      if (_notifStillActive != active) {
+        setState(() => _notifStillActive = active);
+      }
+    } catch (_) {}
+  }
+
+  /// Modal explicativo del indicador de estado de la notificación.
+  void _showNotifActiveInfo() {
+    final active = _notifStillActive;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Estado de la notificación'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _legendRow(Colors.green,
+                'Verde: la notificación sigue en la barra del emisor. Puedes responder.'),
+            const SizedBox(height: 10),
+            _legendRow(Colors.red,
+                'Rojo: la notificación ya no está en la barra del emisor. Es posible que la respuesta no se entregue.'),
+            const SizedBox(height: 10),
+            _legendRow(Colors.grey,
+                'Gris: estado aún desconocido (sin respuesta del emisor todavía).'),
+            const SizedBox(height: 14),
+            Text(
+              active == null
+                  ? 'Estado actual: desconocido'
+                  : active
+                      ? 'Estado actual: en la barra'
+                      : 'Estado actual: ya no está',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendRow(Color color, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          margin: const EdgeInsets.only(top: 3, right: 8),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        Expanded(child: Text(text)),
+      ],
+    );
+  }
+
+  Color _notifActiveDotColor() {
+    switch (_notifStillActive) {
+      case true:
+        return Colors.green;
+      case false:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 
   void _setReplyStatus(String? text) {
@@ -509,6 +617,14 @@ class _FloatingBallConversationScreenState
         fsConversationEnabled &&
         appConversationEnabled;
 
+    _btDebug(
+      'initMode triggerId=$selectedMessageId pkg="$pkg" title="$title" '
+      'startInConv=${widget.startInConversationMode} fsConvEnabled=$fsConversationEnabled '
+      'appConvEnabled=$appConversationEnabled => conversationMode=$conversationMode',
+      sig: 'initMode',
+      throttleMs: 0,
+    );
+
     final iconRaw = appIconBase64.trim();
     final commaIdx = iconRaw.lastIndexOf(',');
     final iconPayload = commaIdx >= 0 ? iconRaw.substring(commaIdx + 1) : iconRaw;
@@ -580,6 +696,9 @@ class _FloatingBallConversationScreenState
     }
     _lastBtDebugSig = sig;
     _lastBtDebugMs = now;
+    // Imprime local (visible en `flutter run`/logcat del dispositivo que ejecuta
+    // esta pantalla) además de reenviar por Bluetooth al peer.
+    print('[floating_ball_conversation] $message');
     try {
       unawaited(
         BleService.sendBtServerMessage({
@@ -632,8 +751,8 @@ class _FloatingBallConversationScreenState
                     if (iconBytes != null || hasIcon) const SizedBox(width: 10),
                     ConstrainedBox(
                       constraints: BoxConstraints(
-                        maxWidth: (constraints.maxWidth - iconSize - 10)
-                            .clamp(120.0, constraints.maxWidth),
+                        maxWidth: (constraints.maxWidth - iconSize - 10 - 28)
+                            .clamp(100.0, constraints.maxWidth),
                       ),
                       child: Text(
                         title,
@@ -644,6 +763,30 @@ class _FloatingBallConversationScreenState
                       ),
                     ),
                   ],
+                ),
+              ),
+              // Indicador "¿notificación aún en la barra del emisor?":
+              // verde = sí, rojo = no, gris = desconocido. Toque → explicación.
+              Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _showNotifActiveInfo,
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: _notifActiveDotColor(),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1319,7 +1462,19 @@ class _FloatingBallConversationScreenState
                             },
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
+                        SttMicButton(
+                          size: 44,
+                          color: modalTextColor,
+                          modalBackgroundColor: Color(_convBgColor),
+                          onResult: (sttText) {
+                            // Enviar automáticamente y cerrar el modal de responder.
+                            final trimmed = sttText.trim();
+                            if (trimmed.isEmpty) return;
+                            Navigator.of(context).pop(trimmed);
+                          },
+                        ),
+                        const SizedBox(width: 8),
                         InkWell(
                           borderRadius: BorderRadius.circular(12),
                           onTap: () {
@@ -1359,15 +1514,26 @@ class _FloatingBallConversationScreenState
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
           padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
-          child: SizedBox(
-            height: mq.size.height,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: panel(),
+          // Cerrar al tocar fuera del panel.
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).pop(),
+            child: SizedBox(
+              height: mq.size.height,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    // Absorber el toque sobre el panel para no cerrarlo al
+                    // interactuar con él.
+                    child: GestureDetector(
+                      onTap: () {},
+                      child: panel(),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1463,7 +1629,7 @@ class _FloatingBallConversationScreenState
 
       final prevMax = pos.maxScrollExtent;
       final prevPixels = pos.pixels;
-      final newStart = (_windowStart - 5).clamp(0, _windowStart);
+      final newStart = (_windowStart - 10).clamp(0, _windowStart);
 
       setState(() {
         _isConversationPaging = true;
@@ -1489,7 +1655,7 @@ class _FloatingBallConversationScreenState
       final canExpand = _windowEnd < _allConversationMessages.length;
       if (!canExpand) return;
 
-      final newEnd = (_windowEnd + 5).clamp(
+      final newEnd = (_windowEnd + 10).clamp(
         _windowEnd,
         _allConversationMessages.length,
       );
@@ -1544,7 +1710,10 @@ class _FloatingBallConversationScreenState
         return pkg == _packageName && t == _conversationTitle;
       }).map((e) => Map<String, dynamic>.from(e)).toList();
 
+      final exactMatchCount = filtered.length;
+      bool usedFallbackFilter = false;
       if (filtered.length <= 1) {
+        usedFallbackFilter = true;
         filtered = remote.where((n) {
           if (_hiddenMessageIds.contains(_messageId(n))) return false;
           final pkg = _stringFromMessage(n, ['packageName', 'paquete']);
@@ -1578,25 +1747,66 @@ class _FloatingBallConversationScreenState
         byId[id] = m;
       }
 
+      // Inyectar el mensaje disparador si no vino en el set (igual que la
+      // pantalla de la app). Sin esto, la notificación que abre la conversación
+      // a veces no se visualiza en la bola flotante.
+      final currentId = _selectedMessageId;
+      if (currentId.isNotEmpty && !byId.containsKey(currentId)) {
+        final tsRaw = widget.notificationData['timestamp'];
+        final int tsMs;
+        if (tsRaw is Timestamp) {
+          tsMs = tsRaw.millisecondsSinceEpoch;
+        } else {
+          tsMs = int.tryParse(currentId.split('_').first) ??
+              DateTime.now().millisecondsSinceEpoch;
+        }
+        byId[currentId] = {
+          'notificationId': currentId,
+          'id': currentId,
+          'title': _conversationTitle,
+          'text': _getFieldValue(
+                ['text', 'body', 'bigText', 'mensaje', 'contenido'],
+              ) ??
+              '',
+          'packageName': _packageName,
+          'appName': '',
+          'timestamp': Timestamp.fromMillisecondsSinceEpoch(tsMs),
+          'extras': Map<String, dynamic>.from(
+            widget.notificationData['extras'] ?? {},
+          ),
+          'status-visualizacion':
+              widget.notificationData['status-visualizacion'] == true,
+        };
+        _btDebug(
+          'load injectedCurrent id=$currentId tsMs=$tsMs',
+          sig: 'inject',
+          throttleMs: 0,
+        );
+      }
+
+      final loadNowMs = DateTime.now().millisecondsSinceEpoch;
       final all = byId.values.toList()
         ..sort(
-          (a, b) => _messageTimestampMs(a).compareTo(_messageTimestampMs(b)),
+          (a, b) => _sortKeyMs(a, loadNowMs).compareTo(_sortKeyMs(b, loadNowMs)),
         );
 
-      final focusIdx = _pickInitialFocusIndex(all);
-
-      int start = 0;
       int end = all.length;
-      if (all.isNotEmpty) {
-        final idx = focusIdx.clamp(0, all.length - 1);
-        _selectedMessageId = _messageId(all[idx]);
-        start = (idx - 10).clamp(0, all.length);
-        end = (idx + 10).clamp(0, all.length);
-        if ((end - start) < 15) {
-          start = (end - 15).clamp(0, all.length);
-          end = (start + 15).clamp(0, all.length);
-        }
-      }
+      int start = (end - 20).clamp(0, end);
+
+      // Diagnóstico de orden y visibilidad del mensaje disparador.
+      final zeroTsCount = all.where((m) => _messageTimestampMs(m) <= 0).length;
+      final selectedPresent = _selectedMessageId.isNotEmpty &&
+          all.any((m) => _messageId(m) == _selectedMessageId);
+      _btDebug(
+        'load done total=${all.length} window=$start..$end '
+        'remote=${remote.length} localReplies=${localReplies.length} '
+        'exactMatch=$exactMatchCount fallbackFilter=$usedFallbackFilter '
+        'zeroTs=$zeroTsCount selectedId=$_selectedMessageId selectedPresent=$selectedPresent '
+        'firstTs=${all.isEmpty ? 0 : _messageTimestampMs(all.first)} '
+        'lastTs=${all.isEmpty ? 0 : _messageTimestampMs(all.last)}',
+        sig: 'loadDone',
+        throttleMs: 0,
+      );
 
       if (!mounted) return;
       setState(() {
@@ -1607,10 +1817,7 @@ class _FloatingBallConversationScreenState
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _ensureSelectedVisible();
-        if (all.isNotEmpty && focusIdx >= all.length - 1) {
-          _scrollToBottom();
-        }
+        _scrollToBottom();
         _scheduleVisibilityCheck();
       });
     } catch (_) {
@@ -1623,22 +1830,6 @@ class _FloatingBallConversationScreenState
     }
   }
 
-  void _ensureSelectedVisible() {
-    if (_selectedMessageId.isEmpty) return;
-    if (!_conversationScrollController.hasClients) return;
-    final key = _messageKeys[_selectedMessageId];
-    final ctx = key?.currentContext;
-    if (ctx == null) return;
-    try {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-        alignment: 0.5,
-      );
-    } catch (_) {}
-  }
-
   void _scrollToBottom() {
     if (!_conversationScrollController.hasClients) return;
     try {
@@ -1647,42 +1838,6 @@ class _FloatingBallConversationScreenState
     } catch (_) {}
   }
 
-  int _pickInitialFocusIndex(List<Map<String, dynamic>> all) {
-    if (all.isEmpty) return 0;
-
-    final byId = all.indexWhere((m) => _messageId(m) == _selectedMessageId);
-    if (byId >= 0) return byId;
-
-    final targetTs = _messageTimestampMs(widget.notificationData);
-    final targetText =
-        _normalizeConversationKey(_extractMessageBody(widget.notificationData));
-    if (targetTs <= 0 && targetText.isEmpty) return all.length - 1;
-
-    int bestIdx = all.length - 1;
-    num bestScore = double.infinity;
-
-    for (var i = 0; i < all.length; i++) {
-      final m = all[i];
-      final ts = _messageTimestampMs(m);
-      final dt = targetTs > 0 ? (ts - targetTs).abs() : 0;
-
-      num penalty = 0;
-      if (targetText.isNotEmpty) {
-        final mt = _normalizeConversationKey(_extractMessageBody(m));
-        final match = mt.isNotEmpty &&
-            (mt.contains(targetText) || targetText.contains(mt));
-        if (!match) penalty = 5000000000;
-      }
-
-      final score = dt + penalty;
-      if (score < bestScore) {
-        bestScore = score;
-        bestIdx = i;
-      }
-    }
-
-    return bestIdx;
-  }
 
   List<Map<String, dynamic>> _currentWindowMessages() {
     if (_allConversationMessages.isEmpty) return const [];
@@ -1715,6 +1870,15 @@ class _FloatingBallConversationScreenState
     final ms = _messageTimestampMs(m);
     if (ms <= 0) return null;
     return DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// Clave de orden segura: si el mensaje no tiene timestamp derivable (0),
+  /// usa [fallbackMs] (capturado una sola vez por carga) en lugar de 0, para
+  /// que no salte al inicio de la conversación (época 1970). Determinista para
+  /// no romper el contrato del comparador.
+  int _sortKeyMs(Map<String, dynamic> m, int fallbackMs) {
+    final t = _messageTimestampMs(m);
+    return t > 0 ? t : fallbackMs;
   }
 
   int _messageTimestampMs(Map<String, dynamic> m) {
@@ -1837,16 +2001,24 @@ class _FloatingBallConversationScreenState
       'status-visualizacion': true,
     };
 
+    _btDebug(
+      'sendReply optimistic replyId=$replyId timeMs=$timeMs sbnKey=$sbnKey total_before=${_allConversationMessages.length}',
+      sig: 'sendOptimistic',
+      throttleMs: 0,
+    );
+
     if (mounted) {
       setState(() {
         _isReplySending = true;
         _selectedMessageId = replyId;
         final next = List<Map<String, dynamic>>.from(_allConversationMessages);
         next.add(optimisticMessage);
-        next.sort((a, b) => _messageTimestampMs(a).compareTo(_messageTimestampMs(b)));
+        final sortNowMs = DateTime.now().millisecondsSinceEpoch;
+        next.sort((a, b) =>
+            _sortKeyMs(a, sortNowMs).compareTo(_sortKeyMs(b, sortNowMs)));
         _allConversationMessages = next;
         _windowEnd = next.length;
-        _windowStart = (_windowEnd - 15).clamp(0, _windowEnd);
+        _windowStart = (_windowEnd - 20).clamp(0, _windowEnd);
         _messageKeys.clear();
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1899,6 +2071,12 @@ class _FloatingBallConversationScreenState
           timestampMs: payload['time'] as int?,
         );
       } catch (_) {}
+
+      _btDebug(
+        'sendReply result replyId=$replyId delivered=$delivered queued=$queued',
+        sig: 'sendResult',
+        throttleMs: 0,
+      );
 
       _selectedMessageId = replyId;
       await _loadConversationMessages();

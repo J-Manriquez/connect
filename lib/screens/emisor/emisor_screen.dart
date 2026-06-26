@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connect/screens/emisor/herramientas_screen.dart';
 import 'package:connect/models/notification_data.dart';
 import 'package:connect/services/firebase_service.dart';
 import 'package:connect/services/preferences_service.dart'; // Añadir esta importación
@@ -429,6 +430,16 @@ class _EmisorScreenState extends State<EmisorScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.apps),
+          tooltip: 'Herramientas',
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const HerramientasScreen(),
+            ),
+          ),
+        ),
         title: const Text('Emisor de Notificaciones'),
         actions: [
           IconButton(

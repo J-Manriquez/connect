@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:connect/screens/emisor/floating_ball_reorder_screen.dart';
+import 'package:connect/screens/emisor/floating_ball_popup_reorder_screen.dart';
 import 'package:connect/screens/emisor/svg_icon_gallery_screen.dart';
 import 'package:connect/services/floating_ball_service.dart';
 import 'package:connect/theme_colors.dart';
@@ -182,6 +183,9 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
   int _popupOffsetYDp = 0;
   int _popupMediaOffsetXDp = 0;
   int _popupMediaOffsetYDp = 0;
+  int _popupButtonRadiusDp = 14;
+  int _popupButtonPaddingDp = 14;
+  int _popupAppButtonPaddingDp = 14;
 
   String _popupBackIconId = 'back';
   String _popupHomeIconId = 'home';
@@ -196,6 +200,12 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
   String? _popupVolumeIconPngBase64;
   String? _popupBrightnessIconPngBase64;
   String? _popupSettingsIconPngBase64;
+
+  // Iconos de las herramientas
+  String? _toolTtsIconPngBase64;
+  String? _toolDictIconPngBase64;
+  String? _toolTransIconPngBase64;
+  String? _toolSearchIconPngBase64;
 
   int _mediaHeightDp = 320;
   int _mediaIconSizeDp = 34;
@@ -463,6 +473,9 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     int nextPopupOffsetYDp = _popupOffsetYDp;
     int nextPopupMediaOffsetXDp = _popupMediaOffsetXDp;
     int nextPopupMediaOffsetYDp = _popupMediaOffsetYDp;
+    int nextPopupButtonRadiusDp = _popupButtonRadiusDp;
+    int nextPopupButtonPaddingDp = _popupButtonPaddingDp;
+    int nextPopupAppButtonPaddingDp = _popupAppButtonPaddingDp;
     String nextPopupBackIconId = _popupBackIconId;
     String nextPopupHomeIconId = _popupHomeIconId;
     String nextPopupRecentsIconId = _popupRecentsIconId;
@@ -475,6 +488,10 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     String? nextPopupVolumeIconPngBase64 = _popupVolumeIconPngBase64;
     String? nextPopupBrightnessIconPngBase64 = _popupBrightnessIconPngBase64;
     String? nextPopupSettingsIconPngBase64 = _popupSettingsIconPngBase64;
+    String? nextToolTtsIconPngBase64 = _toolTtsIconPngBase64;
+    String? nextToolDictIconPngBase64 = _toolDictIconPngBase64;
+    String? nextToolTransIconPngBase64 = _toolTransIconPngBase64;
+    String? nextToolSearchIconPngBase64 = _toolSearchIconPngBase64;
     int nextMediaHeightDp = _mediaHeightDp;
     int nextMediaIconSizeDp = _mediaIconSizeDp;
     int nextMediaTitleSizeSp = _mediaTitleSizeSp;
@@ -761,6 +778,9 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       nextPopupOffsetYDp = await FloatingBallService.getPopupOffsetYDp();
       nextPopupMediaOffsetXDp = await FloatingBallService.getPopupMediaOffsetXDp();
       nextPopupMediaOffsetYDp = await FloatingBallService.getPopupMediaOffsetYDp();
+      nextPopupButtonRadiusDp = await FloatingBallService.getPopupButtonRadiusDp();
+      nextPopupButtonPaddingDp = await FloatingBallService.getPopupButtonPaddingDp();
+      nextPopupAppButtonPaddingDp = await FloatingBallService.getPopupAppButtonPaddingDp();
       nextPopupBackIconId = await FloatingBallService.getPopupBackIconId();
       nextPopupHomeIconId = await FloatingBallService.getPopupHomeIconId();
       nextPopupRecentsIconId = await FloatingBallService.getPopupRecentsIconId();
@@ -774,6 +794,10 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       nextPopupBrightnessIconPngBase64 =
           await FloatingBallService.getPopupBrightnessIconPngBase64();
       nextPopupSettingsIconPngBase64 = await FloatingBallService.getPopupSettingsIconPngBase64();
+      nextToolTtsIconPngBase64 = await FloatingBallService.getToolIconPngBase64('tool:tts');
+      nextToolDictIconPngBase64 = await FloatingBallService.getToolIconPngBase64('tool:dict');
+      nextToolTransIconPngBase64 = await FloatingBallService.getToolIconPngBase64('tool:trans');
+      nextToolSearchIconPngBase64 = await FloatingBallService.getToolIconPngBase64('tool:search');
 
       nextMediaHeightDp = await FloatingBallService.getMediaHeightDp();
       nextMediaIconSizeDp = await FloatingBallService.getMediaIconSizeDp();
@@ -960,6 +984,9 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       _popupOffsetYDp = nextPopupOffsetYDp;
       _popupMediaOffsetXDp = nextPopupMediaOffsetXDp;
       _popupMediaOffsetYDp = nextPopupMediaOffsetYDp;
+      _popupButtonRadiusDp = nextPopupButtonRadiusDp;
+      _popupButtonPaddingDp = nextPopupButtonPaddingDp;
+      _popupAppButtonPaddingDp = nextPopupAppButtonPaddingDp;
       _popupBackIconId = nextPopupBackIconId;
       _popupHomeIconId = nextPopupHomeIconId;
       _popupRecentsIconId = nextPopupRecentsIconId;
@@ -972,6 +999,10 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       _popupVolumeIconPngBase64 = nextPopupVolumeIconPngBase64;
       _popupBrightnessIconPngBase64 = nextPopupBrightnessIconPngBase64;
       _popupSettingsIconPngBase64 = nextPopupSettingsIconPngBase64;
+      _toolTtsIconPngBase64 = nextToolTtsIconPngBase64;
+      _toolDictIconPngBase64 = nextToolDictIconPngBase64;
+      _toolTransIconPngBase64 = nextToolTransIconPngBase64;
+      _toolSearchIconPngBase64 = nextToolSearchIconPngBase64;
       _mediaHeightDp = nextMediaHeightDp;
       _mediaIconSizeDp = nextMediaIconSizeDp;
       _mediaTitleSizeSp = nextMediaTitleSizeSp;
@@ -1314,6 +1345,45 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     if (picked == null) return;
     setState(() => _popupMediaOffsetYDp = picked);
     await FloatingBallService.setPopupMediaOffsetYDp(picked);
+  }
+
+  Future<void> _setPopupButtonRadius() async {
+    final picked = await _showIntSlider(
+      title: 'Radio de esquinas de botones (popup)',
+      current: _popupButtonRadiusDp,
+      min: 0,
+      max: 50,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _popupButtonRadiusDp = picked);
+    await FloatingBallService.setPopupButtonRadiusDp(picked);
+  }
+
+  Future<void> _setPopupButtonPadding() async {
+    final picked = await _showIntSlider(
+      title: 'Margen botones de acción (popup)',
+      current: _popupButtonPaddingDp,
+      min: 0,
+      max: 50,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _popupButtonPaddingDp = picked);
+    await FloatingBallService.setPopupButtonPaddingDp(picked);
+  }
+
+  Future<void> _setPopupAppButtonPadding() async {
+    final picked = await _showIntSlider(
+      title: 'Margen botones de apps (popup)',
+      current: _popupAppButtonPaddingDp,
+      min: 0,
+      max: 50,
+      suffix: 'dp',
+    );
+    if (picked == null) return;
+    setState(() => _popupAppButtonPaddingDp = picked);
+    await FloatingBallService.setPopupAppButtonPaddingDp(picked);
   }
 
   Future<void> _setFsBgColor() async {
@@ -3018,6 +3088,65 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     }
   }
 
+  Future<void> _pickToolIcon(String toolId) async {
+    final picked = await _pickIconFromGallery();
+    if (picked == null) return;
+    String? png;
+    String id;
+    if (picked.type == IconGalleryPickType.svg) {
+      final entry = picked.svg;
+      if (entry == null) return;
+      png = await _renderSvgFilePngBase64(entry.filePath, sizePx: 128, color: Colors.white);
+      if (png == null) return;
+      id = 'svg';
+    } else {
+      final flutterIcon = picked.flutterIcon;
+      final flutterId = picked.flutterId;
+      if (flutterIcon == null || flutterId == null) return;
+      png = await _renderIconPngBase64(flutterIcon, sizePx: 96, color: Colors.white);
+      id = flutterId;
+    }
+    await FloatingBallService.setToolIconPngBase64(toolId, png);
+    setState(() {
+      switch (toolId) {
+        case 'tool:tts':    _toolTtsIconPngBase64 = png; break;
+        case 'tool:dict':   _toolDictIconPngBase64 = png; break;
+        case 'tool:trans':  _toolTransIconPngBase64 = png; break;
+        case 'tool:search': _toolSearchIconPngBase64 = png; break;
+      }
+    });
+  }
+
+  String? _toolIconPng(String toolId) {
+    switch (toolId) {
+      case 'tool:tts':    return _toolTtsIconPngBase64;
+      case 'tool:dict':   return _toolDictIconPngBase64;
+      case 'tool:trans':  return _toolTransIconPngBase64;
+      case 'tool:search': return _toolSearchIconPngBase64;
+      default: return null;
+    }
+  }
+
+  IconData _defaultToolIconData(String toolId) {
+    switch (toolId) {
+      case 'tool:tts':    return Icons.record_voice_over;
+      case 'tool:dict':   return Icons.menu_book;
+      case 'tool:trans':  return Icons.translate;
+      case 'tool:search': return Icons.search;
+      default: return Icons.build;
+    }
+  }
+
+  String _toolName(String toolId) {
+    switch (toolId) {
+      case 'tool:tts':    return 'Lector TTS';
+      case 'tool:dict':   return 'Diccionario';
+      case 'tool:trans':  return 'Traductor';
+      case 'tool:search': return 'Buscar web';
+      default: return toolId;
+    }
+  }
+
   Future<void> _toggleFsCloseHideText(bool v) async {
     setState(() => _fsCloseHideText = v);
     await FloatingBallService.setFullScreenCloseHideTextEnabled(v);
@@ -3413,6 +3542,27 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                             trailing: const Icon(Icons.chevron_right),
                             onTap: _setPopupIconSize,
                           ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Radio de esquinas de botones'),
+                            subtitle: Text('${_popupButtonRadiusDp}dp • Redondez de las esquinas'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _setPopupButtonRadius,
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Margen botones de acción'),
+                            subtitle: Text('${_popupButtonPaddingDp}dp • Espacio entre borde e icono'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _setPopupButtonPadding,
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Margen botones de apps'),
+                            subtitle: Text('${_popupAppButtonPaddingDp}dp • Espacio entre borde e icono en atajos de apps'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _setPopupAppButtonPadding,
+                          ),
                           const SizedBox(height: 6),
                           ExpansionTile(
                             tilePadding: EdgeInsets.zero,
@@ -3439,7 +3589,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                           ExpansionTile(
                             tilePadding: EdgeInsets.zero,
                             title: const Text('Popup multimedia'),
-                            subtitle: const Text('Posición del panel multimedia dentro del popup.'),
+                            subtitle: const Text('Posición e iconos del panel multimedia del popup.'),
                             children: [
                               ListTile(
                                 contentPadding: EdgeInsets.zero,
@@ -3454,6 +3604,66 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 subtitle: Text('${_popupMediaOffsetYDp}dp • Vertical'),
                                 trailing: const Icon(Icons.chevron_right),
                                 onTap: _setPopupMediaOffsetY,
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Icono volumen'),
+                                subtitle: const Text('Acción: control de volumen'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _mediaVolumeIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_mediaVolumeIconId),
+                                ),
+                                onTap: () => _pickMediaIcon('volume'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Icono anterior'),
+                                subtitle: const Text('Acción: pista anterior'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _mediaPrevIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_mediaPrevIconId),
+                                ),
+                                onTap: () => _pickMediaIcon('prev'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Icono reproducir'),
+                                subtitle: const Text('Acción: reproducir'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _mediaPlayIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_mediaPlayIconId),
+                                ),
+                                onTap: () => _pickMediaIcon('play'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Icono pausar'),
+                                subtitle: const Text('Acción: pausar'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _mediaPauseIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_mediaPauseIconId),
+                                ),
+                                onTap: () => _pickMediaIcon('pause'),
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Icono siguiente'),
+                                subtitle: const Text('Acción: pista siguiente'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _mediaNextIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: _iconDataForId(_mediaNextIconId),
+                                ),
+                                onTap: () => _pickMediaIcon('next'),
                               ),
                             ],
                           ),
@@ -3535,7 +3745,40 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 ),
                                 onTap: () => _pickPopupButtonIcon('settings'),
                               ),
+                              const Divider(height: 16),
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 6),
+                                child: Text('Herramientas', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                              ),
+                              ...['tool:tts', 'tool:dict', 'tool:trans', 'tool:search'].map((toolId) =>
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(_toolName(toolId)),
+                                  subtitle: const Text('Herramienta flotante'),
+                                  trailing: _buildPngIconPreview(
+                                    base64Png: _toolIconPng(toolId),
+                                    size: 22,
+                                    tint: Color(_popupIconColor),
+                                    fallback: _defaultToolIconData(toolId),
+                                  ),
+                                  onTap: () => _pickToolIcon(toolId),
+                                ),
+                              ),
                             ],
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Reordenar iconos'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const FloatingBallPopupReorderScreen(),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -5107,6 +5350,27 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                     fallback: _iconDataForId(_fsSettingsIconId),
                                   ),
                                   onTap: () => _pickFsButtonIcon('settings'),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 16),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Herramientas'),
+                              subtitle: const Text('Iconos de los botones de herramientas flotantes.'),
+                              children: [
+                                ...['tool:tts', 'tool:dict', 'tool:trans', 'tool:search'].map((toolId) =>
+                                  ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(_toolName(toolId)),
+                                    trailing: _buildPngIconPreview(
+                                      base64Png: _toolIconPng(toolId),
+                                      size: 22,
+                                      tint: Color(_fsIconColor),
+                                      fallback: _defaultToolIconData(toolId),
+                                    ),
+                                    onTap: () => _pickToolIcon(toolId),
+                                  ),
                                 ),
                               ],
                             ),

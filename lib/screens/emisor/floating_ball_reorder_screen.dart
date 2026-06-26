@@ -48,6 +48,7 @@ class _FloatingBallReorderScreenState extends State<FloatingBallReorderScreen> {
       final fsTilePaddingDp = await FloatingBallService.getFullScreenTilePaddingDp();
       final fsTileInnerGapDp = await FloatingBallService.getFullScreenTileInnerGapDp();
       final selectedApps = await FloatingBallService.getSelectedApps();
+      final selectedTools = await FloatingBallService.getSelectedTools();
       final savedOrder = await FloatingBallService.getFullScreenOrder();
 
       final defaultOrder = <String>[
@@ -76,6 +77,12 @@ class _FloatingBallReorderScreenState extends State<FloatingBallReorderScreen> {
         if (!used.contains(id)) {
           nextOrder.add(id);
           used.add(id);
+        }
+      }
+      for (final toolId in selectedTools) {
+        if (!used.contains(toolId)) {
+          nextOrder.add(toolId);
+          used.add(toolId);
         }
       }
 
@@ -138,6 +145,15 @@ class _FloatingBallReorderScreenState extends State<FloatingBallReorderScreen> {
       final name = (app?['appName'] ?? '').toString();
       return name.isEmpty ? pkg : name;
     }
+    if (id.startsWith('tool:')) {
+      switch (id) {
+        case 'tool:tts':    return 'Lector TTS';
+        case 'tool:dict':   return 'Diccionario';
+        case 'tool:trans':  return 'Traductor';
+        case 'tool:search': return 'Buscar';
+        default:            return id;
+      }
+    }
     return id;
   }
 
@@ -193,6 +209,16 @@ class _FloatingBallReorderScreenState extends State<FloatingBallReorderScreen> {
       default:
         icon = Icons.android;
         break;
+    }
+    // Herramientas
+    if (id.startsWith('tool:')) {
+      switch (id) {
+        case 'tool:tts':    icon = Icons.record_voice_over; break;
+        case 'tool:dict':   icon = Icons.menu_book; break;
+        case 'tool:trans':  icon = Icons.translate; break;
+        case 'tool:search': icon = Icons.search; break;
+        default:            icon = Icons.build; break;
+      }
     }
     return Icon(icon, color: Color(_fsIconColor), size: _fsIconSizeDp.toDouble());
   }

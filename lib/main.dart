@@ -32,6 +32,7 @@ import 'screens/emisor/floating_ball_settings_screen.dart';
 import 'screens/emisor/floating_ball_style_screen.dart';
 import 'screens/emisor/floating_ball_custom_notifications_screen.dart';
 import 'screens/emisor/floating_ball_conversation_screen.dart';
+import 'screens/emisor/lector_tts_screen.dart';
 import 'screens/receptor/receptor_settings_screen.dart';
 
 // Añadir este import al inicio del archivo
@@ -43,7 +44,12 @@ import 'package:connect/screens/buscar_dispositivo_screen.dart';
 import 'package:connect/services/notification_sound_handler.dart';
 import 'package:connect/services/ble_service.dart';
 import 'package:connect/services/floating_ball_service.dart';
+import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:connect/services/update_service.dart';
+import 'package:connect/screens/update_required_screen.dart';
+import 'package:connect/services/device_capability_service.dart';
 
 // reiniciar la app
 import 'package:flutter_phoenix/flutter_phoenix.dart';
@@ -56,17 +62,68 @@ void main() async {
   // Asegurar que Flutter esté inicializado
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Cargar el .env (contiene GITHUB_UPDATE_TOKEN para la auto-actualización).
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (e) {
+    print('ERROR cargando .env: $e');
+  }
+
   // Inicializar Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await BtHiveStorageService.ensureInitialized();
 
-  // Inicializar el servicio de notificaciones locales
-  // await LocalNotificationService.initialize();
+  // Inicialización de Gemma EN SEGUNDO PLANO (no se necesita en el arranque y
+  // NO debe bloquear `main()`). `main()` también corre en la actividad de
+  // auto-apertura de conversación; bloquear aquí (p. ej. esperando la consulta
+  // de ABIs por MethodChannel) impedía que la conversación se mostrara.
+  unawaited(_initGemmaIfSupported());
+
+  // Verificar si hay una versión más nueva publicada en GitHub Releases (Android).
+  // Nunca lanza: ante cualquier fallo devuelve null y la app arranca normal.
+  //
+  // IMPORTANTE: este chequeo hace una petición HTTP que BLOQUEA el arranque.
+  // `main()` también corre cuando la app se abre por auto-apertura de una
+  // conversación (actividad time-critical: pantalla encendida, full-screen).
+  // Bloquear ahí rompe la apertura de la conversación y la notificación, y
+  // retrasa la inicialización de Bluetooth. Por eso SOLO se verifica en el
+  // arranque del lanzador normal (defaultRouteName '/' o vacío), no en las
+  // aperturas por notificación/conversación.
+  // Inicializar Bluetooth + notificaciones SIEMPRE primero, para que nunca
+  // queden detrás de la petición HTTP del chequeo de actualización.
   initializeNotificationHandling();
-  // final notificationListenerService = NotificationListenerService();
-  // notificationListenerService.startListening(); // Iniciar la escucha
+
+  final String initialRoute =
+      WidgetsBinding.instance.platformDispatcher.defaultRouteName.trim();
+  final bool isNormalLaunch = initialRoute.isEmpty || initialRoute == '/';
+  if (isNormalLaunch) {
+    final UpdateInfo? actualizacion = await UpdateService.checkForUpdate();
+    if (actualizacion != null) {
+      runApp(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: UpdateRequiredScreen(info: actualizacion),
+      ));
+      return; // bloquea: no se carga la app normal hasta actualizar
+    }
+  }
 
   runApp(Phoenix(child: const MainApp()));
+}
+
+/// Inicializa flutter_gemma solo si el dispositivo soporta IA local
+/// (arm64-v8a / x86_64). En dispositivos sin esas ABIs (p. ej. relojes
+/// armeabi-v7a) las librerías nativas no están completas y `initialize()`
+/// crashea. Se ejecuta en segundo plano; un fallo nunca tumba la app.
+Future<void> _initGemmaIfSupported() async {
+  try {
+    if (await DeviceCapabilityService.instance.supportsLocalAi()) {
+      await FlutterGemma.initialize();
+    } else {
+      debugPrint('[main] IA local no soportada — se omite FlutterGemma.initialize()');
+    }
+  } catch (e) {
+    debugPrint('[main] FlutterGemma.initialize() falló, se continúa sin IA: $e');
+  }
 }
 
 @pragma('vm:entry-point')
@@ -151,6 +208,20 @@ Future<void> btHiveMain() async {
             dateId,
             visualizado,
           );
+        }
+        return;
+      case 'onFirebaseLink':
+        // El emisor nos envió su device_id por Bluetooth → vincular en Firebase.
+        final payload = Map<String, dynamic>.from(call.arguments as Map);
+        final deviceId = (payload['deviceId'] ?? '').toString().trim();
+        await sendDebug('bt_hive_rx', 'onFirebaseLink deviceId=$deviceId');
+        if (deviceId.isNotEmpty) {
+          try {
+            await ReceptorService().saveLinkedDeviceId(deviceId);
+            await sendDebug('bt_hive_rx', 'onFirebaseLink saved linked=$deviceId');
+          } catch (e) {
+            await sendDebug('bt_hive_rx', 'onFirebaseLink error=$e');
+          }
         }
         return;
       case 'syncNow':
@@ -920,6 +991,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         },
         '/floating_ball_conversation_auto': (context) =>
             const FloatingBallConversationAutoOpenEntry(),
+        '/lector_tts': (context) => const LectorTtsScreen(),
         '/receptor': (context) => const ReceptorScreen(),
         '/notificaciones': (context) => const NotificacionesScreen(),
         '/receptor_settings': (context) => const ReceptorSettingsScreen(),

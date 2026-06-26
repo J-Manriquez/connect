@@ -20,17 +20,39 @@ class _ReceptorScreenState extends State<ReceptorScreen> {
 
   bool _isLoading = false;
   String _errorMessage = '';
+  Timer? _autoLinkTimer;
 
   @override
   void initState() {
     super.initState();
     _checkLinkedStatus();
+    // Sondea si llegó un auto-vínculo por Bluetooth (el emisor envía su
+    // device_id al conectar y el nativo lo guarda en SharedPreferences).
+    _autoLinkTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      _checkAutoLink();
+    });
   }
 
   @override
   void dispose() {
+    _autoLinkTimer?.cancel();
+    _autoLinkTimer = null;
     _codeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkAutoLink() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final id = (prefs.getString('linked_device_id') ?? '').trim();
+      if (id.isEmpty || !mounted) return;
+      _autoLinkTimer?.cancel();
+      // Asegura estado de vínculo en Firebase + sync, luego navega.
+      await _receptorService.saveLinkedDeviceId(id);
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/notificaciones');
+    } catch (_) {}
   }
 
   // Verificar si ya hay un dispositivo vinculado

@@ -198,6 +198,8 @@ class BleService {
     return res == true;
   }
 
+
+
   static Future<bool> shareLogFile(String path, {String mime = 'text/plain', String package = 'com.whatsapp'}) async {
     final res = await _channel.invokeMethod('shareLogFile', { 'path': path, 'mime': mime, 'package': package });
     return res == true;

@@ -119,6 +119,7 @@ object BtClassicClient {
             Log.d("BtClassicClient", "connected: $address")
             println("[btclassic][client] connected address=$address")
             startReaderThread(address)
+            maybeSendFirebaseLink()
         } catch (e: Exception) {
             Log.d("BtClassicClient", "connect_failed: ${e.message ?: ""}")
             println("[btclassic][client] connect_failed address=$address err=${e.message ?: ""}")
@@ -244,6 +245,51 @@ object BtClassicClient {
                     val message = obj.optString("message", "")
                     val ts = obj.optLong("timestamp", 0L)
                     println("[btclassic][debug][$source][$ts] $message")
+                }
+                "firebase_link" -> {
+                    // El peer (emisor) nos envía su device_id de Firestore. Si
+                    // somos receptor, lo guardamos como dispositivo vinculado.
+                    val deviceId = obj.optString("deviceId", "").trim()
+                    val ctx = appContext
+                    if (ctx != null && deviceId.isNotEmpty()) {
+                        val prefs = ctx.getSharedPreferences(
+                            "FlutterSharedPreferences", Context.MODE_PRIVATE
+                        )
+                        // Solo guardamos si NO somos el emisor (no capturamos notificaciones).
+                        if (!NotificationListener.isRunning) {
+                            prefs.edit().putString("flutter.linked_device_id", deviceId).apply()
+                            println("[btclassic][client] firebase_link guardado linked=$deviceId")
+                            ensureFlutterEngine()
+                            btHiveChannel?.invokeMethod(
+                                "onFirebaseLink",
+                                mapOf("deviceId" to deviceId)
+                            )
+                        }
+                    }
+                }
+                "query_notif_active" -> {
+                    // El peer pregunta si una notificación sigue en la barra de
+                    // ESTE dispositivo. Respondemos con su estado actual.
+                    val sbnKey = obj.optString("sbnKey", "").trim()
+                    val requestId = obj.optString("requestId", "").trim()
+                    val active = try {
+                        NotificationListener.isNotificationActive(sbnKey)
+                    } catch (_: Exception) { false }
+                    val resp = JSONObject()
+                    resp.put("type", "notif_active_state")
+                    resp.put("sbnKey", sbnKey)
+                    resp.put("active", active)
+                    resp.put("requestId", requestId)
+                    resp.put("timestamp", System.currentTimeMillis())
+                    send(resp.toString())
+                }
+                "notif_active_state" -> {
+                    // Respuesta a nuestra consulta. La guardamos en SharedPreferences
+                    // (puente fiable entre isletas) para que la UI la lea.
+                    val sbnKey = obj.optString("sbnKey", "").trim()
+                    val active = obj.optBoolean("active", false)
+                    val ts = obj.optLong("timestamp", System.currentTimeMillis())
+                    saveNotifActiveStateToPrefs(sbnKey, active, ts)
                 }
                 "notif_reply" -> {
                     val sbnKey = obj.optString("sbnKey", "").trim()
@@ -886,6 +932,43 @@ object BtClassicClient {
         return paused ?: controllers.first()
     }
 
+    /// Guarda en SharedPreferences ("FlutterSharedPreferences") la última
+    /// respuesta de estado de notificación, para que la UI Flutter la lea
+    /// (puente fiable entre isletas, a diferencia de Hive).
+    private fun saveNotifActiveStateToPrefs(sbnKey: String, active: Boolean, ts: Long) {
+        val ctx = appContext ?: return
+        if (sbnKey.isBlank()) return
+        try {
+            val json = JSONObject()
+            json.put("sbnKey", sbnKey)
+            json.put("active", active)
+            json.put("timestamp", ts)
+            ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                .edit()
+                .putString("flutter.bt_notif_active_last", json.toString())
+                .apply()
+        } catch (_: Exception) {}
+    }
+
+    /// Si este dispositivo es EMISOR (no receptor), envía su device_id de
+    /// Firestore al peer para que se auto-vincule por Firebase.
+    private fun maybeSendFirebaseLink() {
+        try {
+            val ctx = appContext ?: return
+            // Solo el EMISOR (el que captura notificaciones) ofrece su device_id.
+            if (!NotificationListener.isRunning) return
+            val prefs = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val deviceId = prefs.getString("flutter.device_id", null)?.trim() ?: ""
+            if (deviceId.isEmpty()) return
+            val obj = JSONObject()
+            obj.put("type", "firebase_link")
+            obj.put("deviceId", deviceId)
+            obj.put("timestamp", System.currentTimeMillis())
+            send(obj.toString())
+            println("[btclassic][client] firebase_link enviado deviceId=$deviceId")
+        } catch (_: Exception) {}
+    }
+
     private fun ensureFlutterEngine() {
         if (flutterEngine != null) return
         val ctx = appContext ?: return
@@ -903,6 +986,19 @@ object BtClassicClient {
             )
             btHiveChannel = MethodChannel(engine.dartExecutor.binaryMessenger, "com.example.connect/bt_hive_bridge")
             flutterEngine = engine
+
+            // Handler para llamadas Dart → Kotlin en el mismo canal.
+            btHiveChannel?.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "sendDebugLog" -> {
+                        @Suppress("UNCHECKED_CAST")
+                        val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                        println("[btHive][${args["source"]}] ${args["message"]}")
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         } catch (_: Exception) {
         }
     }
