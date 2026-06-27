@@ -14,7 +14,28 @@ class PreferencesService {
   static const String KEY_PRIORITIZE_LOCAL_MEDIA = 'prioritize_local_media';
   static const String KEY_CONVERSATION_ENABLED_PACKAGES =
       'conversation_enabled_packages_v1';
-  
+  static const String KEY_STT_SOUND_ENABLED = 'stt_sound_enabled';
+
+  // Sonido de inicio/fin de grabación del modal STT (activado por defecto).
+  static Future<bool> getSttSoundEnabled() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(KEY_STT_SOUND_ENABLED) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Future<bool> saveSttSoundEnabled(bool enabled) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(KEY_STT_SOUND_ENABLED, enabled);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // Guardar preferencia de usar como receptor
   static Future<bool> saveUseAsReceptor(bool useAsReceptor) async {
     try {

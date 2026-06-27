@@ -1,6 +1,7 @@
 package com.example.connect
 
 import android.os.Bundle
+import android.os.Build
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -22,7 +23,33 @@ class AutoOpenConversationActivity : FlutterActivity() {
     private val AUTO_OPEN_CHANNEL = "com.example.connect/auto_open"
     private val FLOATING_BALL_CHANNEL = "com.example.connect/floating_ball"
     private val APP_LIST_CHANNEL = "com.example.connect/app_list"
+    private val BLE_CHANNEL = "com.example.connect/ble"
     private lateinit var appListService: AppListService
+
+    // Timestamp de la notificación que se muestra actualmente. Se usa como
+    // gate en onNewIntent para no reemplazar una conversación más reciente con
+    // una más antigua (p.ej. dos chats de WhatsApp que llegan casi a la vez).
+    private var currentNotifTimestampMs: Long = 0L
+
+    // Cancela la notificación local cuyo ID está en el Intent, para que no
+    // quede en la barra del receptor y no vuelva a disparar el auto-open.
+    private fun cancelLocalNotification(intent: Intent?) {
+        if (intent == null) return
+        try {
+            val notifId = intent.getStringExtra(LocalNotificationManager.EXTRA_NOTIFICATION_DATA) ?: return
+            if (notifId.isBlank()) return
+            val packageName = (intent.getStringExtra("packageName") ?: "").trim()
+            val title = (intent.getStringExtra("title") ?: "").trim()
+            // Replicar buildGroupKey de LocalNotificationManager (pkg|title lowercase)
+            val groupKey = ("$packageName|$title").lowercase()
+            val numericId = (groupKey.hashCode() and 0x7FFFFFFF)
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+            nm?.cancel(numericId)
+            // Marcar como cancelada para que showNotification la ignore si llega de nuevo
+            LocalNotificationManager.addToCancelledNotifications(notifId)
+            println("[AutoOpenConversationActivity] cancelLocalNotification id=$notifId numericId=$numericId")
+        } catch (_: Exception) {}
+    }
 
     override fun getBackgroundMode(): FlutterActivityLaunchConfigs.BackgroundMode {
         return FlutterActivityLaunchConfigs.BackgroundMode.transparent
@@ -153,6 +180,93 @@ class AutoOpenConversationActivity : FlutterActivity() {
                 }
             }
 
+        // Esta Activity usa un FlutterEngine PROPIO (es un FlutterActivity
+        // normal, no comparte el engine de MainActivity), así que el canal
+        // "com.example.connect/ble" que usa BleService desde Dart (incluyendo
+        // floating_ball_conversation_screen.dart, stt_mic_button.dart y
+        // stt_service.dart) no existía aquí: cualquier llamada de BleService
+        // fallaba en silencio (capturada por los try/catch del lado Dart) sin
+        // dar ningún error visible. Esto rompía, en el flujo de auto-apertura:
+        // el reenvío de logs por BT (sendDebugLogToPeers), el sondeo del
+        // indicador de notificación activa (getBtServerStatus/
+        // sendBtServerMessage/sendNotification) y el mute del STT
+        // (sttSetMuted). Solo se registran aquí los métodos que esta pantalla
+        // realmente usa (no todo lo que tiene MainActivity).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BLE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getBtServerStatus" -> {
+                        try {
+                            result.success(
+                                mapOf(
+                                    "running" to BtClassicServerService.isServiceRunning,
+                                    "connectedCount" to BtClassicServerService.connectedPeers,
+                                    "lastPeerAddress" to BtClassicServerService.lastPeerAddress,
+                                    "lastPeerName" to BtClassicServerService.lastPeerName,
+                                    "lastMediaUpdatedAtMs" to BtClassicServerService.lastMediaUpdatedAtMs
+                                )
+                            )
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    "sendBtServerMessage" -> {
+                        try {
+                            val args = call.arguments as Map<String, Any?>
+                            val json = org.json.JSONObject(args).toString()
+                            val i = Intent(this, BtClassicServerService::class.java)
+                                .setAction(BtClassicServerService.ACTION_SEND_TO_PEERS)
+                                .putExtra(BtClassicServerService.EXTRA_JSON, json)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    "sendNotification" -> {
+                        try {
+                            val args = call.arguments as Map<String, Any?>
+                            val json = org.json.JSONObject(args).toString()
+                            BtClassicClient.init(this)
+                            BtClassicClient.send(json)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    "sendDebugLogToPeers" -> {
+                        try {
+                            val source = call.argument<String>("source") ?: "receptor"
+                            val message = call.argument<String>("message") ?: ""
+                            BtClassicServerService.sendDebugLogToPeers(source, message)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    "sttSetMuted" -> {
+                        try {
+                            val muted = call.argument<Boolean>("muted") ?: false
+                            val audio = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                            if (audio != null) {
+                                val direction = if (muted) android.media.AudioManager.ADJUST_MUTE
+                                    else android.media.AudioManager.ADJUST_UNMUTE
+                                for (stream in intArrayOf(
+                                    android.media.AudioManager.STREAM_MUSIC,
+                                    android.media.AudioManager.STREAM_NOTIFICATION,
+                                )) {
+                                    try { audio.adjustStreamVolume(stream, direction, 0) } catch (_: Exception) {}
+                                }
+                            }
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("ERROR", e.message, null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, AUTO_OPEN_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -197,6 +311,52 @@ class AutoOpenConversationActivity : FlutterActivity() {
             prefs.edit().putBoolean("flutter.skip_auto_redirect_once", true).apply()
         } catch (_: Exception) {
         }
+        // Cancelar la notificación local que abrió esta Activity. Sin esto queda
+        // en la barra del receptor y vuelve a disparar el auto-open en bucle.
+        cancelLocalNotification(intent)
+        currentNotifTimestampMs = intent?.getLongExtra("timestamp", 0L) ?: 0L
         super.onCreate(savedInstanceState)
+    }
+
+    // Con launchMode=singleTask, los nuevos Intents llegan aquí en lugar de
+    // crear otra instancia. Se usa para manejar la llegada de una segunda
+    // notificación mientras la pantalla de conversación ya está abierta.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val newTimestampMs = intent.getLongExtra("timestamp", 0L)
+        val newId = (intent.getStringExtra(LocalNotificationManager.EXTRA_NOTIFICATION_DATA) ?: "").trim()
+
+        // Siempre cancelar la notificación entrante de la barra, aunque no
+        // cambiemos de conversación (evita acumulación en la barra).
+        cancelLocalNotification(intent)
+
+        if (newId.isEmpty()) return
+
+        if (newTimestampMs > currentNotifTimestampMs) {
+            // La nueva notificación es más reciente: actualizar intent y avisar a Flutter
+            currentNotifTimestampMs = newTimestampMs
+            setIntent(intent)
+            println("[AutoOpenConversationActivity] onNewIntent switch -> id=$newId ts=$newTimestampMs")
+            try {
+                val payload = mapOf(
+                    "notificationId" to newId,
+                    "title" to (intent.getStringExtra("title") ?: ""),
+                    "body" to (intent.getStringExtra("body") ?: ""),
+                    "packageName" to (intent.getStringExtra("packageName") ?: ""),
+                    "appName" to (intent.getStringExtra("appName") ?: ""),
+                    "autoOpen" to intent.getBooleanExtra("autoOpen", true),
+                    "isAutoOpened" to true,
+                    "fromBackground" to intent.getBooleanExtra("fromBackground", true),
+                    "timestamp" to newTimestampMs
+                )
+                flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                    MethodChannel(messenger, AUTO_OPEN_CHANNEL).invokeMethod("newIntentArrived", payload)
+                }
+            } catch (e: Exception) {
+                println("[AutoOpenConversationActivity] onNewIntent invokeMethod failed: ${e.message}")
+            }
+        } else {
+            println("[AutoOpenConversationActivity] onNewIntent skip (older) id=$newId ts=$newTimestampMs currentTs=$currentNotifTimestampMs")
+        }
     }
 }

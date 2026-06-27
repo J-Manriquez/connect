@@ -25,17 +25,13 @@ class NotificationSettingsService {
     _lastDebugBySigMs[key] = nowMs;
 
     print('[$source][$nowMs] $message');
+    // Llamada nativa directa y síncrona (sin Intent/startForegroundService):
+    // no necesita chequear el estado del servidor BT antes, ya no-opea sola
+    // si no hay peer conectado.
     try {
-      final rawStatus = await _bleChannel.invokeMethod('getBtServerStatus');
-      final status = Map<String, dynamic>.from(rawStatus as Map);
-      final running = status['running'] == true;
-      final peers = (status['connectedCount'] as num?)?.toInt() ?? 0;
-      if (!running || peers <= 0) return;
-      await _bleChannel.invokeMethod('sendBtServerMessage', {
-        'type': 'debug_log',
+      await _bleChannel.invokeMethod('sendDebugLogToPeers', {
         'source': source,
         'message': message,
-        'timestamp': nowMs,
       });
     } catch (_) {}
   }

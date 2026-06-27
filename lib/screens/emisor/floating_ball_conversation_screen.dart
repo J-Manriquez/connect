@@ -34,7 +34,28 @@ class _FloatingBallConversationAutoOpenEntryState
   @override
   void initState() {
     super.initState();
+    // Escuchar "newIntentArrived" enviado desde AutoOpenConversationActivity
+    // cuando llega una notificación más reciente con singleTask activo.
+    _autoOpenChannel.setMethodCallHandler(_onNativeCall);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _autoOpenChannel.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  Future<dynamic> _onNativeCall(MethodCall call) async {
+    if (call.method == 'newIntentArrived') {
+      final args = call.arguments;
+      if (args is Map) {
+        await _loadFromData(Map<String, dynamic>.from(args));
+      } else {
+        await _load();
+      }
+    }
+    return null;
   }
 
   Future<void> _load() async {
@@ -43,7 +64,10 @@ class _FloatingBallConversationAutoOpenEntryState
       final dynamic res = await _autoOpenChannel.invokeMethod('getAutoOpenPayload');
       if (res is Map) data = Map<String, dynamic>.from(res);
     } catch (_) {}
+    await _loadFromData(data);
+  }
 
+  Future<void> _loadFromData(Map<String, dynamic> data) async {
     final pkg = (data['packageName'] ?? data['paquete'] ?? '').toString().trim();
     final title = (data['title'] ?? data['titulo'] ?? '').toString().trim();
 
@@ -79,7 +103,11 @@ class _FloatingBallConversationAutoOpenEntryState
         body: Center(child: CircularProgressIndicator()),
       );
     }
+    // ValueKey por notificationId: cuando llega una notificación diferente
+    // (onNewIntent → newIntentArrived) Flutter destruye el screen anterior y
+    // crea uno nuevo desde cero, disparando initState con el nuevo payload.
     return FloatingBallConversationScreen(
+      key: ValueKey(data['notificationId'] ?? data['id'] ?? ''),
       notificationData: data,
       startInConversationMode: _startInConversationMode,
       openedFromBackground: true,
@@ -212,10 +240,29 @@ class _FloatingBallConversationScreenState
   /// null = desconocido, true = sigue, false = ya no está.
   bool? _notifStillActive;
   Timer? _notifActiveTimer;
+  /// sbnKey de la notificación entrante más reciente de esta conversación.
+  /// Se fija al abrir (asumiendo que la notificación que disparó la pantalla
+  /// está activa) y se actualiza cada vez que llega un mensaje entrante nuevo,
+  /// en vez de recalcularse desde `_pickBestSbnKeyForReply` (que puede tomar
+  /// el sbnKey de una respuesta saliente vieja y dejar el indicador
+  /// permanentemente desincronizado de la notificación real).
+  String _notifActiveSbnKey = '';
+
+  /// id del último mensaje visto en la marca `bt_hive_last_notification`
+  /// (puente entre isletas — ver `_pollNewMessages`), para no recargar la
+  /// conversación de más cuando no hay nada nuevo relevante.
+  String _lastSeenNewMessageId = '';
 
   @override
   void initState() {
     super.initState();
+    _btDebug(
+      'pantalla ABIERTA pkg=${_getFieldValue(['packageName', 'paquete'])} '
+      'title="${_getFieldValue(['title', 'titulo'])}" '
+      'selectedId=${(widget.notificationData['notificationId'] ?? widget.notificationData['id'] ?? '')}',
+      sig: 'screenOpen',
+      throttleMs: 0,
+    );
     WidgetsBinding.instance.addObserver(this);
     _loadStyle();
     _initMediaVisibility();
@@ -225,11 +272,47 @@ class _FloatingBallConversationScreenState
     });
     _conversationScrollController.addListener(_onConversationScroll);
     _initModeAndMaybeLoad();
-    // Sondea cada 4s si la notificación sigue en la barra del emisor.
+    // Sondea cada 4s si la notificación sigue en la barra del emisor, y si
+    // llegó algún mensaje nuevo mientras la pantalla está abierta.
     _pollNotifActive();
     _notifActiveTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       _pollNotifActive();
+      _pollNewMessages();
     });
+  }
+
+  /// Detecta mensajes nuevos llegados mientras la pantalla está abierta.
+  /// `btHiveMain` (isleta de fondo) escribe en SharedPreferences cada vez que
+  /// procesa un `onBtNotification`; acá solo leemos esa marca y, si cambió Y
+  /// pertenece a esta conversación (mismo packageName+title), recargamos.
+  /// Sin esto, un mensaje nuevo nunca aparecía hasta cerrar y reabrir la
+  /// pantalla (no había ningún mecanismo de refresco en vivo).
+  Future<void> _pollNewMessages() async {
+    if (!_isConversationMode) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final raw = prefs.getString('bt_hive_last_notification');
+      if (raw == null || raw.isEmpty) return;
+      final Map<String, dynamic> st = jsonDecode(raw) as Map<String, dynamic>;
+      final id = (st['id'] ?? '').toString();
+      if (id.isEmpty || id == _lastSeenNewMessageId) return;
+      _lastSeenNewMessageId = id;
+      final pkg = (st['pkg'] ?? '').toString();
+      final title = (st['title'] ?? '').toString();
+      if (pkg != _packageName || title != _conversationTitle) {
+        _btDebug(
+          'pollNewMessages ignorado: otra conversación id=$id pkg=$pkg title="$title"',
+          sig: 'pollNewMessages',
+          throttleMs: 0,
+        );
+        return;
+      }
+      _btDebug('pollNewMessages detectado id=$id => recargando', sig: 'pollNewMessages', throttleMs: 0);
+      await _loadConversationMessages();
+    } catch (e) {
+      _btDebug('pollNewMessages error=$e', sig: 'pollNewMessages', throttleMs: 0);
+    }
   }
 
   Future<void> _initMediaVisibility() async {
@@ -247,6 +330,11 @@ class _FloatingBallConversationScreenState
 
   @override
   void dispose() {
+    _btDebug(
+      'pantalla CERRADA pkg=$_packageName title="$_conversationTitle"',
+      sig: 'screenClose',
+      throttleMs: 0,
+    );
     WidgetsBinding.instance.removeObserver(this);
     _systemTick?.cancel();
     _systemTick = null;
@@ -263,15 +351,57 @@ class _FloatingBallConversationScreenState
   /// Pregunta al emisor (por BT) si la notificación de esta conversación sigue
   /// en su barra, y refresca el indicador con el último estado conocido.
   Future<void> _pollNotifActive() async {
-    final sbnKey = _pickBestSbnKeyForReply().trim();
-    if (sbnKey.isEmpty) return;
+    // Prioriza el sbnKey de la notificación entrante más reciente (fijado al
+    // abrir y actualizado en cada carga); solo si no hay ninguno cae al
+    // anterior método (último sbnKey disponible en cualquier mensaje,
+    // incluyendo respuestas salientes), para no perder el sondeo en
+    // conversaciones viejas que no hayan pasado por ese flujo.
+    final sbnKey = (_notifActiveSbnKey.isNotEmpty
+            ? _notifActiveSbnKey
+            : _pickBestSbnKeyForReply())
+        .trim();
+    if (sbnKey.isEmpty) {
+      _btDebug('pollNotifActive skip: sbnKey vacío', sig: 'pollNotifActive', throttleMs: 4000);
+      return;
+    }
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final query = {
+      'type': 'query_notif_active',
+      'sbnKey': sbnKey,
+      'requestId': requestId,
+    };
+    // La consulta debe llegar al peer sin importar si ESTE dispositivo es,
+    // en este momento, el servidor BT o el cliente: igual que
+    // `_sendConversationReply`, se prueba la ruta servidor (peers conectados
+    // a nuestro BtClassicServerService) y, si no hay, la ruta cliente
+    // (BtClassicClient.send). Antes solo se probaba la ruta servidor: si este
+    // dispositivo era el cliente de la conexión, la consulta nunca llegaba al
+    // peer y el indicador quedaba gris para siempre.
+    bool sentViaServer = false;
     try {
-      unawaited(BleService.sendBtServerMessage({
-        'type': 'query_notif_active',
-        'sbnKey': sbnKey,
-        'requestId': DateTime.now().millisecondsSinceEpoch.toString(),
-      }));
-    } catch (_) {}
+      final status = await BleService.getBtServerStatus();
+      final running = status['running'] == true;
+      final connectedCount = (status['connectedCount'] as num?)?.toInt() ?? 0;
+      if (running && connectedCount > 0) {
+        sentViaServer = await BleService.sendBtServerMessage(query);
+      }
+    } catch (e) {
+      _btDebug('pollNotifActive serverSend error=$e', sig: 'pollNotifActive', throttleMs: 0);
+    }
+    bool sentViaClient = false;
+    if (!sentViaServer) {
+      try {
+        sentViaClient = await BleService.sendNotification(query);
+      } catch (e) {
+        _btDebug('pollNotifActive clientSend error=$e', sig: 'pollNotifActive', throttleMs: 0);
+      }
+    }
+    _btDebug(
+      'pollNotifActive sent sbnKey=$sbnKey requestId=$requestId '
+      'viaServer=$sentViaServer viaClient=$sentViaClient',
+      sig: 'pollNotifActive',
+      throttleMs: 4000,
+    );
     try {
       // El nativo guarda la última respuesta en SharedPreferences (puente entre
       // isletas). La respuesta llega async; el próximo tick ya la verá.
@@ -282,10 +412,17 @@ class _FloatingBallConversationScreenState
       final Map<String, dynamic> st = jsonDecode(raw) as Map<String, dynamic>;
       if ((st['sbnKey'] ?? '').toString().trim() != sbnKey) return;
       final active = st['active'] == true;
+      _btDebug(
+        'pollNotifActive response sbnKey=$sbnKey active=$active prevValue=$_notifStillActive',
+        sig: 'pollNotifActiveResp',
+        throttleMs: 4000,
+      );
       if (_notifStillActive != active) {
         setState(() => _notifStillActive = active);
       }
-    } catch (_) {}
+    } catch (e) {
+      _btDebug('pollNotifActive readPrefs error=$e', sig: 'pollNotifActive', throttleMs: 0);
+    }
   }
 
   /// Modal explicativo del indicador de estado de la notificación.
@@ -637,6 +774,11 @@ class _FloatingBallConversationScreenState
       } catch (_) {}
     }
 
+    // Si entramos en modo conversación, asumimos optimistamente que la
+    // notificación que la disparó sigue en la barra del emisor (verde) hasta
+    // que el primer poll real la confirme o la corrija.
+    final initialSbnKey = conversationMode ? _extractSbnKey(widget.notificationData) : '';
+
     if (!mounted) return;
     setState(() {
       _packageName = pkg;
@@ -645,6 +787,10 @@ class _FloatingBallConversationScreenState
       _appIconBase64 = iconBase64Clean;
       _appIconBytes = iconBytes;
       _isConversationMode = conversationMode;
+      if (initialSbnKey.isNotEmpty) {
+        _notifActiveSbnKey = initialSbnKey;
+        _notifStillActive = true;
+      }
     });
 
     _markAsRead();
@@ -697,17 +843,14 @@ class _FloatingBallConversationScreenState
     _lastBtDebugSig = sig;
     _lastBtDebugMs = now;
     // Imprime local (visible en `flutter run`/logcat del dispositivo que ejecuta
-    // esta pantalla) además de reenviar por Bluetooth al peer.
+    // esta pantalla) además de reenviar por Bluetooth al peer. El reenvío usa
+    // una llamada nativa directa y síncrona (sin Intent/startForegroundService,
+    // ver BleService.sendDebugLogToPeers) — la vía anterior con
+    // sendBtServerMessage chocaba con el rate-limit de Android al loguear con
+    // esta frecuencia.
     print('[floating_ball_conversation] $message');
     try {
-      unawaited(
-        BleService.sendBtServerMessage({
-          'type': 'debug_log',
-          'source': 'floating_ball_conversation',
-          'message': message,
-          'timestamp': now,
-        }),
-      );
+      unawaited(BleService.sendDebugLogToPeers('floating_ball_conversation', message));
     } catch (_) {}
   }
 
@@ -1001,46 +1144,74 @@ class _FloatingBallConversationScreenState
                   textAlign: TextAlign.center,
                 ),
               ),
-            Row(
-              children: [
-                Expanded(
-                  child: _bottomActionButton(
-                    onTap: () async {
-                      if (widget.openedFromBackground) {
-                        SystemNavigator.pop();
-                        return;
-                      }
-                      Navigator.of(context).maybePop();
-                    },
-                    heightDp: _convCloseHeightDp,
-                    bgColor: _convCloseBgColor,
-                    borderColor: _convCloseBorderColor,
-                    textColor: _convCloseTextColor,
-                    hideText: _convCloseHideText,
-                    text: _convCloseText,
-                    iconPngBase64: _convCloseIconPngBase64,
-                    fallback: Icons.close,
-                    iconSizeDp: _convCloseIconSizeDp,
-                  ),
-                ),
-                if (_isConversationMode) ...[
-                  SizedBox(width: _convBottomButtonsGapDp.toDouble()),
-                  Expanded(
-                    child: _bottomActionButton(
-                      onTap: _isReplySending ? null : _openReplyDialog,
-                      heightDp: _convReplyHeightDp,
-                      bgColor: _convReplyBgColor,
-                      borderColor: _convReplyBorderColor,
-                      textColor: _convReplyTextColor,
-                      hideText: _convReplyHideText,
-                      text: _isReplySending ? 'Enviando…' : _convReplyText,
-                      iconPngBase64: _convReplyIconPngBase64,
-                      fallback: Icons.reply,
-                      iconSizeDp: _convReplyIconSizeDp,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final totalW = constraints.maxWidth;
+                final gap = _convBottomButtonsGapDp.toDouble();
+                // Mostrar responder: solo en modo conversación y cuando la
+                // notificación está activa (verde) o aún desconocida (gris).
+                // Si es roja (false) se oculta con animación; vuelve a aparecer
+                // con la misma animación si la notificación regresa a activa.
+                final showReply = _isConversationMode && _notifStillActive != false;
+                final halfW = (totalW - gap) / 2;
+
+                final closeBtn = _bottomActionButton(
+                  onTap: () async {
+                    if (widget.openedFromBackground) {
+                      SystemNavigator.pop();
+                      return;
+                    }
+                    Navigator.of(context).maybePop();
+                  },
+                  heightDp: _convCloseHeightDp,
+                  bgColor: _convCloseBgColor,
+                  borderColor: _convCloseBorderColor,
+                  textColor: _convCloseTextColor,
+                  hideText: _convCloseHideText,
+                  text: _convCloseText,
+                  iconPngBase64: _convCloseIconPngBase64,
+                  fallback: Icons.close,
+                  iconSizeDp: _convCloseIconSizeDp,
+                );
+
+                return Row(
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOut,
+                      width: (_isConversationMode && !showReply) ? totalW : halfW,
+                      child: closeBtn,
                     ),
-                  ),
-                ],
-              ],
+                    if (_isConversationMode)
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        width: showReply ? halfW + gap : 0,
+                        clipBehavior: Clip.hardEdge,
+                        decoration: const BoxDecoration(),
+                        child: Row(
+                          children: [
+                            SizedBox(width: gap),
+                            Expanded(
+                              child: _bottomActionButton(
+                                onTap: _isReplySending ? null : _openSttReply,
+                                heightDp: _convReplyHeightDp,
+                                bgColor: _convReplyBgColor,
+                                borderColor: _convReplyBorderColor,
+                                textColor: _convReplyTextColor,
+                                hideText: _convReplyHideText,
+                                text: _isReplySending ? 'Enviando…' : _convReplyText,
+                                iconPngBase64: _convReplyIconPngBase64,
+                                fallback: Icons.reply,
+                                iconSizeDp: _convReplyIconSizeDp,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -1328,6 +1499,8 @@ class _FloatingBallConversationScreenState
         extrasRaw is Map ? Map<String, dynamic>.from(extrasRaw) : <String, dynamic>{};
     final isReply = extras['isReply'] == true || id.startsWith('reply_');
 
+    _btDebug('deleteMessage start id=$id isReply=$isReply', sig: 'deleteMessage', throttleMs: 0);
+
     _hiddenMessageIds.add(id);
     if (mounted) {
       setState(() {
@@ -1346,7 +1519,9 @@ class _FloatingBallConversationScreenState
         await FirebaseService().deleteNotification(id, '');
         await BtHiveStorageService.deleteOutboxEntry(id);
       }
-    } catch (_) {}
+    } catch (e) {
+      _btDebug('deleteMessage id=$id storageError=$e', sig: 'deleteMessage', throttleMs: 0);
+    }
 
     try {
       await _loadConversationMessages();
@@ -1407,144 +1582,20 @@ class _FloatingBallConversationScreenState
     );
   }
 
-  Future<void> _openReplyDialog() async {
-    final text = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        final controller = TextEditingController();
-        final mq = MediaQuery.of(this.context);
-        final containerRadius = BorderRadius.circular(18);
-
-        Widget panel() {
-          final modalTextColor = Color(_convReplyModalTextColor);
-          final modalTextStyle = TextStyle(
-            color: modalTextColor,
-            fontSize: _convReplyModalTextSizeSp.toDouble(),
-          );
-          return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Material(
-              color: Color(_convReplyModalBgColor),
-              borderRadius: containerRadius,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Responder',
-                      style: modalTextStyle.copyWith(fontWeight: FontWeight.w600),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: controller,
-                            autofocus: true,
-                            style: modalTextStyle,
-                            decoration: InputDecoration(
-                              hintText: 'Escribe una respuesta…',
-                              hintStyle: modalTextStyle.copyWith(
-                                color: modalTextColor.withOpacity(0.6),
-                              ),
-                            ),
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (_) {
-                              final trimmed = controller.text.trim();
-                              if (trimmed.isEmpty) return;
-                              Navigator.of(context).pop(trimmed);
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        SttMicButton(
-                          size: 44,
-                          color: modalTextColor,
-                          modalBackgroundColor: Color(_convBgColor),
-                          onResult: (sttText) {
-                            // Enviar automáticamente y cerrar el modal de responder.
-                            final trimmed = sttText.trim();
-                            if (trimmed.isEmpty) return;
-                            Navigator.of(context).pop(trimmed);
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(12),
-                          onTap: () {
-                            final trimmed = controller.text.trim();
-                            if (trimmed.isEmpty) return;
-                            Navigator.of(context).pop(trimmed);
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Color(_convReplyModalSendBgColor),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Color(_convReplyModalSendBorderColor),
-                                width: 1,
-                              ),
-                            ),
-                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                            alignment: Alignment.center,
-                            child: _pngOrIcon(
-                              base64Png: _convReplyModalSendIconPngBase64,
-                              fallback: Icons.send,
-                              tint: modalTextColor,
-                              size: _convReplyModalSendIconSizeDp.toDouble(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-
-        return AnimatedPadding(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
-          // Cerrar al tocar fuera del panel.
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => Navigator.of(context).pop(),
-            child: SizedBox(
-              height: mq.size.height,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    // Absorber el toque sobre el panel para no cerrarlo al
-                    // interactuar con él.
-                    child: GestureDetector(
-                      onTap: () {},
-                      child: panel(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
+  /// Responder ahora abre directamente el modal de voz (sin diálogo de texto
+  /// intermedio): el usuario graba o edita el texto transcrito ahí mismo y lo
+  /// envía con el botón "Enviar" del propio modal.
+  Future<void> _openSttReply() async {
+    await showSttReplyModal(
+      context,
+      accentColor: Color(_convReplyModalTextColor),
+      backgroundColor: Color(_convReplyModalBgColor),
+      onResult: (text) {
+        final trimmed = text.trim();
+        if (trimmed.isEmpty) return;
+        unawaited(_sendConversationReply(trimmed));
       },
     );
-
-    final trimmed = (text ?? '').trim();
-    if (trimmed.isEmpty) return;
-    await _sendConversationReply(trimmed);
   }
 
   void _onConversationScroll() {
@@ -1599,6 +1650,7 @@ class _FloatingBallConversationScreenState
 
   Future<void> _markNotificationMapAsRead(Map<String, dynamic> message) async {
     if (message['status-visualizacion'] == true) return;
+    final id = _messageId(message);
     try {
       final notificationId = (message['notificationId'] ?? message['id'])?.toString();
       if (notificationId == null || notificationId.isEmpty) return;
@@ -1608,7 +1660,10 @@ class _FloatingBallConversationScreenState
         notificationId,
         true,
       );
-    } catch (_) {}
+      _btDebug('markAsRead id=$id ok', sig: 'markAsRead:$id', throttleMs: 0);
+    } catch (e) {
+      _btDebug('markAsRead id=$id error=$e', sig: 'markAsRead:$id', throttleMs: 0);
+    }
     message['status-visualizacion'] = true;
     if (!mounted) return;
     setState(() {});
@@ -1630,6 +1685,12 @@ class _FloatingBallConversationScreenState
       final prevMax = pos.maxScrollExtent;
       final prevPixels = pos.pixels;
       final newStart = (_windowStart - 10).clamp(0, _windowStart);
+
+      _btDebug(
+        'paging expandUp windowStart=$_windowStart->$newStart windowEnd=$_windowEnd total=${_allConversationMessages.length}',
+        sig: 'pagingUp',
+        throttleMs: 0,
+      );
 
       setState(() {
         _isConversationPaging = true;
@@ -1659,6 +1720,11 @@ class _FloatingBallConversationScreenState
         _windowEnd,
         _allConversationMessages.length,
       );
+      _btDebug(
+        'paging expandDown windowEnd=$_windowEnd->$newEnd windowStart=$_windowStart total=${_allConversationMessages.length}',
+        sig: 'pagingDown',
+        throttleMs: 0,
+      );
       setState(() {
         _isConversationPaging = true;
         _windowEnd = newEnd;
@@ -1686,7 +1752,24 @@ class _FloatingBallConversationScreenState
         sig: 'loadStart:$_packageName:$_conversationTitle:$_selectedMessageId',
         throttleMs: 0,
       );
-      final remote = await _receptorService.fetchAllNotificationsAcrossDaysRawOnce();
+      List<Map<String, dynamic>> remote =
+          await _receptorService.fetchAllNotificationsAcrossDaysRawOnce();
+
+      // Si Firestore devolvió vacío (sin linkedDeviceId o error de red),
+      // usar la cache Hive local que contiene las notificaciones BT entrantes
+      // (outbox + firebase_cache), para no mostrar conversación vacía.
+      if (remote.isEmpty) {
+        try {
+          remote = await BtHiveStorageService.getLocalNotificationsForUi(
+            includeVisualized: true,
+          );
+          _btDebug(
+            'loadFallbackHive count=${remote.length}',
+            sig: 'loadFallbackHive',
+            throttleMs: 0,
+          );
+        } catch (_) {}
+      }
 
       List<Map<String, dynamic>> localReplies = const [];
       try {
@@ -1771,9 +1854,15 @@ class _FloatingBallConversationScreenState
           'packageName': _packageName,
           'appName': '',
           'timestamp': Timestamp.fromMillisecondsSinceEpoch(tsMs),
-          'extras': Map<String, dynamic>.from(
-            widget.notificationData['extras'] ?? {},
-          ),
+          'extras': {
+            ...Map<String, dynamic>.from(widget.notificationData['extras'] ?? {}),
+            // Marca este mensaje como sintetizado: si el real (con su propio
+            // id, formato distinto al `currentId` nativo) llega luego desde
+            // Firestore/Hive, lo detectamos por contenido y descartamos esta
+            // copia para no duplicar visualmente el mensaje que abrió la
+            // conversación.
+            'synthetic': true,
+          },
           'status-visualizacion':
               widget.notificationData['status-visualizacion'] == true,
         };
@@ -1782,6 +1871,30 @@ class _FloatingBallConversationScreenState
           sig: 'inject',
           throttleMs: 0,
         );
+      }
+
+      // Dedupe por contenido: si el mensaje sintetizado de arriba coincide
+      // (mismo autor+texto+minuto) con un mensaje REAL ya presente bajo otro
+      // id, nos quedamos con el real (tiene sbnKey/datos completos) y
+      // descartamos el sintetizado.
+      final syntheticEntry = byId[currentId];
+      if (currentId.isNotEmpty &&
+          syntheticEntry != null &&
+          (syntheticEntry['extras'] as Map?)?['synthetic'] == true) {
+        final syntheticKey = _messageDupKey(syntheticEntry);
+        for (final entry in byId.entries) {
+          if (entry.key == currentId) continue;
+          if ((entry.value['extras'] as Map?)?['synthetic'] == true) continue;
+          if (_messageDupKey(entry.value) == syntheticKey) {
+            byId.remove(currentId);
+            _btDebug(
+              'load dedupSynthetic removido id=$currentId realId=${entry.key}',
+              sig: 'dedupSynthetic',
+              throttleMs: 0,
+            );
+            break;
+          }
+        }
       }
 
       final loadNowMs = DateTime.now().millisecondsSinceEpoch;
@@ -1808,12 +1921,55 @@ class _FloatingBallConversationScreenState
         throttleMs: 0,
       );
 
+      // Log detallado de CADA mensaje que queda en el set final tras dedupe,
+      // para detectar si un mismo mensaje (mismo autor+contenido+hora) se
+      // repite con ids distintos. Se reenvía por BT (ver _btDebug) para
+      // poder leerlo en el receptor vía `flutter logs > salidaCompilacion.txt`.
+      final dupKeyCount = <String, int>{};
+      for (final m in all) {
+        final dupKey = _messageDupKey(m);
+        dupKeyCount[dupKey] = (dupKeyCount[dupKey] ?? 0) + 1;
+      }
+      for (int i = 0; i < all.length; i++) {
+        final m = all[i];
+        final dupKey = _messageDupKey(m);
+        final dupCount = dupKeyCount[dupKey] ?? 1;
+        _btDebug(
+          'msg[$i/${all.length}] ${_describeMessage(m)}'
+          '${dupCount > 1 ? " [POSIBLE DUPLICADO x$dupCount]" : ""}',
+          sig: 'msgDetail:${_messageId(m)}',
+          throttleMs: 0,
+        );
+      }
+
+      // Si llegó un mensaje ENTRANTE nuevo con un sbnKey distinto al que
+      // venimos sondeando, es una notificación recién posteada: asumimos
+      // optimistamente que está activa y empezamos a sondear esa, en vez de
+      // seguir preguntando por una posiblemente vieja/ya removida.
+      String? freshIncomingSbnKey;
+      for (int i = all.length - 1; i >= 0; i--) {
+        final m = all[i];
+        final extrasRaw = m['extras'];
+        final extras =
+            extrasRaw is Map ? Map<String, dynamic>.from(extrasRaw) : <String, dynamic>{};
+        if ((extras['direction'] ?? '').toString().trim() == 'out') continue;
+        final key = _extractSbnKey(m);
+        if (key.isNotEmpty) {
+          freshIncomingSbnKey = key;
+          break;
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _allConversationMessages = all;
         _windowStart = start;
         _windowEnd = end;
         _messageKeys.clear();
+        if (freshIncomingSbnKey != null && freshIncomingSbnKey != _notifActiveSbnKey) {
+          _notifActiveSbnKey = freshIncomingSbnKey;
+          _notifStillActive = true;
+        }
       });
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1863,6 +2019,22 @@ class _FloatingBallConversationScreenState
       }
       items.add(_ConversationItem.message(m));
     }
+
+    // Log de la ventana realmente renderizada (lo que el usuario VE en
+    // pantalla), incluyendo ids en orden, para detectar si la duplicación
+    // ocurre acá (mismo id dos veces en `messages`) en vez de en la carga.
+    final ids = messages.map(_messageId).toList();
+    final idCounts = <String, int>{};
+    for (final id in ids) {
+      idCounts[id] = (idCounts[id] ?? 0) + 1;
+    }
+    final repeatedIds = idCounts.entries.where((e) => e.value > 1).toList();
+    _btDebug(
+      'renderWindow count=${messages.length} ids=${ids.join(",")}'
+      '${repeatedIds.isNotEmpty ? " [ID REPETIDO EN VENTANA: ${repeatedIds.map((e) => "${e.key}x${e.value}").join(",")}]" : ""}',
+      sig: 'renderWindow:${ids.join(",")}',
+      throttleMs: 0,
+    );
     return items;
   }
 
@@ -1905,6 +2077,44 @@ class _FloatingBallConversationScreenState
 
   String _messageId(Map<String, dynamic> m) {
     return (m['notificationId'] ?? m['id'] ?? '').toString().trim();
+  }
+
+  /// Clave para detectar duplicados visuales: mismo autor + mismo contenido +
+  /// mismo minuto, sin importar el id (dos ids distintos con esta misma clave
+  /// se verían como el mismo mensaje repetido en la UI).
+  String _messageDupKey(Map<String, dynamic> m) {
+    final extrasRaw = m['extras'];
+    final extras =
+        extrasRaw is Map ? Map<String, dynamic>.from(extrasRaw) : <String, dynamic>{};
+    final direction = (extras['direction'] ?? '').toString().trim();
+    final content = _extractMessageBody(m);
+    final tsMinute = _messageTimestampMs(m) ~/ 60000;
+    return '$direction|$content|$tsMinute';
+  }
+
+  /// Descripción completa de un mensaje para diagnóstico: id, autor, fecha y
+  /// hora, y contenido íntegro (sin truncar) — usado para encontrar la causa
+  /// de mensajes repetidos en la pantalla.
+  String _describeMessage(Map<String, dynamic> m) {
+    final id = _messageId(m);
+    final extrasRaw = m['extras'];
+    final extras =
+        extrasRaw is Map ? Map<String, dynamic>.from(extrasRaw) : <String, dynamic>{};
+    final direction = (extras['direction'] ?? '').toString().trim();
+    final isReply = extras['isReply'] == true || id.startsWith('reply_');
+    final author = direction == 'out'
+        ? 'yo${isReply ? "(respuesta)" : ""}'
+        : (_stringFromMessage(m, ['appName']).isNotEmpty
+            ? _stringFromMessage(m, ['appName'])
+            : _conversationTitle);
+    final tsMs = _messageTimestampMs(m);
+    final fechaHora = tsMs > 0
+        ? DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.fromMillisecondsSinceEpoch(tsMs))
+        : 'sin timestamp';
+    final content = _extractMessageBody(m);
+    final visualized = m['status-visualizacion'] == true;
+    return 'id=$id autor="$author" fecha="$fechaHora" tsMs=$tsMs '
+        'visualizado=$visualized contenido="$content"';
   }
 
   String _extractMessageBody(Map<String, dynamic> m) {

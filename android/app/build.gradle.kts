@@ -35,6 +35,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Keystore de debug fijo versionado en el repo (android/app/debug.keystore):
+            // así todos los builds release firmados con "debug" usan SIEMPRE la misma
+            // firma sin importar la máquina, evitando el conflicto de instalación
+            // "App not installed as package conflicts with an existing package" que
+            // ocurre cuando cada máquina usa su propio ~/.android/debug.keystore.
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.

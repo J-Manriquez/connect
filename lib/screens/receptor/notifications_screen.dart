@@ -160,17 +160,11 @@ class _UnreadNotificationsScreenState extends State<UnreadNotificationsScreen> {
   }
 
   Future<void> _relayDebugToEmisor(String source, String message) async {
+    // Llamada nativa directa y síncrona (sin Intent/startForegroundService,
+    // ver BleService.sendDebugLogToPeers): no necesita chequear el estado
+    // del servidor BT antes, ya no-opea sola si no hay peer conectado.
     try {
-      final status = await BleService.getBtServerStatus();
-      final running = status['running'] == true;
-      final peers = (status['connectedCount'] as num?)?.toInt() ?? 0;
-      if (!running || peers <= 0) return;
-      await BleService.sendBtServerMessage({
-        'type': 'debug_log',
-        'source': source,
-        'message': message,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      });
+      await BleService.sendDebugLogToPeers(source, message);
     } catch (_) {}
   }
 

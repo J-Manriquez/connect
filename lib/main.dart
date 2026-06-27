@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:connect/screens/buscar_emisor_screen.dart';
 import 'package:connect/screens/emisor/seleccion_bl_screen.dart';
@@ -166,6 +167,24 @@ Future<void> btHiveMain() async {
           'bt_hive_rx',
           'onBtNotification sync_done id=$id',
         );
+        // Marca de "llegó un mensaje nuevo" para que la pantalla de
+        // conversación (que corre en otro isolate/engine) detecte mensajes
+        // entrantes mientras está abierta. Puente vía SharedPreferences
+        // nativas (mismo patrón que bt_notif_active_last/linked_device_id):
+        // ambos isolates leen/escriben el mismo SharedPreferences de Android,
+        // así que no se necesita un canal nativo nuevo para esto.
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+            'bt_hive_last_notification',
+            jsonEncode({
+              'id': id,
+              'pkg': pkg,
+              'title': title,
+              'ts': DateTime.now().millisecondsSinceEpoch,
+            }),
+          );
+        } catch (_) {}
         return;
       case 'onBtMediaState':
         final payload = Map<String, dynamic>.from(call.arguments as Map);
@@ -253,15 +272,12 @@ void initializeNotificationHandling() {
 
     final notificationId =
         (data['notificationId'] ?? data['id'] ?? '').toString().trim();
-    final nowDbg = DateTime.now().millisecondsSinceEpoch;
     print('[auto_open][flutter] openDetail id=$notificationId');
     unawaited(
-      BleService.sendBtServerMessage({
-        'type': 'debug_log',
-        'source': 'flutter_open_detail',
-        'message': 'openDetail id=$notificationId route=NotificationDetailScreen',
-        'timestamp': nowDbg,
-      }),
+      BleService.sendDebugLogToPeers(
+        'flutter_open_detail',
+        'openDetail id=$notificationId route=NotificationDetailScreen',
+      ),
     );
     final now = DateTime.now().millisecondsSinceEpoch;
     if (notificationId.isNotEmpty) {
@@ -301,16 +317,12 @@ void initializeNotificationHandling() {
 
     final notificationId =
         (data['notificationId'] ?? data['id'] ?? '').toString().trim();
-    final nowDbg = DateTime.now().millisecondsSinceEpoch;
     print('[auto_open][flutter] openFromAuto id=$notificationId');
     unawaited(
-      BleService.sendBtServerMessage({
-        'type': 'debug_log',
-        'source': 'flutter_open_auto',
-        'message':
-            'openFromAuto id=$notificationId route=/floating_ball_custom_notifications',
-        'timestamp': nowDbg,
-      }),
+      BleService.sendDebugLogToPeers(
+        'flutter_open_auto',
+        'openFromAuto id=$notificationId route=/floating_ball_custom_notifications',
+      ),
     );
 
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -434,12 +446,7 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
       print('[$ts][receptor_nav] $message');
     } catch (_) {}
     try {
-      await BleService.sendBtServerMessage({
-        'type': 'debug_log',
-        'source': 'receptor_nav',
-        'message': message,
-        'timestamp': nowMs,
-      });
+      await BleService.sendDebugLogToPeers('receptor_nav', message);
     } catch (_) {}
   }
 

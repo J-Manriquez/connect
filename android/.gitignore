@@ -12,3 +12,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Excepcion: debug.keystore de app/ se versiona a proposito para que todas las
+# maquinas firmen release con la misma clave de debug (password "android",
+# no es secreto real) y no choquen al instalar sobre una app ya instalada.
+!app/debug.keystore

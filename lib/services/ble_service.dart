@@ -198,6 +198,31 @@ class BleService {
     return res == true;
   }
 
+  /// Reenvía un log de diagnóstico al peer por BT usando una llamada nativa
+  /// directa y síncrona (sin Intent/startForegroundService), igual al patrón
+  /// que usa `media_state`. A diferencia de `sendBtServerMessage` con
+  /// type=debug_log (que arranca un Intent por cada llamada y choca con el
+  /// rate-limit de Android sobre startForegroundService cuando se loguea con
+  /// frecuencia), este camino es confiable para logging chatty.
+  /// Silencia (o restaura) los streams de audio donde el motor STT del
+  /// sistema reproduce sus beeps de inicio/fin de grabación.
+  static Future<bool> sttSetMuted(bool muted) async {
+    try {
+      final res = await _channel.invokeMethod('sttSetMuted', {'muted': muted});
+      return res == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> sendDebugLogToPeers(String source, String message) async {
+    final res = await _channel.invokeMethod('sendDebugLogToPeers', {
+      'source': source,
+      'message': message,
+    });
+    return res == true;
+  }
+
 
 
   static Future<bool> shareLogFile(String path, {String mime = 'text/plain', String package = 'com.whatsapp'}) async {

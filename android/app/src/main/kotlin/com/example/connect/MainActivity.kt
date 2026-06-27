@@ -45,6 +45,7 @@ class MainActivity: FlutterActivity() {
     private val BLE_CHANNEL = "com.example.connect/ble"
     private val FLOATING_BALL_CHANNEL = "com.example.connect/floating_ball"
     private val TTS_AUDIO_CHANNEL = "com.example.connect/tts_audio"
+    private val DIAGNOSTICS_CHANNEL = "com.example.connect/device_diagnostics"
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
@@ -56,6 +57,7 @@ class MainActivity: FlutterActivity() {
     private lateinit var bleChannel: MethodChannel
     private lateinit var floatingBallChannel: MethodChannel
     private lateinit var ttsAudioChannel: MethodChannel
+    private lateinit var diagnosticsChannel: MethodChannel
     private lateinit var activeNotificationsEventsChannel: EventChannel
     private var activeNotificationsEventsSink: EventChannel.EventSink? = null
     private lateinit var appListService: AppListService
@@ -221,6 +223,7 @@ class MainActivity: FlutterActivity() {
         bleChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BLE_CHANNEL)
         floatingBallChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FLOATING_BALL_CHANNEL)
         ttsAudioChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, TTS_AUDIO_CHANNEL)
+        diagnosticsChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DIAGNOSTICS_CHANNEL)
         btAdapter = BluetoothAdapter.getDefaultAdapter()
         
         // Iniciar automáticamente el servicio si el permiso está concedido
@@ -1057,6 +1060,49 @@ class MainActivity: FlutterActivity() {
                         result.error("ERROR", e.message, null)
                     }
                 }
+                "sendDebugLogToPeers" -> {
+                    // Camino directo y sincrono (igual al usado por media_state via
+                    // BtClassicClient.send): llama BtClassicServerService.sendDebugLogToPeers
+                    // sin pasar por Intent/startForegroundService. La via anterior
+                    // (sendBtServerMessage con type=debug_log) arrancaba un Intent por
+                    // cada log, y Android limita cuantas veces por minuto se puede
+                    // llamar startForegroundService desde el mismo proceso: con logging
+                    // frecuente (cada mensaje, cada render, cada resultado parcial de
+                    // STT) la mayoria de esas llamadas se descartaban en silencio.
+                    try {
+                        val source = call.argument<String>("source") ?: "receptor"
+                        val message = call.argument<String>("message") ?: ""
+                        BtClassicServerService.sendDebugLogToPeers(source, message)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "sttSetMuted" -> {
+                    // Silencia/restaura los streams donde el motor de reconocimiento
+                    // de voz del sistema reproduce sus beeps de inicio/fin de
+                    // grabación (varía por fabricante: música y notificación
+                    // cubren la mayoría de los casos). Se usa ADJUST_MUTE/UNMUTE
+                    // en vez de bajar el volumen a 0, para poder restaurar el nivel
+                    // exacto que tenía el usuario sin necesidad de recordarlo.
+                    try {
+                        val muted = call.argument<Boolean>("muted") ?: false
+                        val audio = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                        if (audio != null) {
+                            val direction = if (muted) android.media.AudioManager.ADJUST_MUTE
+                                else android.media.AudioManager.ADJUST_UNMUTE
+                            for (stream in intArrayOf(
+                                android.media.AudioManager.STREAM_MUSIC,
+                                android.media.AudioManager.STREAM_NOTIFICATION,
+                            )) {
+                                try { audio.adjustStreamVolume(stream, direction, 0) } catch (_: Exception) {}
+                            }
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
                 "getBondedDevices" -> {
                     try {
                         val adapter = btAdapter
@@ -1282,6 +1328,80 @@ class MainActivity: FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("ERROR", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        diagnosticsChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getAndroidBuildInfo" -> {
+                    try {
+                        val abis = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            Build.SUPPORTED_ABIS.toList()
+                        } else {
+                            @Suppress("DEPRECATION")
+                            listOfNotNull(Build.CPU_ABI, Build.CPU_ABI2).filter { it.isNotBlank() }
+                        }
+                        result.success(mapOf(
+                            "manufacturer" to Build.MANUFACTURER,
+                            "brand" to Build.BRAND,
+                            "model" to Build.MODEL,
+                            "device" to Build.DEVICE,
+                            "product" to Build.PRODUCT,
+                            "hardware" to Build.HARDWARE,
+                            "board" to Build.BOARD,
+                            "androidVersion" to Build.VERSION.RELEASE,
+                            "sdkInt" to Build.VERSION.SDK_INT,
+                            "fingerprint" to Build.FINGERPRINT,
+                            "supportedAbis" to abis,
+                            "availableProcessors" to Runtime.getRuntime().availableProcessors()
+                        ))
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "tryRootEnableDeveloperOptions" -> {
+                    try {
+                        val proc = Runtime.getRuntime().exec(arrayOf("su", "-c",
+                            "settings put global development_settings_enabled 1 && echo OK || echo FAILED"))
+                        proc.waitFor()
+                        val stdout = proc.inputStream.bufferedReader().readText().trim()
+                        val stderr = proc.errorStream.bufferedReader().readText().trim()
+                        val exitCode = proc.exitValue()
+                        result.success("exit=$exitCode stdout='$stdout' stderr='$stderr'")
+                    } catch (e: Exception) {
+                        result.success("Excepción al ejecutar su: ${e.message}")
+                    }
+                }
+                "openDeveloperOptions" -> {
+                    val method = call.argument<String>("method") ?: "settings"
+                    try {
+                        val intent = when (method) {
+                            "settings" -> Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+                            "component" -> Intent().apply {
+                                component = android.content.ComponentName(
+                                    "com.android.settings",
+                                    "com.android.settings.DevelopmentSettings"
+                                )
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            "device_info" -> Intent().apply {
+                                component = android.content.ComponentName(
+                                    "com.android.settings",
+                                    "com.android.settings.DeviceInfoSettings"
+                                )
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            "device_info_action" -> Intent(android.provider.Settings.ACTION_DEVICE_INFO_SETTINGS)
+                            else -> Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+                        }
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(intent)
+                        result.success("Lanzado OK ($method)")
+                    } catch (e: Exception) {
+                        result.success("Error al lanzar ($method): ${e.message}")
                     }
                 }
                 else -> result.notImplemented()
@@ -1673,16 +1793,11 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun sendBtDebug(source: String, message: String) {
+        // Llamada directa y sincrona (sin Intent/startForegroundService), igual
+        // al patron usado por media_state: evita el rate-limit de Android sobre
+        // startForegroundService cuando se loguea con frecuencia.
         try {
-            val obj = org.json.JSONObject()
-            obj.put("type", "debug_log")
-            obj.put("source", source)
-            obj.put("message", message)
-            obj.put("timestamp", System.currentTimeMillis())
-            val i = Intent(this, BtClassicServerService::class.java)
-                .setAction(BtClassicServerService.ACTION_SEND_TO_PEERS)
-                .putExtra(BtClassicServerService.EXTRA_JSON, obj.toString())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)
+            BtClassicServerService.sendDebugLogToPeers(source, message)
         } catch (_: Exception) {
         }
     }

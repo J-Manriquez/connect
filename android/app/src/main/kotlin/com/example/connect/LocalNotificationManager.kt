@@ -28,17 +28,11 @@ class LocalNotificationManager(private val context: Context) {
         appContext.getSharedPreferences(PREFS_NOTIFICATION_SETTINGS, Context.MODE_PRIVATE)
 
     private fun sendBtDebug(source: String, message: String) {
+        // Llamada directa y sincrona (sin Intent/startForegroundService), igual
+        // al patron usado por media_state: evita el rate-limit de Android sobre
+        // startForegroundService cuando se loguea con frecuencia.
         try {
-            val obj = JSONObject()
-            obj.put("type", "debug_log")
-            obj.put("source", source)
-            obj.put("message", message)
-            obj.put("timestamp", System.currentTimeMillis())
-            val i = Intent(appContext, BtClassicServerService::class.java)
-                .setAction(BtClassicServerService.ACTION_SEND_TO_PEERS)
-                .putExtra(BtClassicServerService.EXTRA_JSON, obj.toString())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) appContext.startForegroundService(i)
-            else appContext.startService(i)
+            BtClassicServerService.sendDebugLogToPeers(source, message)
         } catch (_: Throwable) {
         }
     }

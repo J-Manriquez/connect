@@ -124,14 +124,47 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
   /// en su barra, y refresca el indicador con el último estado conocido.
   Future<void> _pollNotifActive() async {
     final sbnKey = _pickBestSbnKeyForReply().trim();
-    if (sbnKey.isEmpty) return;
+    if (sbnKey.isEmpty) {
+      _btDebug('pollNotifActive skip: sbnKey vacío', sig: 'pollNotifActive', throttleMs: 4000);
+      return;
+    }
+    final requestId = DateTime.now().millisecondsSinceEpoch.toString();
+    final query = {
+      'type': 'query_notif_active',
+      'sbnKey': sbnKey,
+      'requestId': requestId,
+    };
+    // Igual que al enviar una respuesta (líneas con `getBtServerStatus` /
+    // `sendNotification` más abajo): la consulta debe llegar al peer sin
+    // importar si este dispositivo es ahora el servidor BT o el cliente.
+    // Antes solo se probaba la ruta servidor (`sendBtServerMessage`): si este
+    // dispositivo era el cliente de la conexión, la consulta nunca llegaba al
+    // peer y el indicador quedaba gris para siempre.
+    bool sentViaServer = false;
     try {
-      unawaited(BleService.sendBtServerMessage({
-        'type': 'query_notif_active',
-        'sbnKey': sbnKey,
-        'requestId': DateTime.now().millisecondsSinceEpoch.toString(),
-      }));
-    } catch (_) {}
+      final status = await BleService.getBtServerStatus();
+      final running = status['running'] == true;
+      final connectedCount = (status['connectedCount'] as num?)?.toInt() ?? 0;
+      if (running && connectedCount > 0) {
+        sentViaServer = await BleService.sendBtServerMessage(query);
+      }
+    } catch (e) {
+      _btDebug('pollNotifActive serverSend error=$e', sig: 'pollNotifActive', throttleMs: 0);
+    }
+    bool sentViaClient = false;
+    if (!sentViaServer) {
+      try {
+        sentViaClient = await BleService.sendNotification(query);
+      } catch (e) {
+        _btDebug('pollNotifActive clientSend error=$e', sig: 'pollNotifActive', throttleMs: 0);
+      }
+    }
+    _btDebug(
+      'pollNotifActive sent sbnKey=$sbnKey requestId=$requestId '
+      'viaServer=$sentViaServer viaClient=$sentViaClient',
+      sig: 'pollNotifActive',
+      throttleMs: 4000,
+    );
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.reload();
@@ -140,10 +173,17 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
       final Map<String, dynamic> st = jsonDecode(raw) as Map<String, dynamic>;
       if ((st['sbnKey'] ?? '').toString().trim() != sbnKey) return;
       final active = st['active'] == true;
+      _btDebug(
+        'pollNotifActive response sbnKey=$sbnKey active=$active prevValue=$_notifStillActive',
+        sig: 'pollNotifActiveResp',
+        throttleMs: 4000,
+      );
       if (_notifStillActive != active) {
         setState(() => _notifStillActive = active);
       }
-    } catch (_) {}
+    } catch (e) {
+      _btDebug('pollNotifActive readPrefs error=$e', sig: 'pollNotifActive', throttleMs: 0);
+    }
   }
 
   Color _notifActiveDotColor() {
@@ -1642,16 +1682,10 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
 
       print('[detalle_notif] $message');
 
-      final status = await BleService.getBtServerStatus();
-      final running = status['running'] == true;
-      final peers = (status['connectedCount'] as num?)?.toInt() ?? 0;
-      if (!running || peers <= 0) return;
-      await BleService.sendBtServerMessage({
-        'type': 'debug_log',
-        'source': 'receptor_detalle_notif',
-        'message': message,
-        'timestamp': nowMs,
-      });
+      // Llamada nativa directa y síncrona (sin Intent/startForegroundService,
+      // ver BleService.sendDebugLogToPeers): no necesita chequear el estado
+      // del servidor BT antes, ya no-opea sola si no hay peer conectado.
+      await BleService.sendDebugLogToPeers('receptor_detalle_notif', message);
     } catch (_) {}
   }
 

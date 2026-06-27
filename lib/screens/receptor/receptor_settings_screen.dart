@@ -13,6 +13,7 @@ import 'package:connect/screens/receptor/custom_sound_selection_screen.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
 import 'package:connect/screens/emisor/floating_ball_settings_screen.dart';
 import 'package:connect/screens/emisor/media_reproduction_screen.dart';
+import 'package:connect/screens/receptor/device_diagnostics_screen.dart';
 import 'package:restart_app/restart_app.dart';
 import 'package:flutter/services.dart';
 
@@ -586,6 +587,40 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
                               minimumSize: const Size.fromHeight(48),
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               backgroundColor: customColor[600],
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const DeviceDiagnosticsScreen(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.developer_board),
+                            label: const Text(
+                              'Diagnóstico del dispositivo',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              backgroundColor: Colors.grey[700],
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),

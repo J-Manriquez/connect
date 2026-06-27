@@ -5,60 +5,88 @@ description: Cómo emitir y leer logs de depuración del receptor a través de l
 
 # Debug logging por Bluetooth (emisor ↔ receptor)
 
-La app `connect` tiene dos roles conectados por **Bluetooth Classic (RFCOMM/SPP)**:
-emisor y receptor. Para depurar lo que ocurre en el receptor (muchas veces en un
-isolate de fondo, sin USB conectado), se envían mensajes estructurados
-`debug_log` por ese mismo socket Bluetooth. El otro extremo los imprime a logcat
-y/o los reemite al `logStream` de Flutter.
+La app `connect` tiene dos roles conectados por **Bluetooth Classic (RFCOMM/SPP)**.
+
+**Arquitectura real de la conexión (importante, no es simétrica):**
+- El **RECEPTOR corre `BtClassicServerService`** (servidor BT, acepta conexiones) —
+  lo arrancan las pantallas `lib/screens/receptor/conexion_screen.dart` y
+  `receptor_ble_signal_screen.dart` vía `BleService.startBtServer()`.
+- El **EMISOR corre `BtClassicClient`** (cliente BT, inicia la conexión hacia el
+  receptor) — lo dispara `lib/screens/emisor/seleccion_bl_screen.dart` vía
+  `BleService.connectToPeer(address)`.
+
+Para depurar lo que ocurre en el receptor (muchas veces en un isolate de fondo,
+sin USB conectado), se envían mensajes estructurados `debug_log` por ese mismo
+socket Bluetooth hacia el emisor, y se capturan con
+`flutter logs`/`flutter run > archivo.txt` apuntando al **emisor** (ahí es
+donde llegan los logs reenviados).
 
 Usa este mecanismo cuando agregues o depures lógica del receptor y quieras
-trazas: en vez de `print()` (que no ves si el dispositivo no está cableado),
-manda un `debug_log` por BT.
+trazas: en vez de solo `print()` local (que no ves si el dispositivo no está
+cableado), reenvía además el mensaje por BT al emisor.
 
-## Cómo emitir un log (Dart)
+## Cómo emitir un log (Dart) — método recomendado
 
-### Caso normal — UI / isolate principal
-Vía [BleService.sendBtServerMessage](../../../lib/services/ble_service.dart#L196).
-Es la forma estándar usada en toda la app. **Fire-and-forget**, nunca bloquea ni
-lanza:
+### `BleService.sendDebugLogToPeers(source, message)` — directo y confiable
+
+Es la forma **recomendada para logging frecuente** (cada mensaje, cada render,
+resultados parciales de STT, etc.). Llama nativamente
+`BtClassicServerService.sendDebugLogToPeers(source, message)`
+**directo y síncrono, sin `Intent`/`startForegroundService`** — el mismo
+patrón que usa `media_state` (`BtClassicClient.send(json)` en
+[BtClassicClient.kt](../../../android/app/src/main/kotlin/com/example/connect/BtClassicClient.kt#L915)
+para enviar, llamado directamente sobre el objeto que ya tiene el socket
+activo, sin pasar por ningún Intent).
 
 ```dart
 import 'package:connect/services/ble_service.dart';
 
-unawaited(BleService.sendBtServerMessage({
-  'type': 'debug_log',
-  'source': 'mi_funcionalidad',          // tag corto del contexto
-  'message': 'evento x id=$id estado=$estado', // pares key=value
-  'timestamp': DateTime.now().millisecondsSinceEpoch,
-}));
+unawaited(BleService.sendDebugLogToPeers('mi_funcionalidad', 'evento x id=$id estado=$estado'));
 ```
 
-Patrón helper recomendado (copiado de `_btDebug` en
-[main.dart](../../../lib/main.dart#L364)) cuando vas a loguear varias veces en
-una clase:
+Patrón helper recomendado cuando vas a loguear varias veces en una clase
+(combina print local simple + reenvío):
 
 ```dart
-Future<void> _btDebug(String message) async {
-  final nowMs = DateTime.now().millisecondsSinceEpoch;
+void _log(String message) {
+  print('[mi_tag] $message'); // print simple, no debugPrint: no se trunca/throttlea
   try {
-    print('[${DateTime.fromMillisecondsSinceEpoch(nowMs).toIso8601String()}][mi_tag] $message');
-  } catch (_) {}
-  try {
-    await BleService.sendBtServerMessage({
-      'type': 'debug_log',
-      'source': 'mi_tag',
-      'message': message,
-      'timestamp': nowMs,
-    });
+    unawaited(BleService.sendDebugLogToPeers('mi_tag', message));
   } catch (_) {}
 }
 ```
 
+Implementación Dart: [BleService.sendDebugLogToPeers](../../../lib/services/ble_service.dart).
+Implementación nativa: caso `"sendDebugLogToPeers"` en el canal
+`com.example.connect/ble` de
+[MainActivity.kt](../../../android/app/src/main/kotlin/com/example/connect/MainActivity.kt),
+que llama directo a
+[BtClassicServerService.sendDebugLogToPeers](../../../android/app/src/main/kotlin/com/example/connect/BtClassicServerService.kt#L93)
+(`instance?.sendDebugToPeers(...)`, sin Intent).
+
+### ⚠️ Método legacy — `sendBtServerMessage` con `type: 'debug_log'` (NO usar para logging frecuente)
+
+Existe también `BleService.sendBtServerMessage({'type': 'debug_log', ...})`,
+usado originalmente en toda la app. **No lo uses para logging nuevo**: construye
+un `Intent` y llama `startForegroundService(ACTION_SEND_TO_PEERS)` en cada
+invocación. Android limita agresivamente cuántas veces por minuto se puede
+llamar `startForegroundService` desde el mismo proceso — con logging chatty
+(un log por mensaje renderizado, por resultado parcial de STT, etc.) la
+mayoría de esas llamadas se descartan **en silencio**, sin error visible, y
+los logs simplemente no llegan al peer. Esto fue diagnosticado tras observar
+que el reenvío de logs de la pantalla de conversación nunca aparecía en el
+receptor, mientras que `media_state` (que usa la llamada directa) sí
+funcionaba siempre.
+
+Si encuentras código viejo con este patrón, migra a `sendDebugLogToPeers`.
+
 ### Caso isolate de fondo (bt_hive / receptor headless)
+
 Cuando estás dentro del entrypoint `btHiveMain` o de un servicio nativo headless
-donde `BleService` no aplica, usa el bridge `com.example.connect/bt_hive_bridge`
-con el método `sendDebugLog` (ver `sendDebug` en
-[main.dart](../../../lib/main.dart#L86)):
+donde `BleService` no aplica (ese canal vive en el engine principal, no en el
+engine headless de `BtClassicServerService`), usa el bridge
+`com.example.connect/bt_hive_bridge` con el método `sendDebugLog` (ver `sendDebug`
+en [main.dart](../../../lib/main.dart#L86)):
 
 ```dart
 final btChannel = MethodChannel('com.example.connect/bt_hive_bridge');
@@ -68,29 +96,37 @@ await btChannel.invokeMethod('sendDebugLog', {
 }); // envuelto en try/catch
 ```
 
-El lado nativo (`BtClassicServerService` / `BtClassicClient`) lo envuelve como
-`{type:debug_log, source, message, timestamp}` y lo difunde a los peers con
-`sendDebugToPeers`.
+Este canal SÍ es directo (ver `"sendDebugLog"` en el `MethodChannel` que
+`BtClassicServerService` registra para su engine embebido en `btHiveMain`,
+[BtClassicServerService.kt](../../../android/app/src/main/kotlin/com/example/connect/BtClassicServerService.kt#L240)):
+llama `sendDebugToPeers(source, message)` directo, sin Intent. Solo es
+alcanzable desde Dart que corre en ese isolate headless, no desde el engine
+principal de UI.
 
 ## Cómo emitir un log (Kotlin / nativo)
 
-Desde un servicio nativo del receptor:
+Desde un servicio nativo del receptor, llama siempre el helper estático
+directo:
 
 ```kotlin
 BtClassicServerService.sendDebugLogToPeers("mi_source_nativo", "mensaje")
 ```
 
-Helpers nativos equivalentes existen en `MainActivity`, `LocalNotificationManager`
-y `BtClassicServerService` (todos construyen el mismo JSON `type=debug_log`).
+`MainActivity.sendBtDebug(...)` y `LocalNotificationManager.sendBtDebug(...)`
+ya delegan en este helper directo (fueron migrados desde el patrón
+Intent/`startForegroundService` por el mismo problema de rate-limit).
 
 ## Dónde aparecen los logs (lectura)
 
-1. **logcat del peer que recibe** — el nativo imprime al recibir el JSON:
-   - servidor: `[btclassic][server][peer_debug][<source>][<ts>] <message>`
-     ([BtClassicServerService.kt](../../../android/app/src/main/kotlin/com/example/connect/BtClassicServerService.kt#L760))
-   - cliente: `[btclassic][debug][<source>][<ts>] <message>`
-     ([BtClassicClient.kt](../../../android/app/src/main/kotlin/com/example/connect/BtClassicClient.kt#L242))
+1. **logcat del peer que recibe (el EMISOR)** — el nativo imprime al recibir el JSON:
+   - en `BtClassicClient.kt` (el emisor es el cliente BT que recibe del servidor/receptor):
+     `[btclassic][debug][<source>][<ts>] <message>`
+     ([BtClassicClient.kt](../../../android/app/src/main/kotlin/com/example/connect/BtClassicClient.kt#L247))
    - Filtra con: `adb logcat | grep btclassic`
+   - **Captura recomendada**: `flutter logs > salida.txt` (o `flutter run > salida.txt`)
+     apuntando al dispositivo **emisor** — `flutter logs`/`flutter run` incluyen
+     TODO el logcat del proceso de la app (no solo `I/flutter`), así que estas
+     líneas nativas SÍ quedan en el archivo.
 
 2. **`BleService.logStream` en Flutter** — los managers GATT reemiten eventos vía
    `onBleLog`, que [BleService.initialize](../../../lib/services/ble_service.dart#L62)
@@ -112,9 +148,10 @@ y `BtClassicServerService` (todos construyen el mismo JSON `type=debug_log`).
   `ble_rx`, `flutter_open_detail`, `media_state`, …). Sirve para filtrar.
 - **`message`**: pares `key=value` legibles. Trunca textos largos
   (p. ej. `title="${t.length > 60 ? t.substring(0,60) : t}"`).
-- **`timestamp`**: siempre `DateTime.now().millisecondsSinceEpoch`.
 - **Nunca bloquees ni lances**: `unawaited(...)` o `try/catch` vacío. El logging
   jamás debe romper la funcionalidad que estás depurando.
+- **Para logging frecuente, usa siempre `sendDebugLogToPeers`** (directo), nunca
+  `sendBtServerMessage` con `type: 'debug_log'` (Intent, rate-limited).
 - **Rate-limit**: para fuentes muy ruidosas (ej. `media_state`) el nativo ya
   descarta repetidos < 1200 ms; ten en cuenta que algunos logs se omiten a
   propósito.
