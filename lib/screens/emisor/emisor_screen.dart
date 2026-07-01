@@ -436,7 +436,7 @@ class _EmisorScreenState extends State<EmisorScreen>
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => const HerramientasScreen(),
+              builder: (_) => HerramientasScreen(),
             ),
           ),
         ),
@@ -928,6 +928,9 @@ class _EmisorScreenState extends State<EmisorScreen>
                     _filterNotifications();
                   });
                   break;
+                case 3:
+                  Navigator.pushNamed(context, '/emisor_salud');
+                  break;
               }
             },
             selectedFontSize: 14.0,
@@ -947,6 +950,10 @@ class _EmisorScreenState extends State<EmisorScreen>
               BottomNavigationBarItem(
                 icon: Icon(Icons.apps),
                 label: 'Aplicaciones',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.monitor_heart),
+                label: 'Salud',
               ),
             ],
           ),

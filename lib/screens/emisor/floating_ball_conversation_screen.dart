@@ -428,44 +428,84 @@ class _FloatingBallConversationScreenState
   /// Modal explicativo del indicador de estado de la notificación.
   void _showNotifActiveInfo() {
     final active = _notifStillActive;
+    final bgColor = Color(_convBgColor);
+    final textColor = Color(_convTextColor);
+    final titleColor = Color(_convTitleColor);
+
+    final String statusLabel;
+    final Color statusColor;
+    final String statusDetail;
+    if (active == null) {
+      statusLabel = 'Estado desconocido';
+      statusColor = Colors.grey;
+      statusDetail = 'Aún no se recibió respuesta del emisor. No se sabe si puedes responder.';
+    } else if (active) {
+      statusLabel = 'Puedes responder';
+      statusColor = Colors.green;
+      statusDetail = 'La notificación sigue activa en la barra del emisor. La respuesta debería entregarse correctamente.';
+    } else {
+      statusLabel = 'Respuesta puede no entregarse';
+      statusColor = Colors.red;
+      statusDetail = 'La notificación ya no está en la barra del emisor. Es posible que la respuesta no se entregue.';
+    }
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Estado de la notificación'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _legendRow(Colors.green,
-                'Verde: la notificación sigue en la barra del emisor. Puedes responder.'),
-            const SizedBox(height: 10),
-            _legendRow(Colors.red,
-                'Rojo: la notificación ya no está en la barra del emisor. Es posible que la respuesta no se entregue.'),
-            const SizedBox(height: 10),
-            _legendRow(Colors.grey,
-                'Gris: estado aún desconocido (sin respuesta del emisor todavía).'),
-            const SizedBox(height: 14),
-            Text(
-              active == null
-                  ? 'Estado actual: desconocido'
-                  : active
-                      ? 'Estado actual: en la barra'
-                      : 'Estado actual: ya no está',
-              style: const TextStyle(fontWeight: FontWeight.w600),
+        backgroundColor: bgColor,
+        title: Text('Estado de la notificación', style: TextStyle(color: titleColor)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 14,
+                      height: 14,
+                      margin: const EdgeInsets.only(right: 10),
+                      decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                    ),
+                    Expanded(
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(statusDetail, style: TextStyle(color: textColor)),
+                const SizedBox(height: 18),
+                Text('Referencia de colores:', style: TextStyle(color: textColor.withValues(alpha: 0.7), fontSize: 12)),
+                const SizedBox(height: 8),
+                _legendRow(Colors.green, 'Verde: notificación activa. Puedes responder.', textColor),
+                const SizedBox(height: 8),
+                _legendRow(Colors.red, 'Rojo: notificación ya no está. La respuesta puede no entregarse.', textColor),
+                const SizedBox(height: 8),
+                _legendRow(Colors.grey, 'Gris: estado desconocido, sin respuesta del emisor aún.', textColor),
+              ],
             ),
-          ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Entendido'),
+            child: Text('Entendido', style: TextStyle(color: titleColor)),
           ),
         ],
       ),
     );
   }
 
-  Widget _legendRow(Color color, String text) {
+  Widget _legendRow(Color color, String text, [Color? textColor]) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -475,7 +515,7 @@ class _FloatingBallConversationScreenState
           margin: const EdgeInsets.only(top: 3, right: 8),
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        Expanded(child: Text(text)),
+        Expanded(child: Text(text, style: textColor != null ? TextStyle(color: textColor) : null)),
       ],
     );
   }
@@ -1516,7 +1556,15 @@ class _FloatingBallConversationScreenState
       if (isReply) {
         await BtHiveStorageService.deleteConversationReplyById(id);
       } else {
-        await FirebaseService().deleteNotification(id, '');
+        // Estos mensajes son mirrored desde el dispositivo receptor vinculado
+        // (no desde este dispositivo): hay que borrar bajo SU deviceId, no el
+        // propio (`FirebaseService.getDeviceId()`), o la notificación nunca se
+        // borra de verdad en Firestore y reaparece en la siguiente recarga.
+        final linkedDeviceId = await _receptorService.getLinkedDeviceId();
+        if (linkedDeviceId != null && linkedDeviceId.trim().isNotEmpty) {
+          await FirebaseService()
+              .deleteNotificationForDeviceId(linkedDeviceId.trim(), id);
+        }
         await BtHiveStorageService.deleteOutboxEntry(id);
       }
     } catch (e) {
@@ -1535,18 +1583,22 @@ class _FloatingBallConversationScreenState
         extrasRaw is Map ? Map<String, dynamic>.from(extrasRaw) : <String, dynamic>{};
     final id = _messageId(message);
     final isReply = extras['isReply'] == true || id.startsWith('reply_');
+    final bgColor = Color(_convBgColor);
+    final textColor = Color(_convTextColor);
+    final titleColor = Color(_convTitleColor);
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Opciones'),
+          backgroundColor: bgColor,
+          title: Text('Opciones', style: TextStyle(color: titleColor)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.done),
-                title: const Text('Marcar como leído'),
+                leading: Icon(Icons.done, color: textColor),
+                title: Text('Marcar como leído', style: TextStyle(color: textColor)),
                 enabled: !visualized,
                 onTap: visualized
                     ? null
@@ -1556,16 +1608,17 @@ class _FloatingBallConversationScreenState
                       },
               ),
               ListTile(
-                leading: const Icon(Icons.delete),
-                title: Text(isReply ? 'Eliminar respuesta' : 'Eliminar mensaje'),
+                leading: Icon(Icons.delete, color: textColor),
+                title: Text(isReply ? 'Eliminar respuesta' : 'Eliminar mensaje',
+                    style: TextStyle(color: textColor)),
                 onTap: () async {
                   Navigator.of(context).pop();
                   await _deleteConversationMessage(message);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.settings),
-                title: const Text('Configuración personalizada'),
+                leading: Icon(Icons.settings, color: textColor),
+                title: Text('Configuración personalizada', style: TextStyle(color: textColor)),
                 onTap: () {
                   Navigator.of(context).pop();
                   Navigator.pushNamed(

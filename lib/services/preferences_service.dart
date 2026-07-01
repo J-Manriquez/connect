@@ -1,6 +1,20 @@
+import 'dart:convert';
+
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PreferencesService {
+  // Canal de la bola flotante: se usa para avisar al lado nativo que recargue
+  // su configuración cuando cambian las apps con conversación activa (el menú
+  // de la bola decide con eso si mostrar el botón "Chats").
+  static const MethodChannel _floatingBallChannel =
+      MethodChannel('com.example.connect/floating_ball');
+
+  // Espejo legible por el lado nativo de la lista de apps con conversación
+  // activa (el plugin guarda la StringList con una codificación que el nativo
+  // no lee fácilmente, así que lo duplicamos como JSON string).
+  static const String KEY_CONVERSATION_ENABLED_PACKAGES_JSON =
+      'conversation_enabled_packages_json';
   // Claves para las preferencias
   static const String KEY_USE_AS_RECEPTOR = 'use_as_receptor';
   static const String KEY_DISABLE_AUTO_REDIRECT = 'disable_auto_redirect'; // ✅ NUEVA CLAVE
@@ -15,6 +29,48 @@ class PreferencesService {
   static const String KEY_CONVERSATION_ENABLED_PACKAGES =
       'conversation_enabled_packages_v1';
   static const String KEY_STT_SOUND_ENABLED = 'stt_sound_enabled';
+
+  // ── Perfil corporal del usuario (sensores de salud) ───────────────────────
+  static const String KEY_BODY_NAME           = 'bodyProfile_name';
+  static const String KEY_BODY_AGE            = 'bodyProfile_age';
+  static const String KEY_BODY_SEX            = 'bodyProfile_sex'; // 'M' | 'F'
+  static const String KEY_BODY_WEIGHT_KG      = 'bodyProfile_weight_kg';
+  static const String KEY_BODY_HEIGHT_CM      = 'bodyProfile_height_cm';
+  static const String KEY_BODY_FC_MAX         = 'bodyProfile_fc_max'; // 0 = calcular 220-edad
+  static const String KEY_BODY_STEPS_GOAL     = 'bodyProfile_steps_goal';
+  static const String KEY_BODY_HR_ALERT_HIGH  = 'bodyProfile_hr_alert_high';
+  static const String KEY_BODY_HR_ALERT_LOW   = 'bodyProfile_hr_alert_low';
+
+  static Future<Map<String, dynamic>> getBodyProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'name':         prefs.getString(KEY_BODY_NAME) ?? '',
+      'age':          prefs.getInt(KEY_BODY_AGE) ?? 30,
+      'sex':          prefs.getString(KEY_BODY_SEX) ?? 'M',
+      'weight_kg':    prefs.getDouble(KEY_BODY_WEIGHT_KG) ?? 70.0,
+      'height_cm':    prefs.getDouble(KEY_BODY_HEIGHT_CM) ?? 170.0,
+      'fc_max':       prefs.getInt(KEY_BODY_FC_MAX) ?? 0,
+      'steps_goal':   prefs.getInt(KEY_BODY_STEPS_GOAL) ?? 10000,
+      'hr_alert_high':prefs.getInt(KEY_BODY_HR_ALERT_HIGH) ?? 120,
+      'hr_alert_low': prefs.getInt(KEY_BODY_HR_ALERT_LOW) ?? 50,
+    };
+  }
+
+  static Future<void> saveBodyProfile(Map<String, dynamic> data) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (data['name'] != null) await prefs.setString(KEY_BODY_NAME, data['name']);
+    if (data['age'] != null) await prefs.setInt(KEY_BODY_AGE, data['age']);
+    if (data['sex'] != null) await prefs.setString(KEY_BODY_SEX, data['sex']);
+    if (data['weight_kg'] != null) await prefs.setDouble(KEY_BODY_WEIGHT_KG, data['weight_kg']);
+    if (data['height_cm'] != null) await prefs.setDouble(KEY_BODY_HEIGHT_CM, data['height_cm']);
+    if (data['fc_max'] != null) await prefs.setInt(KEY_BODY_FC_MAX, data['fc_max']);
+    if (data['steps_goal'] != null) await prefs.setInt(KEY_BODY_STEPS_GOAL, data['steps_goal']);
+    if (data['hr_alert_high'] != null) await prefs.setInt(KEY_BODY_HR_ALERT_HIGH, data['hr_alert_high']);
+    if (data['hr_alert_low'] != null) await prefs.setInt(KEY_BODY_HR_ALERT_LOW, data['hr_alert_low']);
+  }
+
+  static int calcFcMax(int age, int fcMaxManual) =>
+      fcMaxManual > 0 ? fcMaxManual : (220 - age).clamp(100, 220);
 
   // Sonido de inicio/fin de grabación del modal STT (activado por defecto).
   static Future<bool> getSttSoundEnabled() async {
@@ -250,11 +306,15 @@ class PreferencesService {
       final prefs = await SharedPreferences.getInstance();
       final raw =
           prefs.getStringList(KEY_CONVERSATION_ENABLED_PACKAGES) ?? const [];
-      return raw
+      final normalized = raw
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toSet()
           .toList();
+      // Migración perezosa: asegura que el espejo JSON exista para usuarios
+      // que ya tenían apps con conversación activa antes de esta función.
+      await _syncConversationEnabledMirror(prefs, normalized);
+      return normalized;
     } catch (e) {
       return const [];
     }
@@ -271,9 +331,30 @@ class PreferencesService {
           .toSet()
           .toList();
       await prefs.setStringList(KEY_CONVERSATION_ENABLED_PACKAGES, normalized);
+      await _syncConversationEnabledMirror(prefs, normalized);
+      // Avisar al lado nativo para que recargue la configuración del menú de la
+      // bola y actualice la visibilidad del botón "Chats".
+      try {
+        await _floatingBallChannel.invokeMethod('updateConfig');
+      } catch (_) {}
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  /// Duplica la lista como JSON string en una clave que el lado nativo lee con
+  /// facilidad. Solo escribe si cambió, para evitar escrituras innecesarias.
+  static Future<void> _syncConversationEnabledMirror(
+    SharedPreferences prefs,
+    List<String> normalized,
+  ) async {
+    try {
+      final json = jsonEncode(normalized);
+      final current = prefs.getString(KEY_CONVERSATION_ENABLED_PACKAGES_JSON);
+      if (current != json) {
+        await prefs.setString(KEY_CONVERSATION_ENABLED_PACKAGES_JSON, json);
+      }
+    } catch (_) {}
   }
 }

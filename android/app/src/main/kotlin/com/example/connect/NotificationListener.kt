@@ -684,6 +684,12 @@ class NotificationListener : NotificationListenerService() {
         mediaHandler.postDelayed(runnable, nextDelayMs)
     }
 
+    private fun triggerLocalWidgetUpdate() {
+        try { MediaWidgetProviderStyle2.updateAll(applicationContext) } catch (_: Exception) {}
+        try { MediaWidgetProviderStyle3.updateAll(applicationContext) } catch (_: Exception) {}
+        try { MediaWidgetProviderWide.updateAll(applicationContext) } catch (_: Exception) {}
+    }
+
     private fun saveLocalMediaCache(json: String) {
         try {
             val now = System.currentTimeMillis()
@@ -770,7 +776,7 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        val maxSide = 220
+        val maxSide = 420
 
         val raw: Bitmap? =
             metadata.getBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART)
@@ -895,10 +901,28 @@ class NotificationListener : NotificationListenerService() {
             return
         }
 
+        val prioritizeLocal = try {
+            val fp = applicationContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            when (val v = fp.all["flutter.prioritize_local_media"]) {
+                is Boolean -> v
+                is String -> v.equals("true", ignoreCase = true)
+                else -> false
+            }
+        } catch (_: Exception) { false }
+
         val sendStatic = force || staticSignature != lastStaticSignature
         val sendPosition = isPlaying && positionSecond != lastPositionSecond
 
         if (!sendStatic && !sendPosition) {
+            if (prioritizeLocal) {
+                // Refresh the cache timestamp so the 15 s freshness window never expires
+                // while media is active (paused or playing but position unchanged this tick).
+                try {
+                    val prefs = applicationContext.getSharedPreferences(PREFS_LOCAL_MEDIA_CACHE, Context.MODE_PRIVATE)
+                    prefs.edit().putLong(KEY_MEDIA_UPDATED_AT_MS, System.currentTimeMillis()).apply()
+                } catch (_: Exception) {}
+                triggerLocalWidgetUpdate()
+            }
             scheduleMediaTick(if (isPlaying) 1000 else 4000)
             return
         }
@@ -952,6 +976,7 @@ class NotificationListener : NotificationListenerService() {
             } else {
                 println("[media][tx] not_sent: bt_not_configured")
             }
+            if (prioritizeLocal) triggerLocalWidgetUpdate()
         } catch (_: Exception) {
             println("[media][tx] send_failed")
         }

@@ -90,10 +90,28 @@ class FirebaseService {
     return deviceId;
   }
 
-  // Elimina una notificación específica de Firebase
+  // Elimina una notificación específica de Firebase, bajo el nodo del
+  // dispositivo PROPIO (rol receptor: este dispositivo capturó la
+  // notificación y la subió a su propio nodo). Para borrar notificaciones
+  // MIRRORED desde un dispositivo receptor vinculado (rol emisor — pantallas
+  // de la bola flotante), usa `deleteNotificationForDeviceId` con
+  // `ReceptorService.getLinkedDeviceId()`; usar este método ahí borraría bajo
+  // el deviceId equivocado y la notificación "eliminada" reaparecería en la
+  // siguiente recarga porque nunca se borró de verdad en Firestore.
   Future<void> deleteNotification(String notificationId, String dateId) async {
     final deviceId = await getDeviceId();
+    await deleteNotificationForDeviceId(deviceId, notificationId);
+  }
 
+  /// Igual que `deleteNotification`, pero recibiendo explícitamente el
+  /// deviceId bajo el que vive el documento en Firestore. Úsalo cuando el
+  /// deviceId correcto NO es `getDeviceId()` (este dispositivo), p. ej. al
+  /// borrar mensajes mirrored de un receptor vinculado
+  /// (`ReceptorService.getLinkedDeviceId()`).
+  Future<void> deleteNotificationForDeviceId(
+    String deviceId,
+    String notificationId,
+  ) async {
     try {
       await _firestore
           .collection('dispositivos')

@@ -157,6 +157,13 @@ class FloatingBallService : Service() {
         private const val KEY_CUSTOM_NOTIFS_CLEAR_ALL_ICON_ID = "flutter.floating_ball_custom_notifications_clear_all_icon_id"
         private const val KEY_CUSTOM_NOTIFS_CLEAR_ALL_ICON_PNG_BASE64 = "flutter.floating_ball_custom_notifications_clear_all_icon_png_base64"
         private const val KEY_CUSTOM_NOTIFS_CLEAR_ALL_TEXT = "flutter.floating_ball_custom_notifications_clear_all_text"
+        private const val KEY_FS_CHATS_MENU_ENABLED = "flutter.floating_ball_fs_chats_menu_enabled"
+        private const val KEY_FS_CHATS_ICON_ID = "flutter.floating_ball_fs_chats_icon_id"
+        private const val KEY_FS_CHATS_ICON_PNG_BASE64 = "flutter.floating_ball_fs_chats_icon_png_base64"
+        private const val KEY_FS_CHATS_TEXT = "flutter.floating_ball_fs_chats_text"
+        private const val KEY_POPUP_CHATS_ICON_ID = "flutter.floating_ball_popup_chats_icon_id"
+        private const val KEY_POPUP_CHATS_ICON_PNG_BASE64 = "flutter.floating_ball_popup_chats_icon_png_base64"
+        private const val KEY_CONVERSATION_ENABLED_PKGS_JSON = "flutter.conversation_enabled_packages_json"
         private const val KEY_CONVERSATION_BOTTOM_BUTTONS_GAP_DP = "flutter.floating_ball_conversation_bottom_buttons_gap_dp"
         private const val KEY_CONVERSATION_BOTTOM_BUTTONS_PADDING_HORZ_DP = "flutter.floating_ball_conversation_bottom_buttons_padding_horz_dp"
         private const val KEY_CONVERSATION_BOTTOM_BUTTONS_PADDING_VERT_DP = "flutter.floating_ball_conversation_bottom_buttons_padding_vert_dp"
@@ -295,6 +302,7 @@ class FloatingBallService : Service() {
                 "close" -> android.R.drawable.ic_menu_close_clear_cancel
                 "phone" -> android.R.drawable.ic_menu_call
                 "sms" -> android.R.drawable.sym_action_chat
+                "chat" -> android.R.drawable.sym_action_chat
                 "email" -> android.R.drawable.ic_dialog_email
                 "camera" -> android.R.drawable.ic_menu_camera
                 "photo" -> android.R.drawable.ic_menu_gallery
@@ -404,8 +412,20 @@ class FloatingBallService : Service() {
             obj.put("canSkipPrev", canSkipPrev)
             obj.put("canSeek", canSeek)
             val prefs = getSharedPreferences("local_media_cache_v1", Context.MODE_PRIVATE)
+            // Preserve artwork from the previous cache entry (NotificationListener stores it).
+            val mergedJson = try {
+                val prevJson = prefs.getString("media_json", null)
+                if (!prevJson.isNullOrBlank()) {
+                    val prevObj = JSONObject(prevJson)
+                    val prevArt = prevObj.optString("artBase64", "").trim()
+                    if (prevArt.isNotBlank()) obj.put("artBase64", prevArt)
+                    val prevMime = prevObj.optString("artMime", "").trim()
+                    if (prevMime.isNotBlank()) obj.put("artMime", prevMime)
+                }
+                obj.toString()
+            } catch (_: Exception) { obj.toString() }
             prefs.edit()
-                .putString("media_json", obj.toString())
+                .putString("media_json", mergedJson)
                 .putLong("updatedAtMs", System.currentTimeMillis())
                 .apply()
         } catch (_: Exception) {
@@ -580,6 +600,14 @@ class FloatingBallService : Service() {
     private var fsBrightnessIconPngBase64: String? = null
     private var fsOrder: List<String> = emptyList()
     private var fsAppLabels: Map<String, String> = emptyMap()
+    // Menú de chats
+    private var fsChatsMenuEnabled: Boolean = false
+    private var fsChatsText: String = "Chats"
+    private var fsChatsIconId: String = "chat"
+    private var fsChatsIconPngBase64: String? = null
+    private var popupChatsIconId: String = "chat"
+    private var popupChatsIconPngBase64: String? = null
+    private var conversationEnabledPkgs: List<String> = emptyList()
     private var useAsReceptor: Boolean = false
     private var mediaModalView: View? = null
     private var mediaModalTick: Runnable? = null
@@ -828,6 +856,15 @@ class FloatingBallService : Service() {
             fsOrder = readStringListJson(prefs.getString(KEY_FS_ORDER_JSON, null))
             fsAppLabels = readStringMapJson(prefs.getString(KEY_FS_APP_LABELS_JSON, null))
             useAsReceptor = prefs.getBoolean(KEY_USE_AS_RECEPTOR, false)
+
+            // Menú de chats
+            fsChatsMenuEnabled = readBoolPref(prefs, KEY_FS_CHATS_MENU_ENABLED, false)
+            fsChatsText = (prefs.getString(KEY_FS_CHATS_TEXT, "Chats") ?: "Chats").trim().ifEmpty { "Chats" }
+            fsChatsIconId = (prefs.getString(KEY_FS_CHATS_ICON_ID, "chat") ?: "chat").trim().ifEmpty { "chat" }
+            fsChatsIconPngBase64 = prefs.getString(KEY_FS_CHATS_ICON_PNG_BASE64, null)
+            popupChatsIconId = (prefs.getString(KEY_POPUP_CHATS_ICON_ID, "chat") ?: "chat").trim().ifEmpty { "chat" }
+            popupChatsIconPngBase64 = prefs.getString(KEY_POPUP_CHATS_ICON_PNG_BASE64, null)
+            conversationEnabledPkgs = readStringListJson(prefs.getString(KEY_CONVERSATION_ENABLED_PKGS_JSON, null))
 
             popupBgColor = readColor(prefs, KEY_POPUP_BG_COLOR, fsBgColor)
             popupButtonColor = readColor(prefs, KEY_POPUP_BUTTON_COLOR, fsButtonColor)
@@ -2005,6 +2042,16 @@ class FloatingBallService : Service() {
                 }
             })
         }
+        // Botón "Chats": solo si está habilitado y hay al menos una app con
+        // conversación activa.
+        val showChats = fsChatsMenuEnabled && conversationEnabledPkgs.isNotEmpty()
+        if (showChats) {
+            popupItems["chats"] = {
+                content.addView(buildPopupButton(popupChatsIconId, popupChatsIconPngBase64, null) {
+                    openChatsMenu()
+                })
+            }
+        }
         for (pkg in selectedApps) {
             val icon = try {
                 packageManager.getApplicationIcon(pkg)
@@ -2027,6 +2074,20 @@ class FloatingBallService : Service() {
             }
         }
 
+        // Botón "Calculadora": siempre disponible
+        popupItems["calculator"] = {
+            content.addView(buildPopupButton("calculate", null, null) {
+                openCalculatorMenu()
+            })
+        }
+
+        // Botón "Control remoto": siempre disponible
+        popupItems["remote_control"] = {
+            content.addView(buildPopupButton("apps", null, null) {
+                openRemoteControlMenu()
+            })
+        }
+
         val defaultPopupOrder = listOf("back", "home", "recents", "volume", "brightness", "settings")
         val order = if (popupOrder.isNotEmpty()) popupOrder else defaultPopupOrder
         val used = HashSet<String>()
@@ -2036,6 +2097,9 @@ class FloatingBallService : Service() {
         }
         for (id in order) add(id)
         for (id in defaultPopupOrder) add(id)
+        if (showChats) add("chats")
+        add("calculator")
+        add("remote_control")
         for (pkg in selectedApps) add("pkg:$pkg")
         for (toolId in selectedTools) add(toolId)
 
@@ -2610,6 +2674,41 @@ class FloatingBallService : Service() {
             }
         }
 
+        // Botón "Chats": solo si está habilitado y hay al menos una app con
+        // conversación activa.
+        val showChats = fsChatsMenuEnabled && conversationEnabledPkgs.isNotEmpty()
+        if (showChats) {
+            byId["chats"] = FsItem(
+                id = "chats",
+                title = fsChatsText,
+                iconId = fsChatsIconId,
+                iconPngBase64 = fsChatsIconPngBase64
+            ) {
+                hideMenu()
+                openChatsMenu()
+            }
+        }
+
+        // Botón "Calculadora": siempre disponible en el menú completo
+        byId["calculator"] = FsItem(
+            id = "calculator",
+            title = "Calculadora",
+            iconId = "calculate"
+        ) {
+            hideMenu()
+            openCalculatorMenu()
+        }
+
+        // Botón "Control remoto": siempre disponible en el menú completo
+        byId["remote_control"] = FsItem(
+            id = "remote_control",
+            title = "Control remoto",
+            iconId = "apps"
+        ) {
+            hideMenu()
+            openRemoteControlMenu()
+        }
+
         for (pkg in selectedApps) {
             val label = (fsAppLabels[pkg] ?: resolveAppLabel(pkg)).trim()
             if (label.isBlank()) continue
@@ -2659,6 +2758,9 @@ class FloatingBallService : Service() {
 
         for (id in order) addOrdered(id)
         for (id in defaultOrder) addOrdered(id)
+        if (showChats) addOrdered("chats")
+        addOrdered("calculator")
+        addOrdered("remote_control")
         for (pkg in selectedApps) addOrdered("pkg:$pkg")
         for (toolId in selectedTools) addOrdered(toolId)
 
@@ -4307,6 +4409,36 @@ class FloatingBallService : Service() {
             val launch = packageManager.getLaunchIntentForPackage(pkg) ?: return
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(launch)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun openChatsMenu() {
+        try {
+            val i = Intent(this, FloatingBallChatsActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(i)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun openCalculatorMenu() {
+        try {
+            val i = Intent(this, FloatingBallCalculatorActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(i)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun openRemoteControlMenu() {
+        try {
+            val i = Intent(this, FloatingBallRemoteControlActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(i)
         } catch (_: Exception) {
         }
     }

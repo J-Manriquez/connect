@@ -8,31 +8,33 @@
         android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
+        android:scaleType="fitXY"
         android:src="@android:drawable/ic_menu_gallery" />
 
     <LinearLayout
+        android:id="@+id/widget_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="12dp"
+        android:gravity="center_vertical"
+        android:padding="10dp"
         android:background="#80000000">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="88dp"
+            android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
             <FrameLayout
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_weight="1">
 
                 <LinearLayout
                     android:id="@+id/widget_text_area"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:gravity="center_vertical">
 
@@ -44,14 +46,14 @@
                         android:textColor="#FFFFFF"
                         android:textSize="18sp"
                         android:textStyle="bold"
-                        android:maxLines="2"
+                        android:maxLines="1"
                         android:ellipsize="end" />
 
                     <TextView
                         android:id="@+id/widget_subtitle"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
+                        android:layout_marginTop="4dp"
                         android:text="Conecta el emisor para controlar"
                         android:textColor="#FFFFFF"
                         android:textSize="14sp"
@@ -62,19 +64,17 @@
                 <FrameLayout
                     android:id="@+id/widget_volume_panel"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="center_vertical"
                     android:visibility="gone">
 
-                    <ProgressBar
+                    <ImageView
                         android:id="@+id/widget_volume_progress"
-                        style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="match_parent"
                         android:layout_height="28dp"
                         android:layout_gravity="center_vertical"
-                        android:progressDrawable="@drawable/widget_progress_with_thumb"
-                        android:max="100"
-                        android:progress="0" />
+                        android:scaleType="fitXY"
+                        android:contentDescription="@null" />
 
                     <LinearLayout
                         android:id="@+id/widget_volume_segments"
@@ -100,8 +100,9 @@
 
             <ImageView
                 android:id="@+id/widget_volume_btn"
-                android:layout_width="88dp"
-                android:layout_height="88dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
                 android:adjustViewBounds="true"
                 android:scaleType="centerInside"
                 android:src="@drawable/widget_ic_volume"
@@ -111,19 +112,16 @@
         <LinearLayout
             android:id="@+id/widget_middle"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
+            android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center_vertical">
+            android:layout_marginTop="8dp">
 
-            <ProgressBar
+            <ImageView
                 android:id="@+id/widget_progress"
-                style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="24dp"
-                android:progressDrawable="@drawable/widget_progress_with_thumb"
-                android:max="1000"
-                android:progress="0" />
+                android:layout_height="20dp"
+                android:scaleType="fitXY"
+                android:contentDescription="@null" />
 
             <TextView
                 android:id="@+id/widget_time"
@@ -138,7 +136,7 @@
                 android:id="@+id/widget_time_row"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="4dp"
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
@@ -183,15 +181,24 @@
         <LinearLayout
             android:id="@+id/widget_controls_row"
             android:layout_width="match_parent"
-            android:layout_height="88dp"
+            android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginTop="10dp">
+            android:gravity="center_vertical"
+            android:layout_marginTop="8dp">
+
+            <ImageView
+                android:id="@+id/widget_default_app"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="2dp"
+                android:adjustViewBounds="true"
+                android:scaleType="centerInside"
+                android:src="@android:drawable/ic_media_play" />
 
             <ImageView
                 android:id="@+id/widget_prev"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
+                android:layout_height="52dp"
                 android:layout_weight="1"
                 android:adjustViewBounds="true"
                 android:scaleType="centerInside"
@@ -201,7 +208,7 @@
             <ImageView
                 android:id="@+id/widget_play_pause"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
+                android:layout_height="52dp"
                 android:layout_weight="1"
                 android:adjustViewBounds="true"
                 android:scaleType="centerInside"
@@ -211,7 +218,7 @@
             <ImageView
                 android:id="@+id/widget_next"
                 android:layout_width="0dp"
-                android:layout_height="match_parent"
+                android:layout_height="52dp"
                 android:layout_weight="1"
                 android:adjustViewBounds="true"
                 android:scaleType="centerInside"

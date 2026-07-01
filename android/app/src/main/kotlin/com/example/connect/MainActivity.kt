@@ -29,6 +29,9 @@ import android.location.LocationManager
 import android.os.BatteryManager
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs
 import io.flutter.embedding.android.RenderMode
+import androidx.annotation.RequiresApi
+import androidx.core.app.ActivityCompat
+import android.content.pm.PackageManager
 
 
 
@@ -43,9 +46,11 @@ class MainActivity: FlutterActivity() {
     private val ACTIVE_NOTIFICATIONS_EVENTS_CHANNEL = "com.example.connect/active_notifications_events"
     private val BATTERY_CHANNEL = "com.example.connect/battery" // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
     private val BLE_CHANNEL = "com.example.connect/ble"
+    private val STOPWATCH_CHANNEL = "com.example.connect/stopwatch"
     private val FLOATING_BALL_CHANNEL = "com.example.connect/floating_ball"
     private val TTS_AUDIO_CHANNEL = "com.example.connect/tts_audio"
     private val DIAGNOSTICS_CHANNEL = "com.example.connect/device_diagnostics"
+    private val REMOTE_CONTROL_CHANNEL = "com.example.connect/remote_control"
     private lateinit var emisorChannel: MethodChannel
     private lateinit var appListChannel: MethodChannel
     private lateinit var receptorChannel: MethodChannel
@@ -55,11 +60,17 @@ class MainActivity: FlutterActivity() {
     private var soundEventsSink: EventChannel.EventSink? = null
     private lateinit var batteryChannel: MethodChannel // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
     private lateinit var bleChannel: MethodChannel
+    private lateinit var stopwatchChannel: MethodChannel
     private lateinit var floatingBallChannel: MethodChannel
     private lateinit var ttsAudioChannel: MethodChannel
     private lateinit var diagnosticsChannel: MethodChannel
+    private lateinit var remoteControlChannel: MethodChannel
+    // internal para que FloatingBallRemoteControlActivity pueda acceder vía MainActivity.instance
+    internal var hidController: BtHidController? = null
     private lateinit var activeNotificationsEventsChannel: EventChannel
     private var activeNotificationsEventsSink: EventChannel.EventSink? = null
+    // Canal de eventos de sensores recibidos por BT (emisor recibe del receptor)
+    internal var sensorDebugEventSink: EventChannel.EventSink? = null
     private lateinit var appListService: AppListService
     private lateinit var localNotificationManager: LocalNotificationManager
     private lateinit var vibrationManager: VibrationManager
@@ -76,6 +87,7 @@ class MainActivity: FlutterActivity() {
 
     companion object {
         var instance: MainActivity? = null
+        const val REQUEST_BODY_SENSORS = 9001
     }
 
     private fun isAutoOpenForegroundBlockActive(intent: Intent?): Boolean {
@@ -221,11 +233,147 @@ class MainActivity: FlutterActivity() {
         // ✅ CANAL PARA OPTIMIZACIÓN DE BATERÍA
         batteryChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_CHANNEL)
         bleChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BLE_CHANNEL)
+        stopwatchChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, STOPWATCH_CHANNEL)
+        stopwatchChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "start" -> {
+                    val i = Intent(applicationContext, StopwatchTimerFgService::class.java)
+                        .setAction(StopwatchTimerFgService.ACTION_START)
+                    try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i) } catch (_: Exception) { startService(i) }
+                    result.success(true)
+                }
+                "pause" -> {
+                    val i = Intent(applicationContext, StopwatchTimerFgService::class.java)
+                        .setAction(StopwatchTimerFgService.ACTION_PAUSE)
+                    startService(i)
+                    result.success(true)
+                }
+                "reset" -> {
+                    val i = Intent(applicationContext, StopwatchTimerFgService::class.java)
+                        .setAction(StopwatchTimerFgService.ACTION_RESET)
+                    startService(i)
+                    result.success(true)
+                }
+                "lap" -> {
+                    val i = Intent(applicationContext, StopwatchTimerFgService::class.java)
+                        .setAction(StopwatchTimerFgService.ACTION_LAP)
+                    startService(i)
+                    result.success(true)
+                }
+                "set_timer" -> {
+                    val ms = (call.argument<Any>("duration_ms") as? Long)
+                        ?: (call.argument<Any>("duration_ms") as? Int)?.toLong() ?: 0L
+                    val i = Intent(applicationContext, StopwatchTimerFgService::class.java)
+                        .setAction(StopwatchTimerFgService.ACTION_SET_TIMER)
+                        .putExtra(StopwatchTimerFgService.EXTRA_TIMER_DURATION, ms)
+                    try { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i) } catch (_: Exception) { startService(i) }
+                    result.success(true)
+                }
+                "set_mode" -> {
+                    val mode = call.argument<String>("mode") ?: StopwatchTimerFgService.MODE_STOPWATCH
+                    val i = Intent(applicationContext, StopwatchTimerFgService::class.java)
+                        .setAction(StopwatchTimerFgService.ACTION_SET_MODE)
+                        .putExtra(StopwatchTimerFgService.EXTRA_MODE, mode)
+                    startService(i)
+                    result.success(true)
+                }
+                "get_state" -> {
+                    try {
+                        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                        result.success(mapOf(
+                            "mode"      to (prefs.getString(StopwatchTimerFgService.KEY_MODE,  StopwatchTimerFgService.MODE_STOPWATCH) ?: StopwatchTimerFgService.MODE_STOPWATCH),
+                            "state"     to (prefs.getString(StopwatchTimerFgService.KEY_STATE, StopwatchTimerFgService.STATE_IDLE)     ?: StopwatchTimerFgService.STATE_IDLE),
+                            "start"     to prefs.getLong(StopwatchTimerFgService.KEY_START, 0L),
+                            "accum"     to prefs.getLong(StopwatchTimerFgService.KEY_ACCUM, 0L),
+                            "timerTgt"  to prefs.getLong(StopwatchTimerFgService.KEY_TIMER_TGT, 5 * 60_000L),
+                            "timerRem"  to prefs.getLong(StopwatchTimerFgService.KEY_TIMER_REM, 5 * 60_000L),
+                            "lapsJson"  to (prefs.getString(StopwatchTimerFgService.KEY_LAPS, "[]") ?: "[]"),
+                        ))
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "updateStopwatchWidget" -> {
+                    try {
+                        StopwatchWidgetProviderStyle1.updateAll(applicationContext)
+                        StopwatchWidgetProviderStyle3.updateAll(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) { result.error("ERROR", e.message, null) }
+                }
+                else -> result.notImplemented()
+            }
+        }
         floatingBallChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FLOATING_BALL_CHANNEL)
         ttsAudioChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, TTS_AUDIO_CHANNEL)
         diagnosticsChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DIAGNOSTICS_CHANNEL)
+        remoteControlChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, REMOTE_CONTROL_CHANNEL)
+
+        // Canal para el servicio de sensores corporales
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "connect/sensor_service")
+            .setMethodCallHandler { call, result ->
+                val intent = Intent(this, SensorForegroundService::class.java)
+                when (call.method) {
+                    "start" -> {
+                        intent.action = SensorForegroundService.ACTION_START
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(null)
+                    }
+                    "stop" -> {
+                        intent.action = SensorForegroundService.ACTION_STOP
+                        startService(intent)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // EventChannels de sensores corporales (datos del receptor → UI principal)
+        fun sensorEventChannel(name: String, onListen: (EventChannel.EventSink?) -> Unit) {
+            EventChannel(flutterEngine.dartExecutor.binaryMessenger, name)
+                .setStreamHandler(object : EventChannel.StreamHandler {
+                    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) = onListen(events)
+                    override fun onCancel(arguments: Any?) = onListen(null)
+                })
+        }
+        sensorEventChannel("connect/heart_rate")  { SensorForegroundService.hrSink      = it }
+        sensorEventChannel("connect/steps")       { SensorForegroundService.stepsSink   = it }
+        sensorEventChannel("connect/compass")     { SensorForegroundService.compassSink = it }
+        sensorEventChannel("connect/wrist_state") { SensorForegroundService.wristSink   = it }
+        sensorEventChannel("connect/sensor_debug") { sink ->
+            SensorForegroundService.debugSink = sink   // receptor: logs del servicio de sensores
+            sensorDebugEventSink = sink                // emisor: logs BT recibidos de sensor_data
+        }
+
+        // MethodChannel rotary (Kotlin → Flutter: invokeMethod "rotaryDelta")
+        SensorForegroundService.rotaryChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger, "connect/rotary"
+        ).also { ch ->
+            ch.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> { SensorForegroundService.instance?.registerRotary(); result.success(null) }
+                    "stop"  -> { SensorForegroundService.instance?.unregisterRotary(); result.success(null) }
+                    else    -> result.notImplemented()
+                }
+            }
+        }
+
+        // Solicitar permiso BODY_SENSORS si es necesario (Android 6+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.BODY_SENSORS),
+                    REQUEST_BODY_SENSORS
+                )
+            }
+        }
+
         btAdapter = BluetoothAdapter.getDefaultAdapter()
-        
+
         // Iniciar automáticamente el servicio si el permiso está concedido
         if (isNotificationServiceEnabled()) {
             val serviceIntent = Intent(this, NotificationListener::class.java)
@@ -1320,12 +1468,57 @@ class MainActivity: FlutterActivity() {
                 }
                 "updateWidget" -> {
                     try {
-                        MediaWidgetProvider.updateAll(applicationContext)
                         MediaWidgetProviderStyle2.updateAll(applicationContext)
                         MediaWidgetProviderStyle3.updateAll(applicationContext)
-                        MediaWidgetProviderStyle4.updateAll(applicationContext)
-                        MediaWidgetProviderStyle5.updateAll(applicationContext)
+                        MediaWidgetProviderWide.updateAll(applicationContext)
                         result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "updateWeatherWidget" -> {
+                    try {
+                        WeatherWidgetProvider.updateAll(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "updateCalculatorWidget" -> {
+                    try {
+                        CalculatorWidgetProvider.updateAll(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "updateStopwatchWidget" -> {
+                    try {
+                        StopwatchWidgetProviderStyle1.updateAll(applicationContext)
+                        StopwatchWidgetProviderStyle3.updateAll(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "updateImageWidget" -> {
+                    // Respondemos inmediatamente; el render de bitmaps corre en background
+                    result.success(true)
+                    Thread {
+                        try {
+                            val cfg = ImageSlideShowWidgetProvider.readCfg(applicationContext)
+                            ImageSlideShowWidgetProvider.updateAll(applicationContext, cfg)
+                            if (cfg.imageList.isNotEmpty()) {
+                                ImageSlideShowWidgetProvider.scheduleAdvance(applicationContext, cfg.intervalSec)
+                            }
+                        } catch (e: Exception) {
+                            println("[ImageWidget] updateImageWidget error: ${e.message}")
+                        }
+                    }.start()
+                }
+                "getInternalFilesDir" -> {
+                    try {
+                        result.success(applicationContext.filesDir.absolutePath)
                     } catch (e: Exception) {
                         result.error("ERROR", e.message, null)
                     }
@@ -1375,6 +1568,44 @@ class MainActivity: FlutterActivity() {
                         result.success("Excepción al ejecutar su: ${e.message}")
                     }
                 }
+                "getSensors" -> {
+                    try {
+                        val sm = getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager
+                        if (sm == null) {
+                            result.error("ERROR", "SensorManager no disponible", null)
+                        } else {
+                            val sensors = sm.getSensorList(android.hardware.Sensor.TYPE_ALL)
+                            val list = sensors.map { s ->
+                                val map = HashMap<String, Any?>()
+                                try { map["name"] = s.name } catch (_: Exception) {}
+                                try { map["type"] = s.type } catch (_: Exception) {}
+                                try { map["vendor"] = s.vendor } catch (_: Exception) {}
+                                try { map["version"] = s.version } catch (_: Exception) {}
+                                try { map["power"] = s.power } catch (_: Exception) {}
+                                try { map["resolution"] = s.resolution } catch (_: Exception) {}
+                                try { map["maximumRange"] = s.maximumRange } catch (_: Exception) {}
+                                try { map["minDelay"] = s.minDelay } catch (_: Exception) {}
+                                if (Build.VERSION.SDK_INT >= 20) {
+                                    try { map["stringType"] = s.stringType } catch (_: Exception) {}
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                    try { map["maxDelay"] = s.maxDelay } catch (_: Exception) {}
+                                    try { map["reportingMode"] = s.reportingMode } catch (_: Exception) {}
+                                    try { map["isWakeUp"] = s.isWakeUpSensor } catch (_: Exception) {}
+                                    try { map["fifoMaxEventCount"] = s.fifoMaxEventCount } catch (_: Exception) {}
+                                    try { map["fifoReservedEventCount"] = s.fifoReservedEventCount } catch (_: Exception) {}
+                                }
+                                map
+                            }
+                            result.success(mapOf(
+                                "count" to sensors.size,
+                                "sensors" to list
+                            ))
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
                 "openDeveloperOptions" -> {
                     val method = call.argument<String>("method") ?: "settings"
                     try {
@@ -1402,6 +1633,150 @@ class MainActivity: FlutterActivity() {
                         result.success("Lanzado OK ($method)")
                     } catch (e: Exception) {
                         result.success("Error al lanzar ($method): ${e.message}")
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // HID keyboard controller (teléfono como teclado BT HID para el TV box)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            hidController = BtHidController(applicationContext)
+        }
+
+        // ✅ CANAL PARA CONTROL REMOTO (touchpad/teclado hacia "connect remote control")
+        RemoteControlClient.init(applicationContext)
+        RemoteControlClient.onMessage = { json ->
+            runOnUiThread {
+                try {
+                    remoteControlChannel.invokeMethod("onRemoteMessage", json)
+                } catch (_: Exception) {
+                }
+            }
+        }
+        RemoteControlClient.onConnectionChanged = { connected ->
+            runOnUiThread {
+                try {
+                    remoteControlChannel.invokeMethod("onRemoteConnectionChanged", connected)
+                } catch (_: Exception) {
+                }
+            }
+        }
+        remoteControlChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getBondedDevices" -> {
+                    try {
+                        val adapter = btAdapter
+                        val bonded = adapter?.bondedDevices?.map { d ->
+                            mapOf(
+                                "address" to d.address,
+                                "name" to (d.name ?: ""),
+                                "bondState" to d.bondState
+                            )
+                        } ?: emptyList()
+                        result.success(bonded)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "startDiscovery" -> {
+                    try {
+                        startBtDiscovery()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "stopDiscovery" -> {
+                    try {
+                        stopBtDiscovery()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "connectRemote" -> {
+                    try {
+                        val address = call.argument<String>("address")
+                        if (address != null) {
+                            RemoteControlClient.connect(address)
+                            // Iniciar también conexión HID en paralelo (API 28+).
+                            // El TV box recibirá KeyEvents reales para el D-pad.
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                hidController?.initAndConnect(address)
+                            }
+                            result.success(true)
+                        } else {
+                            result.error("INVALID_ARGS", "address requerido", null)
+                        }
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "disconnectRemote" -> {
+                    try {
+                        RemoteControlClient.disconnect()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            hidController?.disconnect()
+                        }
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "hidSendDpad" -> {
+                    try {
+                        val key = call.argument<String>("key")
+                        if (key == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                        val hid = hidController
+                        if (hid == null || !hid.isConnected) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                        val hidCode = when (key) {
+                            "dpad_up"     -> 0x52
+                            "dpad_down"   -> 0x51
+                            "dpad_left"   -> 0x50
+                            "dpad_right"  -> 0x4F
+                            "dpad_center" -> 0x28
+                            else -> 0
+                        }
+                        if (hidCode == 0) { result.success(false); return@setMethodCallHandler }
+                        // Responder inmediatamente; el envío BT es asíncrono
+                        result.success(true)
+                        hid.sendKeyAsync(hidCode)
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "hidStatus" -> {
+                    try {
+                        val hid = hidController
+                        result.success(mapOf(
+                            "supported" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P),
+                            "connected" to (hid?.isConnected == true),
+                            "state" to (hid?.hidState?.name ?: "UNAVAILABLE")
+                        ))
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
+                    }
+                }
+                "isRemoteConnected" -> {
+                    result.success(RemoteControlClient.isConnected())
+                }
+                "getConnectedAddress" -> {
+                    result.success(RemoteControlClient.connectedAddress)
+                }
+                "sendRemote" -> {
+                    try {
+                        val args = call.arguments as Map<String, Any?>
+                        val json = org.json.JSONObject(args).toString()
+                        result.success(RemoteControlClient.send(json))
+                    } catch (e: Exception) {
+                        result.error("ERROR", e.message, null)
                     }
                 }
                 else -> result.notImplemented()
@@ -1611,6 +1986,15 @@ class MainActivity: FlutterActivity() {
 
         if (handleMediaLaunchIntent(intent)) return
         
+        // Widget de imágenes: abre la pantalla de edición y auto-inicia selector de carpeta
+        if (intent.action == ImageSlideShowWidgetProvider.ACTION_OPEN_EDITOR) {
+            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                io.flutter.plugin.common.MethodChannel(messenger, "com.example.connect/ble")
+                    .invokeMethod("navigateToImageWidgetEditor", null)
+            }
+            return
+        }
+
         // ✅ MANEJO ESPECÍFICO PARA DEVICE_FINDER_ACTION
         if (intent.action == "DEVICE_FINDER_ACTION") {
             Log.d("MainActivity", "Intent de Device Finder recibido")

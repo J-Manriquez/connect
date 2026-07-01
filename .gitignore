@@ -51,3 +51,10 @@ app.*.map.json
 /android/app/release
 
 /previo-funcionando
+
+# connect remote control (subproyecto Android nativo independiente, NO se
+# compila junto a `connect`): artefactos de build y config local de máquina.
+/connect_remote_control/app/build/
+/connect_remote_control/build/
+/connect_remote_control/.gradle/
+/connect_remote_control/local.properties

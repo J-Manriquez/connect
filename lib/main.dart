@@ -33,8 +33,24 @@ import 'screens/emisor/floating_ball_settings_screen.dart';
 import 'screens/emisor/floating_ball_style_screen.dart';
 import 'screens/emisor/floating_ball_custom_notifications_screen.dart';
 import 'screens/emisor/floating_ball_conversation_screen.dart';
+import 'screens/emisor/floating_ball_chats_menu_screen.dart';
+import 'screens/emisor/floating_ball_calculator_screen.dart';
+import 'screens/emisor/floating_ball_remote_control_screen.dart';
 import 'screens/emisor/lector_tts_screen.dart';
 import 'screens/receptor/receptor_settings_screen.dart';
+import 'package:connect/screens/weather_settings_screen.dart';
+import 'package:connect/screens/emisor/image_widget_editor_screen.dart';
+import 'package:connect/screens/emisor/stopwatch_widget_list_screen.dart';
+import 'package:connect/screens/emisor/stopwatch_timer_screen.dart';
+import 'package:connect/screens/shared/user_body_profile_screen.dart';
+import 'package:connect/screens/receptor/receptor_salud_screen.dart';
+import 'package:connect/screens/receptor/receptor_hr_screen.dart';
+import 'package:connect/screens/receptor/receptor_pasos_screen.dart';
+import 'package:connect/screens/receptor/brujula_screen.dart';
+import 'package:connect/screens/emisor/emisor_salud_screen.dart';
+import 'package:connect/screens/emisor/emisor_hr_screen.dart';
+import 'package:connect/screens/emisor/emisor_pasos_screen.dart';
+import 'package:connect/screens/shared/salud_debug_screen.dart';
 
 // Añadir este import al inicio del archivo
 import 'package:connect/services/local_notification_service.dart';
@@ -45,7 +61,9 @@ import 'package:connect/screens/buscar_dispositivo_screen.dart';
 import 'package:connect/services/notification_sound_handler.dart';
 import 'package:connect/services/ble_service.dart';
 import 'package:connect/services/floating_ball_service.dart';
-import 'package:flutter_gemma/flutter_gemma.dart';
+// MÓDULO IA — NO ELIMINAR: desactivado para reducir peso del APK (~190 MB).
+// Reactivar junto con flutter_gemma en pubspec.yaml cuando se reactive el módulo lib/modules/ai/.
+// import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:connect/services/update_service.dart';
@@ -78,7 +96,8 @@ void main() async {
   // NO debe bloquear `main()`). `main()` también corre en la actividad de
   // auto-apertura de conversación; bloquear aquí (p. ej. esperando la consulta
   // de ABIs por MethodChannel) impedía que la conversación se mostrara.
-  unawaited(_initGemmaIfSupported());
+  // MÓDULO IA — NO ELIMINAR: reactivar cuando se reactive flutter_gemma en pubspec.yaml.
+  // unawaited(_initGemmaIfSupported());
 
   // Verificar si hay una versión más nueva publicada en GitHub Releases (Android).
   // Nunca lanza: ante cualquier fallo devuelve null y la app arranca normal.
@@ -98,6 +117,16 @@ void main() async {
       WidgetsBinding.instance.platformDispatcher.defaultRouteName.trim();
   final bool isNormalLaunch = initialRoute.isEmpty || initialRoute == '/';
   if (isNormalLaunch) {
+    // Sincroniza el espejo nativo de apps con conversación activa y recarga la
+    // config del overlay, para que el botón "Chats" del menú de la bola se
+    // muestre aunque las apps de conversación se hayan activado antes de que
+    // esta función existiera. No bloquea el arranque.
+    unawaited(() async {
+      try {
+        await PreferencesService.getConversationEnabledPackages();
+        await FloatingBallService.applyConfigToOverlay();
+      } catch (_) {}
+    }());
     final UpdateInfo? actualizacion = await UpdateService.checkForUpdate();
     if (actualizacion != null) {
       runApp(MaterialApp(
@@ -111,21 +140,19 @@ void main() async {
   runApp(Phoenix(child: const MainApp()));
 }
 
-/// Inicializa flutter_gemma solo si el dispositivo soporta IA local
-/// (arm64-v8a / x86_64). En dispositivos sin esas ABIs (p. ej. relojes
-/// armeabi-v7a) las librerías nativas no están completas y `initialize()`
-/// crashea. Se ejecuta en segundo plano; un fallo nunca tumba la app.
-Future<void> _initGemmaIfSupported() async {
-  try {
-    if (await DeviceCapabilityService.instance.supportsLocalAi()) {
-      await FlutterGemma.initialize();
-    } else {
-      debugPrint('[main] IA local no soportada — se omite FlutterGemma.initialize()');
-    }
-  } catch (e) {
-    debugPrint('[main] FlutterGemma.initialize() falló, se continúa sin IA: $e');
-  }
-}
+// MÓDULO IA — NO ELIMINAR: función desactivada junto con flutter_gemma para reducir APK.
+// Reactivar descomentando esto y la línea unawaited() en main(), más flutter_gemma en pubspec.yaml.
+// Future<void> _initGemmaIfSupported() async {
+//   try {
+//     if (await DeviceCapabilityService.instance.supportsLocalAi()) {
+//       await FlutterGemma.initialize();
+//     } else {
+//       debugPrint('[main] IA local no soportada — se omite FlutterGemma.initialize()');
+//     }
+//   } catch (e) {
+//     debugPrint('[main] FlutterGemma.initialize() falló, se continúa sin IA: $e');
+//   }
+// }
 
 @pragma('vm:entry-point')
 Future<void> btHiveMain() async {
@@ -587,6 +614,15 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
 
         await _ensureServicesActive();
         break;
+      case 'navigateToImageWidgetEditor':
+        // Abre el editor del widget de imágenes y auto-inicia el selector de carpeta
+        if (navigatorKey.currentContext != null) {
+          Navigator.of(navigatorKey.currentContext!).pushNamed(
+            '/image_widget_editor',
+            arguments: {'autoPickFolder': true},
+          );
+        }
+        break;
       default:
         // print('Unknown method ${call.method}');
     }
@@ -998,6 +1034,12 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         },
         '/floating_ball_conversation_auto': (context) =>
             const FloatingBallConversationAutoOpenEntry(),
+        '/floating_ball_chats': (context) =>
+            const FloatingBallChatsMenuScreen(),
+        '/floating_ball_calculator': (context) =>
+            const FloatingBallCalculatorScreen(),
+        '/floating_ball_remote_control': (context) =>
+            const FloatingBallRemoteControlScreen(),
         '/lector_tts': (context) => const LectorTtsScreen(),
         '/receptor': (context) => const ReceptorScreen(),
         '/notificaciones': (context) => const NotificacionesScreen(),
@@ -1020,6 +1062,23 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         },
         '/notification_filters': (context) => const NotificationFiltersScreen(),
         '/conversation_apps': (context) => const ConversationAppsScreen(),
+        '/weather_settings': (context) => const WeatherSettingsScreen(),
+        '/image_widget_editor': (context) => const ImageWidgetEditorScreen(),
+        '/stopwatch_widget': (context) => const StopwatchWidgetListScreen(),
+        '/stopwatch_timer':  (context) => const StopwatchTimerScreen(),
+        // Salud — receptor
+        '/receptor_salud':       (context) => const ReceptorSaludScreen(),
+        '/receptor_salud_hr':    (context) => const ReceptorHrScreen(),
+        '/receptor_salud_pasos': (context) => const ReceptorPasosScreen(),
+        '/receptor_brujula':     (context) => const BrujulaScreen(),
+        '/receptor_salud_debug': (context) => const SaludDebugScreen(side: 'receptor'),
+        // Salud — emisor
+        '/emisor_salud':         (context) => const EmisorSaludScreen(),
+        '/emisor_salud_hr':      (context) => const EmisorHrScreen(),
+        '/emisor_salud_pasos':   (context) => const EmisorPasosScreen(),
+        '/emisor_salud_debug':   (context) => const SaludDebugScreen(side: 'emisor'),
+        // Perfil corporal (compartido)
+        '/user_body_profile':    (context) => const UserBodyProfileScreen(),
       }
     );
   }

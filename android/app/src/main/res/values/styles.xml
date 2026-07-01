@@ -25,4 +25,106 @@
         <item name="android:colorBackgroundCacheHint">@null</item>
         <item name="android:backgroundDimEnabled">false</item>
     </style>
+
+    <!-- ===== Widget de clima ===== -->
+
+    <!-- Fila de las listas (por horas / por días) -->
+    <style name="WeatherRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="WeatherRowLabel">
+        <item name="android:layout_width">52dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="WeatherRowEmoji">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="WeatherRowPp">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:textColor">#80D8FF</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="WeatherRowVal">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Columna de botones de scroll ▲▼ -->
+    <style name="WeatherScrollBtns">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center</item>
+        <item name="android:layout_marginStart">4dp</item>
+    </style>
+
+    <style name="WeatherScrollBtn">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">0dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">10dp</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+    </style>
+
+    <!-- ===== Widget de calculadora — estilos base de teclas ===== -->
+    <!-- El Kotlin sobreescribe colores/tamaños vía setTextColor/setTextViewTextSize/setBtnBg -->
+
+    <style name="CalcKeyBase">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_marginStart">2dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+        <item name="android:background">#FF3A3A3C</item>
+    </style>
+
+    <style name="CalcKeyNum" parent="CalcKeyBase">
+        <item name="android:background">#FF3A3A3C</item>
+    </style>
+
+    <style name="CalcKeyOp" parent="CalcKeyBase">
+        <item name="android:background">#FFFF9F0A</item>
+        <item name="android:textSize">24sp</item>
+    </style>
+
+    <style name="CalcKeyFn" parent="CalcKeyBase">
+        <item name="android:background">#FF636366</item>
+    </style>
+
+    <!-- Indicador de página (puntos) -->
+    <style name="WeatherDot">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">3dp</item>
+        <item name="android:layout_marginEnd">3dp</item>
+        <item name="android:text">●</item>
+        <item name="android:textColor">#5CFFFFFF</item>
+        <item name="android:textSize">10sp</item>
+    </style>
 </resources>

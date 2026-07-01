@@ -349,6 +349,38 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
     );
   }
 
+  // Contenedor desplazable de una pestaña (reemplaza a las tarjetas
+  // expandibles): cada pestaña muestra directamente su contenido.
+  Widget _tabPage(List<Widget> children) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      children: children,
+    );
+  }
+
+  // Encabezado descriptivo al inicio de cada pestaña.
+  Widget _tabHeader(String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 13, color: Colors.black54),
+          ),
+          const Divider(height: 20),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final statusText = _enabled ? 'Activada' : 'Desactivada';
@@ -376,25 +408,37 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
       foregroundColor: customColor[600],
       textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
     );
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Configuración bola flotante'),
-        backgroundColor: customColor[700],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Configuración bola flotante'),
+          backgroundColor: customColor[700],
+          foregroundColor: Colors.white,
+          bottom: _loading
+              ? null
+              : const TabBar(
+                  isScrollable: true,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  indicatorColor: Colors.white,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    Tab(text: 'Estado'),
+                    Tab(text: 'Menú'),
+                    Tab(text: 'Gestos'),
+                  ],
+                ),
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
                 children: [
-                  Card(
-                    child: ExpansionTile(
-                      title: const Text('Estado y permisos'),
-                      subtitle: const Text(
-                        'Activa la bola y revisa los permisos necesarios para que funcione en segundo plano.',
-                      ),
-                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      children: [
+                  _tabPage([
+                    _tabHeader(
+                      'Estado y permisos',
+                      'Activa la bola y revisa los permisos necesarios para que funcione en segundo plano.',
+                    ),
                         // Estado actual
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -535,18 +579,12 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
                             child: const Text('Permitir'),
                           ),
                         ),
-                      ],
+                  ]),
+                  _tabPage([
+                    _tabHeader(
+                      'Personalización',
+                      'Ajusta el estilo de la bola y el contenido del menú (apps, pantalla completa y más).',
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    child: ExpansionTile(
-                      title: const Text('Personalización'),
-                      subtitle: const Text(
-                        'Ajusta el estilo de la bola y el contenido del menú (apps, pantalla completa y más).',
-                      ),
-                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      children: [
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Personalizar bola'),
@@ -606,20 +644,12 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
                   if (_selectedTools.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Card(
-                      child: ExpansionTile(
-                        title: const Text('Posición de widgets flotantes'),
-                        subtitle: const Text(
-                          'Ajusta dónde aparece cada widget al abrirse.',
-                        ),
-                        childrenPadding:
-                            const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        children: [
+                    const Divider(height: 28),
+                    _tabHeader(
+                      'Posición de widgets flotantes',
+                      'Ajusta dónde aparece cada widget al abrirse.',
+                    ),
                           for (final toolId in _selectedTools) ...[
                             Padding(
                               padding: const EdgeInsets.only(top: 12, bottom: 4),
@@ -648,19 +678,13 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
                             if (toolId != _selectedTools.last)
                               const Divider(height: 20),
                           ],
-                        ],
-                      ),
-                    ),
                   ],
-                  const SizedBox(height: 16),
-                  Card(
-                    child: ExpansionTile(
-                      title: const Text('Gestos'),
-                      subtitle: const Text(
-                        'Acciones al deslizar fuera de la bola. Útil si quieres mantener la bola estática.',
-                      ),
-                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      children: [
+                  ]),
+                  _tabPage([
+                    _tabHeader(
+                      'Gestos',
+                      'Acciones al deslizar fuera de la bola. Útil si quieres mantener la bola estática.',
+                    ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Habilitar gestos'),
@@ -824,12 +848,10 @@ class _FloatingBallSettingsScreenState extends State<FloatingBallSettingsScreen>
                             ],
                           ),
                         ],
-                      ],
-                    ),
-                  ),
+                  ]),
                 ],
               ),
-            ),
+        ),
     );
   }
 }

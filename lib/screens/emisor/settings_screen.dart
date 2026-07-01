@@ -1,6 +1,11 @@
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:connect/services/preferences_service.dart'; // ✅ AGREGAR IMPORT
+import 'package:connect/screens/emisor/calculator_widget_editor_screen.dart';
+import 'package:connect/screens/emisor/image_widget_editor_screen.dart';
+import 'package:connect/screens/emisor/widgets_config_screen.dart';
+import 'package:connect/screens/emisor/stopwatch_widget_editor_screen.dart';
+import 'package:connect/services/stopwatch_widget_config_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool isServiceRunning;
@@ -542,6 +547,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onTap: () => Navigator.pushNamed(
                               context,
                               '/floating_ball_settings',
+                            ),
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Widgets de Música'),
+                            subtitle: const Text(
+                              'Controla la reproducción musical desde la pantalla de inicio (3 estilos)',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const WidgetsConfigScreen(),
+                              ),
+                            ),
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Widget de Clima'),
+                            subtitle: const Text(
+                              'Temperatura y condición meteorológica de tus ciudades',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.pushNamed(context, '/weather_settings'),
+                          ),
+                          ...StopwatchWidgetConfigSpec.widgets.map((spec) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text('Cronómetro — ${spec.name}'),
+                            subtitle: Text(spec.description),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => StopwatchWidgetEditorScreen(spec: spec),
+                              ),
+                            ),
+                          )),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Widget de Imágenes'),
+                            subtitle: const Text(
+                              'Presentación de fotos personalizada en la pantalla de inicio',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ImageWidgetEditorScreen(),
+                              ),
+                            ),
+                          ),
+                          ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Widget de Calculadora'),
+                            subtitle: const Text(
+                              'Calculadora básica con paréntesis e historial en la pantalla de inicio',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const CalculatorWidgetEditorScreen(),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),

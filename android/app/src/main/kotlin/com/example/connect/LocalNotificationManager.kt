@@ -817,7 +817,7 @@ class LocalNotificationManager(private val context: Context) {
         }
     }
 
-    private fun wakeUpScreenConservative(allowActivityLaunch: Boolean = true) {
+    internal fun wakeUpScreenConservative(allowActivityLaunch: Boolean = true) {
         try {
             println("[local_notification] wakeUpScreenConservative start sdk=${Build.VERSION.SDK_INT} allowActivityLaunch=$allowActivityLaunch")
             val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager

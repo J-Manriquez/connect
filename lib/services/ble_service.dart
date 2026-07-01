@@ -234,4 +234,9 @@ class BleService {
     final res = await _channel.invokeMethod('updateWidget');
     return res == true;
   }
+
+  static Future<bool> updateCalculatorWidget() async {
+    final res = await _channel.invokeMethod('updateCalculatorWidget');
+    return res == true;
+  }
 }

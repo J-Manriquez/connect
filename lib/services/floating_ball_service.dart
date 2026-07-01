@@ -16,6 +16,8 @@ class FloatingBallService {
   static const String _keyBallSizeDp = 'floating_ball_ball_size_dp';
   static const String _keyFullScreen = 'floating_ball_fullscreen';
   static const String _keyFullScreenBgColor = 'floating_ball_fs_bg_color';
+  static const String _keyFullScreenUnifiedBgEnabled =
+      'floating_ball_fs_unified_bg_enabled';
   static const String _keyFullScreenButtonColor = 'floating_ball_fs_button_color';
   static const String _keyFullScreenContentColor = 'floating_ball_fs_content_color';
   static const String _keyFullScreenIconColor = 'floating_ball_fs_icon_color';
@@ -294,6 +296,26 @@ class FloatingBallService {
       'floating_ball_popup_brightness_icon_png_base64';
   static const String _keyPopupSettingsIconPngBase64 =
       'floating_ball_popup_settings_icon_png_base64';
+  static const String _keyPopupChatsIconId = 'floating_ball_popup_chats_icon_id';
+  static const String _keyPopupChatsIconPngBase64 =
+      'floating_ball_popup_chats_icon_png_base64';
+
+  // Menú de chats (pantalla de lista de conversaciones de la bola)
+  static const String _keyFullScreenChatsMenuEnabled =
+      'floating_ball_fs_chats_menu_enabled';
+  static const String _keyFullScreenChatsIconId =
+      'floating_ball_fs_chats_icon_id';
+  static const String _keyFullScreenChatsIconPngBase64 =
+      'floating_ball_fs_chats_icon_png_base64';
+  static const String _keyFullScreenChatsText = 'floating_ball_fs_chats_text';
+  static const String _keyChatsBgColor = 'floating_ball_chats_bg_color';
+  static const String _keyChatsItemBgColor = 'floating_ball_chats_item_bg_color';
+  static const String _keyChatsItemBorderColor =
+      'floating_ball_chats_item_border_color';
+  static const String _keyChatsTitleColor = 'floating_ball_chats_title_color';
+  static const String _keyChatsTitleSizeSp = 'floating_ball_chats_title_size_sp';
+  static const String _keyChatsTextColor = 'floating_ball_chats_text_color';
+  static const String _keyChatsTextSizeSp = 'floating_ball_chats_text_size_sp';
 
   static const String _keyMediaHeightDp = 'floating_ball_media_height_dp';
   static const String _keyMediaIconSizeDp = 'floating_ball_media_icon_size_dp';
@@ -532,6 +554,48 @@ class FloatingBallService {
   static const String _defaultMediaPlayIconId = 'play';
   static const String _defaultMediaPauseIconId = 'pause';
   static const String _defaultMediaNextIconId = 'skip_next';
+  static const bool _defaultFullScreenChatsMenuEnabled = false;
+  static const String _defaultFullScreenChatsText = 'Chats';
+  static const String _defaultChatsIconId = 'chat';
+  static const int _defaultChatsBgColor = _defaultFullScreenBgColor;
+  static const int _defaultChatsItemBgColor = _defaultFullScreenButtonColor;
+  static const int _defaultChatsItemBorderColor =
+      _defaultFullScreenTileBorderColor;
+  static const int _defaultChatsTitleColor = 0xFFFFFFFF;
+  static const int _defaultChatsTitleSizeSp = 16;
+  static const int _defaultChatsTextColor = 0xFFFFFFFF;
+  static const int _defaultChatsTextSizeSp = 14;
+
+  /// Prefijo común de TODAS las claves de configuración de la bola flotante
+  /// en SharedPreferences (estilo, gestos, apps seleccionadas, herramientas,
+  /// orden, chats, etc.). Se usa para respaldar/restaurar toda la config.
+  static const String prefsKeyPrefix = 'floating_ball_';
+
+  /// Reaplica al overlay nativo la configuración actual guardada en
+  /// SharedPreferences. Útil tras restaurar un respaldo para que la bola
+  /// tome los nuevos valores sin reiniciar la app.
+  static Future<void> applyConfigToOverlay() async {
+    try {
+      await _channel.invokeMethod('updateConfig');
+    } catch (_) {
+      // El overlay puede no estar activo; los valores quedan persistidos igual.
+    }
+  }
+
+  /// Cancela la notificación agrupada (clave `pkg|title`) de un chat en la barra
+  /// del dispositivo, si existe. Lo maneja la Activity del menú de chats
+  /// (`FloatingBallChatsActivity`) en su propio `FlutterEngine`.
+  static Future<void> cancelChatNotifications(
+    String packageName,
+    String title,
+  ) async {
+    try {
+      await _channel.invokeMethod('cancelChatNotifications', {
+        'packageName': packageName,
+        'title': title,
+      });
+    } catch (_) {}
+  }
 
   static Future<bool> isEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -677,6 +741,30 @@ class FloatingBallService {
   static Future<void> setFullScreenBgColor(int argb) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyFullScreenBgColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  /// Si está activo, todas las pantallas de la bola (pantalla completa,
+  /// conversación, notificaciones y chats) comparten el mismo color de fondo.
+  /// La barra superior NO se ve afectada (mantiene su color propio).
+  static Future<bool> isUnifiedBackgroundEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyFullScreenUnifiedBgEnabled) ?? false;
+  }
+
+  static Future<void> setUnifiedBackgroundEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyFullScreenUnifiedBgEnabled, enabled);
+  }
+
+  /// Aplica el mismo [argb] como color de fondo de pantalla completa,
+  /// conversación, notificaciones y chats (no toca la barra superior).
+  static Future<void> setUnifiedBackgroundColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyFullScreenBgColor, argb);
+    await prefs.setInt(_keyConversationBgColor, argb);
+    await prefs.setInt(_keyCustomNotificationsBgColor, argb);
+    await prefs.setInt(_keyChatsBgColor, argb);
     await _channel.invokeMethod('updateConfig');
   }
 
@@ -989,6 +1077,163 @@ class FloatingBallService {
   static Future<void> setFullScreenConversationEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyFullScreenConversationEnabled, enabled);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  // ===== Menú de chats =====
+  static Future<bool> isFullScreenChatsMenuEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyFullScreenChatsMenuEnabled) ??
+        _defaultFullScreenChatsMenuEnabled;
+  }
+
+  static Future<void> setFullScreenChatsMenuEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyFullScreenChatsMenuEnabled, enabled);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getChatsBgColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyChatsBgColor) ?? _defaultChatsBgColor;
+  }
+
+  static Future<void> setChatsBgColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyChatsBgColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getChatsItemBgColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyChatsItemBgColor) ?? _defaultChatsItemBgColor;
+  }
+
+  static Future<void> setChatsItemBgColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyChatsItemBgColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getChatsItemBorderColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyChatsItemBorderColor) ??
+        _defaultChatsItemBorderColor;
+  }
+
+  static Future<void> setChatsItemBorderColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyChatsItemBorderColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getChatsTitleColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyChatsTitleColor) ?? _defaultChatsTitleColor;
+  }
+
+  static Future<void> setChatsTitleColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyChatsTitleColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getChatsTitleSizeSp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyChatsTitleSizeSp) ?? _defaultChatsTitleSizeSp)
+        .clamp(8, 32);
+  }
+
+  static Future<void> setChatsTitleSizeSp(int sp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyChatsTitleSizeSp, sp.clamp(8, 32));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getChatsTextColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyChatsTextColor) ?? _defaultChatsTextColor;
+  }
+
+  static Future<void> setChatsTextColor(int argb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyChatsTextColor, argb);
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<int> getChatsTextSizeSp() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getInt(_keyChatsTextSizeSp) ?? _defaultChatsTextSizeSp)
+        .clamp(8, 32);
+  }
+
+  static Future<void> setChatsTextSizeSp(int sp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyChatsTextSizeSp, sp.clamp(8, 32));
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<String> getFullScreenChatsText() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyFullScreenChatsText) ??
+        _defaultFullScreenChatsText;
+  }
+
+  static Future<void> setFullScreenChatsText(String text) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyFullScreenChatsText, text.trim());
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<String> getFullScreenChatsIconId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyFullScreenChatsIconId) ?? _defaultChatsIconId;
+  }
+
+  static Future<String?> getFullScreenChatsIconPngBase64() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_keyFullScreenChatsIconPngBase64);
+    if (v == null || v.trim().isEmpty) return null;
+    return v;
+  }
+
+  static Future<void> setFullScreenChatsIconWithPng({
+    required String iconId,
+    required String? iconPngBase64,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyFullScreenChatsIconId, iconId);
+    if (iconPngBase64 == null || iconPngBase64.trim().isEmpty) {
+      await prefs.remove(_keyFullScreenChatsIconPngBase64);
+    } else {
+      await prefs.setString(_keyFullScreenChatsIconPngBase64, iconPngBase64);
+    }
+    await _channel.invokeMethod('updateConfig');
+  }
+
+  static Future<String> getPopupChatsIconId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyPopupChatsIconId) ?? _defaultChatsIconId;
+  }
+
+  static Future<String?> getPopupChatsIconPngBase64() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getString(_keyPopupChatsIconPngBase64);
+    if (v == null || v.trim().isEmpty) return null;
+    return v;
+  }
+
+  static Future<void> setPopupChatsIconWithPng({
+    required String iconId,
+    required String? iconPngBase64,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyPopupChatsIconId, iconId);
+    if (iconPngBase64 == null || iconPngBase64.trim().isEmpty) {
+      await prefs.remove(_keyPopupChatsIconPngBase64);
+    } else {
+      await prefs.setString(_keyPopupChatsIconPngBase64, iconPngBase64);
+    }
     await _channel.invokeMethod('updateConfig');
   }
 

@@ -406,11 +406,9 @@ class BtClassicServerService : Service() {
                 .apply()
         } catch (_: Exception) {
         }
-        try { MediaWidgetProvider.updateAll(applicationContext) } catch (_: Exception) {}
         try { MediaWidgetProviderStyle2.updateAll(applicationContext) } catch (_: Exception) {}
         try { MediaWidgetProviderStyle3.updateAll(applicationContext) } catch (_: Exception) {}
-        try { MediaWidgetProviderStyle4.updateAll(applicationContext) } catch (_: Exception) {}
-        try { MediaWidgetProviderStyle5.updateAll(applicationContext) } catch (_: Exception) {}
+        try { MediaWidgetProviderWide.updateAll(applicationContext) } catch (_: Exception) {}
     }
 
     /// Si este dispositivo es EMISOR (no receptor), envía su device_id de
@@ -622,6 +620,29 @@ class BtClassicServerService : Service() {
             if (type == "notif_reply_ack") {
                 return
             }
+            if (type == "sensor_data") {
+                val hr = obj.optInt("hr", -1)
+                val steps = obj.optInt("steps", -1)
+                val wrist = obj.optString("wrist", "")
+                val zona = obj.optString("zona", "")
+                val kcal = obj.optDouble("kcal", -1.0)
+                val distM = obj.optInt("dist_m", -1)
+                val ts = System.currentTimeMillis()
+                fun emitSensor(msg: String) {
+                    val sink = MainActivity.instance?.sensorDebugEventSink ?: return
+                    val m = mapOf("source" to "bt_sensor_rx", "message" to msg, "timestamp" to ts)
+                    sink.success(m)
+                }
+                mainHandler.post {
+                    if (hr >= 0) emitSensor("HR:$hr")
+                    if (zona.isNotEmpty()) emitSensor("HR_ZONA:$zona")
+                    if (steps >= 0) emitSensor("STEPS:$steps")
+                    if (distM >= 0) emitSensor("DIST:$distM")
+                    if (kcal >= 0) emitSensor("KCAL:$kcal")
+                    if (wrist.isNotEmpty()) emitSensor("WRIST:$wrist")
+                }
+                return
+            }
             if (type == "device_search") {
                 val action = obj.optString("action", "start")
                 if (action == "stop") {
@@ -644,11 +665,9 @@ class BtClassicServerService : Service() {
                         return
                     }
                     saveMediaCache(json)
-                    try { MediaWidgetProvider.updateAll(applicationContext) } catch (_: Exception) {}
                     try { MediaWidgetProviderStyle2.updateAll(applicationContext) } catch (_: Exception) {}
                     try { MediaWidgetProviderStyle3.updateAll(applicationContext) } catch (_: Exception) {}
-                    try { MediaWidgetProviderStyle4.updateAll(applicationContext) } catch (_: Exception) {}
-                    try { MediaWidgetProviderStyle5.updateAll(applicationContext) } catch (_: Exception) {}
+                    try { MediaWidgetProviderWide.updateAll(applicationContext) } catch (_: Exception) {}
                     println("[btclassic][server][media] rx title='$title' pkg='$pkg' posMs=$pos durMs=$dur artLen=$artLen")
                     sendDebugToPeers("media_state", "rx title='$title' pkg='$pkg' posMs=$pos durMs=$dur artLen=$artLen")
                     ensureFlutterEngine()
@@ -717,11 +736,9 @@ class BtClassicServerService : Service() {
                             .apply()
                     } catch (_: Exception) {
                     }
-                    try { MediaWidgetProvider.updateAll(applicationContext) } catch (_: Exception) {}
                     try { MediaWidgetProviderStyle2.updateAll(applicationContext) } catch (_: Exception) {}
                     try { MediaWidgetProviderStyle3.updateAll(applicationContext) } catch (_: Exception) {}
-                    try { MediaWidgetProviderStyle4.updateAll(applicationContext) } catch (_: Exception) {}
-                    try { MediaWidgetProviderStyle5.updateAll(applicationContext) } catch (_: Exception) {}
+                    try { MediaWidgetProviderWide.updateAll(applicationContext) } catch (_: Exception) {}
 
                     ensureFlutterEngine()
                     val payload = hashMapOf<String, Any?>(
@@ -767,11 +784,9 @@ class BtClassicServerService : Service() {
                             .putString("flutter.media_default_app_installed_pkg", pkg)
                             .putBoolean("flutter.media_default_app_installed", installed)
                             .apply()
-                        try { MediaWidgetProvider.updateAll(applicationContext) } catch (_: Exception) {}
                         try { MediaWidgetProviderStyle2.updateAll(applicationContext) } catch (_: Exception) {}
                         try { MediaWidgetProviderStyle3.updateAll(applicationContext) } catch (_: Exception) {}
-                        try { MediaWidgetProviderStyle4.updateAll(applicationContext) } catch (_: Exception) {}
-                        try { MediaWidgetProviderStyle5.updateAll(applicationContext) } catch (_: Exception) {}
+                        try { MediaWidgetProviderWide.updateAll(applicationContext) } catch (_: Exception) {}
                     }
                 } catch (_: Exception) {
                 }

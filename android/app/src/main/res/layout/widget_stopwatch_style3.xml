@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Style 3: Circular — anillo de progreso (Bitmap) + tiempo centrado + botones -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/sw_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="8dp">
+
+    <!-- Contenedor del anillo (FrameLayout para apilar el ring y el tiempo) -->
+    <FrameLayout
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_gravity="center_horizontal"
+        android:id="@+id/sw_ring_frame">
+
+        <!-- Anillo dibujado como Bitmap -->
+        <ImageView
+            android:id="@+id/sw_ring"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Progreso" />
+
+        <!-- Tiempo centrado sobre el anillo -->
+        <TextView
+            android:id="@+id/sw_time"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="00:00"
+            android:textSize="18sp"
+            android:textColor="#FFFFFFFF"
+            android:textStyle="bold"
+            android:singleLine="true" />
+
+    </FrameLayout>
+
+    <!-- Etiqueta de modo -->
+    <TextView
+        android:id="@+id/sw_mode_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="CRONÓMETRO"
+        android:textSize="8sp"
+        android:textColor="#FF88AAFF"
+        android:gravity="center"
+        android:letterSpacing="0.15" />
+
+    <!-- Vueltas recientes (más reciente primero) -->
+    <TextView
+        android:id="@+id/sw_lap_1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="10sp"
+        android:textColor="#FFCCCCCC"
+        android:gravity="center"
+        android:singleLine="true"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/sw_lap_2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="10sp"
+        android:textColor="#FFCCCCCC"
+        android:gravity="center"
+        android:singleLine="true"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/sw_lap_3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="10sp"
+        android:textColor="#FFCCCCCC"
+        android:gravity="center"
+        android:singleLine="true"
+        android:visibility="gone" />
+
+    <!-- Botones -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="4dp">
+
+        <ImageButton
+            android:id="@+id/btn_reset"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Reset" />
+
+        <ImageButton
+            android:id="@+id/btn_start_pause"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:src="@android:drawable/ic_media_play"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Play/Pause" />
+
+        <ImageButton
+            android:id="@+id/btn_toggle_mode"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Cambiar modo" />
+
+    </LinearLayout>
+
+</LinearLayout>

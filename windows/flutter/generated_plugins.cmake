@@ -6,7 +6,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
   cloud_firestore
   firebase_core
-  flutter_gemma
   flutter_secure_storage_windows
   permission_handler_windows
   piper_phonemizer_windows_plugin

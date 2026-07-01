@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Permisos necesarios"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Para que connect pueda controlar este dispositivo, activa cada uno de los siguientes permisos. El nombre de cada permiso puede variar según el fabricante (TV-box, smart TV, teléfono)."
+            android:layout_marginBottom="24dp" />
+
+        <!-- 0. Emparejamiento estándar -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:text="0. Empareja primero por Bluetooth"
+            android:layout_marginBottom="4dp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:text="Hazlo desde los Ajustes de Bluetooth del sistema en AMBOS dispositivos (este receptor y el teléfono con connect). Una vez emparejados, el paso &quot;hacer visible&quot; ya no es necesario."
+            android:layout_marginBottom="8dp" />
+        <Button
+            android:id="@+id/btnPairing"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Abrir ajustes de Bluetooth"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 1. Permisos runtime de Bluetooth -->
+        <TextView
+            android:id="@+id/statusBluetooth"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:text="1. Permisos de Bluetooth — ✗ pendiente"
+            android:layout_marginBottom="4dp" />
+        <Button
+            android:id="@+id/btnBluetooth"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Conceder permisos de Bluetooth"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 2. Discoverable (opcional) -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:text="2. Hacer visible este dispositivo (opcional)"
+            android:layout_marginBottom="4dp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:text="Solo necesario para el primer emparejamiento. Si tu dispositivo no muestra ningún diálogo al tocar el botón, simplemente empareja por el paso 0 y omite este paso."
+            android:layout_marginBottom="8dp" />
+        <Button
+            android:id="@+id/btnDiscoverable"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Hacer visible (300s)"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 3. Overlay / cursor -->
+        <TextView
+            android:id="@+id/statusOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:text="3. Permitir superposición (cursor) — ✗ pendiente"
+            android:layout_marginBottom="4dp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:text="En algunos TV-box este permiso aparece como &quot;Imagen en imagen&quot; en vez de &quot;Superposición&quot;. Prueba ambos botones."
+            android:layout_marginBottom="8dp" />
+        <Button
+            android:id="@+id/btnOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Permitir superposición"
+            android:layout_marginBottom="8dp" />
+        <Button
+            android:id="@+id/btnPip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Probar &quot;Imagen en imagen&quot;"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 4. Accesibilidad -->
+        <TextView
+            android:id="@+id/statusAccessibility"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:text="4. Activar servicio de accesibilidad — ✗ pendiente"
+            android:layout_marginBottom="4dp" />
+        <TextView
+            android:id="@+id/hintAccessibilityRestricted"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="#B45309"
+            android:text="Si el interruptor de accesibilidad aparece bloqueado/gris: ve a &quot;Información de la app&quot; → menú ⋮ (arriba) → &quot;Permitir ajustes restringidos&quot;, confirma, y vuelve a intentar activarlo aquí."
+            android:layout_marginBottom="8dp" />
+        <Button
+            android:id="@+id/btnAccessibility"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Activar accesibilidad"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 5. Batería -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:text="5. Ignorar optimización de batería"
+            android:layout_marginBottom="4dp" />
+        <Button
+            android:id="@+id/btnBattery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Ignorar optimización de batería"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 6. Notificaciones -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:text="6. Permitir notificaciones"
+            android:layout_marginBottom="4dp" />
+        <Button
+            android:id="@+id/btnNotifications"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Permitir notificaciones"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Tamaño del cursor -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textStyle="bold"
+            android:text="7. Tamaño del cursor"
+            android:layout_marginBottom="4dp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:text="El valor central es el tamaño por defecto. Desliza a la derecha para agrandar, a la izquierda para reducir."
+            android:layout_marginBottom="8dp" />
+        <SeekBar
+            android:id="@+id/seekCursorSize"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="8"
+            android:progress="4"
+            android:layout_marginBottom="4dp" />
+        <TextView
+            android:id="@+id/tvCursorSizeLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tamaño: normal"
+            android:textSize="12sp"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Fallback universal -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:text="¿Algún botón no te lleva a ningún lado? Tu fabricante puede haber movido el permiso a otro lugar. Búscalo manualmente desde aquí:"
+            android:layout_marginBottom="8dp" />
+        <Button
+            android:id="@+id/btnAppDetails"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Abrir información de la app"
+            android:layout_marginBottom="24dp" />
+
+        <Button
+            android:id="@+id/btnDone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:text="Listo, volver" />
+
+    </LinearLayout>
+</ScrollView>

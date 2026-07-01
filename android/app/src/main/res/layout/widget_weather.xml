@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/weather_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Fondo dibujado a Bitmap en Kotlin (color/degradado/dinámico, radio de
+         esquinas y oscurecido configurables, ver readWeatherWidgetCfg). -->
+    <ImageView
+        android:id="@+id/weather_bg_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:id="@+id/weather_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <!-- ===== Cabecera: ciudad (toca para rotar) + etiqueta de vista ===== -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <LinearLayout
+                android:id="@+id/weather_city_btn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="?android:attr/selectableItemBackground">
+
+                <TextView
+                    android:id="@+id/weather_pin"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📍"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/weather_city"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="2dp"
+                    android:text="—"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/weather_city_caret"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" ▾"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/weather_view_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ahora"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- ===== Contenido (una de las 3 vistas visible a la vez) ===== -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="6dp">
+
+            <!-- Vista 1: clima actual -->
+            <LinearLayout
+                android:id="@+id/weather_view_current"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/weather_temp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="--°"
+                        android:textColor="#FFFFFF"
+                        android:textSize="48sp" />
+
+                    <TextView
+                        android:id="@+id/weather_desc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textColor="#FFFFFF"
+                        android:textSize="15sp"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
+
+                    <TextView
+                        android:id="@+id/weather_apparent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=""
+                        android:textColor="#B3FFFFFF"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal">
+
+                    <TextView
+                        android:id="@+id/weather_emoji"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🌡️"
+                        android:textSize="50sp" />
+
+                    <TextView
+                        android:id="@+id/weather_humidity"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text=""
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/weather_wind"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text=""
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Vista 2: por horas (lista + botones ▲▼) -->
+            <LinearLayout
+                android:id="@+id/weather_view_hourly"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <LinearLayout android:id="@+id/hr0" style="@style/WeatherRow">
+                        <TextView android:id="@+id/hr0_time" style="@style/WeatherRowLabel" />
+                        <TextView android:id="@+id/hr0_emoji" style="@style/WeatherRowEmoji" />
+                        <TextView android:id="@+id/hr0_pp" style="@style/WeatherRowPp" />
+                        <TextView android:id="@+id/hr0_temp" style="@style/WeatherRowVal" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/hr1" style="@style/WeatherRow">
+                        <TextView android:id="@+id/hr1_time" style="@style/WeatherRowLabel" />
+                        <TextView android:id="@+id/hr1_emoji" style="@style/WeatherRowEmoji" />
+                        <TextView android:id="@+id/hr1_pp" style="@style/WeatherRowPp" />
+                        <TextView android:id="@+id/hr1_temp" style="@style/WeatherRowVal" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/hr2" style="@style/WeatherRow">
+                        <TextView android:id="@+id/hr2_time" style="@style/WeatherRowLabel" />
+                        <TextView android:id="@+id/hr2_emoji" style="@style/WeatherRowEmoji" />
+                        <TextView android:id="@+id/hr2_pp" style="@style/WeatherRowPp" />
+                        <TextView android:id="@+id/hr2_temp" style="@style/WeatherRowVal" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/hr3" style="@style/WeatherRow">
+                        <TextView android:id="@+id/hr3_time" style="@style/WeatherRowLabel" />
+                        <TextView android:id="@+id/hr3_emoji" style="@style/WeatherRowEmoji" />
+                        <TextView android:id="@+id/hr3_pp" style="@style/WeatherRowPp" />
+                        <TextView android:id="@+id/hr3_temp" style="@style/WeatherRowVal" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/WeatherScrollBtns">
+                    <TextView android:id="@+id/hr_up" style="@style/WeatherScrollBtn" android:text="▲" />
+                    <TextView android:id="@+id/hr_down" style="@style/WeatherScrollBtn" android:text="▼" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Vista 3: por días (lista + botones ▲▼) -->
+            <LinearLayout
+                android:id="@+id/weather_view_daily"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <LinearLayout android:id="@+id/dy0" style="@style/WeatherRow">
+                        <TextView android:id="@+id/dy0_day" style="@style/WeatherRowLabel" />
+                        <TextView android:id="@+id/dy0_emoji" style="@style/WeatherRowEmoji" />
+                        <TextView android:id="@+id/dy0_pp" style="@style/WeatherRowPp" />
+                        <TextView android:id="@+id/dy0_temp" style="@style/WeatherRowVal" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/dy1" style="@style/WeatherRow">
+                        <TextView android:id="@+id/dy1_day" style="@style/WeatherRowLabel" />
+                        <TextView android:id="@+id/dy1_emoji" style="@style/WeatherRowEmoji" />
+                        <TextView android:id="@+id/dy1_pp" style="@style/WeatherRowPp" />
+                        <TextView android:id="@+id/dy1_temp" style="@style/WeatherRowVal" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/dy2" style="@style/WeatherRow">
+                        <TextView android:id="@+id/dy2_day" style="@style/WeatherRowLabel" />
+                        <TextView android:id="@+id/dy2_emoji" style="@style/WeatherRowEmoji" />
+                        <TextView android:id="@+id/dy2_pp" style="@style/WeatherRowPp" />
+                        <TextView android:id="@+id/dy2_temp" style="@style/WeatherRowVal" />
+                    </LinearLayout>
+                    <LinearLayout android:id="@+id/dy3" style="@style/WeatherRow">
+                        <TextView android:id="@+id/dy3_day" style="@style/WeatherRowLabel" />
+                        <TextView android:id="@+id/dy3_emoji" style="@style/WeatherRowEmoji" />
+                        <TextView android:id="@+id/dy3_pp" style="@style/WeatherRowPp" />
+                        <TextView android:id="@+id/dy3_temp" style="@style/WeatherRowVal" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout style="@style/WeatherScrollBtns">
+                    <TextView android:id="@+id/dy_up" style="@style/WeatherScrollBtn" android:text="▲" />
+                    <TextView android:id="@+id/dy_down" style="@style/WeatherScrollBtn" android:text="▼" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Estado vacío -->
+            <TextView
+                android:id="@+id/weather_empty"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="Abre la app para elegir una ciudad"
+                android:textColor="#B3FFFFFF"
+                android:textSize="13sp"
+                android:visibility="gone" />
+        </FrameLayout>
+
+        <!-- ===== Pie: ◀ · indicadores · ▶ ===== -->
+        <LinearLayout
+            android:id="@+id/weather_footer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/weather_prev"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="◀"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:background="?android:attr/selectableItemBackground" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <TextView android:id="@+id/weather_dot0" style="@style/WeatherDot" />
+                <TextView android:id="@+id/weather_dot1" style="@style/WeatherDot" />
+                <TextView android:id="@+id/weather_dot2" style="@style/WeatherDot" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/weather_next"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="▶"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:background="?android:attr/selectableItemBackground" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

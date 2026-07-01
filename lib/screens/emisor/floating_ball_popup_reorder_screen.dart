@@ -48,6 +48,9 @@ class _FloatingBallPopupReorderScreenState
         'volume',
         'brightness',
         'settings',
+        'chats',
+        'calculator',
+        'remote_control',
       ];
       final nextOrder = <String>[];
       final used = <String>{};
@@ -121,6 +124,12 @@ class _FloatingBallPopupReorderScreenState
         return 'Recientes';
       case 'settings':
         return 'Configuración';
+      case 'chats':
+        return 'Chats';
+      case 'calculator':
+        return 'Calculadora';
+      case 'remote_control':
+        return 'Control remoto';
     }
     if (id.startsWith('pkg:')) {
       final pkg = id.substring(4);
@@ -181,6 +190,15 @@ class _FloatingBallPopupReorderScreenState
         break;
       case 'settings':
         icon = Icons.settings;
+        break;
+      case 'chats':
+        icon = Icons.chat;
+        break;
+      case 'calculator':
+        icon = Icons.calculate;
+        break;
+      case 'remote_control':
+        icon = Icons.gamepad;
         break;
       default:
         icon = Icons.android;

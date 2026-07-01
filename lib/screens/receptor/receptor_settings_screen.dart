@@ -13,9 +13,33 @@ import 'package:connect/screens/receptor/custom_sound_selection_screen.dart';
 import 'package:connect/services/vibration_pattern_service.dart';
 import 'package:connect/screens/emisor/floating_ball_settings_screen.dart';
 import 'package:connect/screens/emisor/media_reproduction_screen.dart';
+import 'package:connect/screens/emisor/widgets_config_screen.dart';
 import 'package:connect/screens/receptor/device_diagnostics_screen.dart';
+import 'package:connect/services/floating_ball_service.dart';
 import 'package:restart_app/restart_app.dart';
 import 'package:flutter/services.dart';
+
+/// Descriptor de un permiso mostrado en la pestaña "Permisos".
+/// [check] devuelve si está concedido; [action] lo solicita o abre los ajustes.
+class _PermItem {
+  final String id;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Future<bool> Function() check;
+  final Future<void> Function() action;
+  final String actionLabel;
+
+  const _PermItem({
+    required this.id,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.check,
+    required this.action,
+    required this.actionLabel,
+  });
+}
 
 class ReceptorSettingsScreen extends StatefulWidget {
   const ReceptorSettingsScreen({super.key});
@@ -37,6 +61,9 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   bool _soundEnabled = true; // ✅ NUEVA VARIABLE PARA SONIDO
   bool _showLocalNotificationsSubtitle = false;
   bool _isLoading = true;
+
+  // Estado (concedido/no) de cada permiso de la pestaña "Permisos".
+  Map<String, bool> _permStatus = {};
 
   // ✅ SOLUCIÓN: Añadir referencia al servicio
   final NotificationListenerService _notificationService =
@@ -61,6 +88,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
   Future<void> _initializeSettings() async {
     await _loadSettings();
     await _ensureNotificationServiceActive(); // ✅ Asegurar que el servicio esté activo
+    await _loadPermissions();
 
     // ✅ VERIFICACIÓN ADICIONAL: Confirmar sincronización al inicializar
     // await _reloadAutoOpenState();
@@ -80,6 +108,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       _ensureNotificationServiceActive();
+      _loadPermissions();
     }
   }
 
@@ -473,7 +502,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
             Switch(
               value: _notificationsEnabled,
               onChanged: _toggleLocalNotificationsEnabled,
-              activeColor: Colors.green,
+              activeThumbColor: Colors.green,
               inactiveThumbColor: Colors.red,
               inactiveTrackColor: Colors.red[200],
             ),
@@ -483,635 +512,525 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Configuración Receptor')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(5.0),
+  // ===== Permisos =====
+  List<_PermItem> get _permItems => [
+        _PermItem(
+          id: 'notif_access',
+          icon: Icons.notifications_active,
+          title: 'Acceso a notificaciones',
+          subtitle: 'Permite leer y gestionar las notificaciones del sistema.',
+          check: () async {
+            try {
+              final r =
+                  await _emisorChannel.invokeMethod('isNotificationServiceEnabled');
+              return r == true;
+            } catch (_) {
+              return false;
+            }
+          },
+          action: _openNotificationListenerPermission,
+          actionLabel: 'Abrir ajustes',
+        ),
+        _PermItem(
+          id: 'post_notif',
+          icon: Icons.notifications,
+          title: 'Mostrar notificaciones',
+          subtitle: 'Necesario para mostrar las notificaciones recibidas.',
+          check: () async => (await Permission.notification.status).isGranted,
+          action: () async => await Permission.notification.request(),
+          actionLabel: 'Conceder',
+        ),
+        _PermItem(
+          id: 'bt_connect',
+          icon: Icons.bluetooth_connected,
+          title: 'Bluetooth (conectar)',
+          subtitle: 'Conexión con el dispositivo emisor por Bluetooth.',
+          check: () async => (await Permission.bluetoothConnect.status).isGranted,
+          action: () async => await Permission.bluetoothConnect.request(),
+          actionLabel: 'Conceder',
+        ),
+        _PermItem(
+          id: 'bt_scan',
+          icon: Icons.bluetooth_searching,
+          title: 'Bluetooth (buscar)',
+          subtitle: 'Buscar dispositivos cercanos para vincular.',
+          check: () async => (await Permission.bluetoothScan.status).isGranted,
+          action: () async => await Permission.bluetoothScan.request(),
+          actionLabel: 'Conceder',
+        ),
+        _PermItem(
+          id: 'location',
+          icon: Icons.location_on,
+          title: 'Ubicación',
+          subtitle:
+              'El sistema la requiere para buscar dispositivos Bluetooth cercanos.',
+          check: () async => (await Permission.location.status).isGranted,
+          action: () async => await Permission.location.request(),
+          actionLabel: 'Conceder',
+        ),
+        _PermItem(
+          id: 'overlay',
+          icon: Icons.layers,
+          title: 'Mostrar sobre otras apps',
+          subtitle:
+              'Permite la bola flotante y abrir la app sobre la pantalla bloqueada.',
+          check: FloatingBallService.isOverlayPermissionGranted,
+          action: FloatingBallService.openOverlayPermissionSettings,
+          actionLabel: 'Abrir ajustes',
+        ),
+        _PermItem(
+          id: 'accessibility',
+          icon: Icons.accessibility_new,
+          title: 'Accesibilidad',
+          subtitle:
+              'Habilita acciones globales (Inicio/Atrás/Recientes) de la bola flotante.',
+          check: FloatingBallService.isAccessibilityEnabled,
+          action: FloatingBallService.openAccessibilitySettings,
+          actionLabel: 'Abrir ajustes',
+        ),
+        _PermItem(
+          id: 'battery',
+          icon: Icons.battery_charging_full,
+          title: 'Ignorar optimización de batería',
+          subtitle: 'Evita que el sistema cierre el servicio en segundo plano.',
+          check: FloatingBallService.isBatteryOptimizationIgnored,
+          action: FloatingBallService.requestBatteryOptimizationPermission,
+          actionLabel: 'Permitir',
+        ),
+        _PermItem(
+          id: 'audio',
+          icon: Icons.library_music,
+          title: 'Audio / almacenamiento',
+          subtitle: 'Para elegir sonidos personalizados de notificación.',
+          check: () async => (await Permission.audio.status).isGranted,
+          action: () async => await Permission.audio.request(),
+          actionLabel: 'Conceder',
+        ),
+      ];
+
+  Future<void> _loadPermissions() async {
+    final items = _permItems;
+    final results = <String, bool>{};
+    for (final it in items) {
+      try {
+        results[it.id] = await it.check();
+      } catch (_) {
+        results[it.id] = false;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _permStatus = results);
+  }
+
+  // ===== Helpers de pestañas =====
+  Widget _tabPage(List<Widget> children) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      children: children,
+    );
+  }
+
+  Widget _tabHeader(String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4, left: 4, right: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(subtitle,
+              style: const TextStyle(fontSize: 13, color: Colors.black54)),
+          const Divider(height: 20),
+        ],
+      ),
+    );
+  }
+
+  // Tarjeta explicativa de navegación (reemplaza a los botones planos).
+  Widget _navCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    Color? color,
+  }) {
+    final c = color ?? customColor[600]!;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: c, size: 26),
+        ),
+        title: Text(title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(subtitle,
+              style: const TextStyle(fontSize: 13, color: Colors.black54)),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  // Tarjeta con switch y descripción.
+  Widget _switchCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+    String? warning,
+  }) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: customColor[100],
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: customColor[600], size: 26),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style:
+                          const TextStyle(fontSize: 13, color: Colors.black54)),
+                  if (warning != null) ...[
+                    const SizedBox(height: 4),
+                    Text(warning,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: Colors.red)),
+                  ],
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: Colors.green,
+              inactiveTrackColor: customColor[200],
+              inactiveThumbColor: Colors.grey[300],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPermissionCard(_PermItem it) {
+    final granted = _permStatus[it.id] ?? false;
+    final MaterialColor statusColor = granted ? Colors.green : Colors.red;
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                // Opciones de Dispositivo
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(15.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Opciones de Dispositivo',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: ElevatedButton.icon(
-                            onPressed: _unlinkDevice,
-                            icon: const Icon(Icons.link_off),
-                            label: const Text(
-                              'Desvincular Dispositivo',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: customColor[400],
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: ElevatedButton.icon(
-                            onPressed: () => Navigator.pushNamed(context, '/receptor_ble_signal'),
-                            icon: const Icon(Icons.bluetooth_searching),
-                            label: const Text(
-                              'Configurar conexión Bluetooth',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: customColor[500],
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const MediaReproductionScreen(
-                                    useLinkedDevice: true,
-                                  ),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.play_circle_outline),
-                            label: const Text(
-                              'Reproducción multimedia',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: customColor[600],
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const DeviceDiagnosticsScreen(),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.developer_board),
-                            label: const Text(
-                              'Diagnóstico del dispositivo',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: Colors.grey[700],
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const FloatingBallSettingsScreen(),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.radio_button_checked),
-                            label: const Text(
-                              'Configurar bola flotante',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: customColor[600],
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Container(
-                        //   margin: const EdgeInsets.symmetric(
-                        //     vertical: 8,
-                        //     horizontal: 8,
-                        //   ),
-                        //   child: ElevatedButton.icon(
-                        //     onPressed: () =>
-                        //         Navigator.pushNamed(context, '/widget_styles'),
-                        //     icon: const Icon(Icons.widgets),
-                        //     label: const Text(
-                        //       'Estilos del widget',
-                        //       style: TextStyle(
-                        //         fontSize: 16,
-                        //         fontWeight: FontWeight.bold,
-                        //       ),
-                        //     ),
-                        //     style: ElevatedButton.styleFrom(
-                        //       minimumSize: const Size.fromHeight(48),
-                        //       padding: const EdgeInsets.symmetric(vertical: 16),
-                        //       backgroundColor: customColor[600],
-                        //       foregroundColor: Colors.white,
-                        //       shape: RoundedRectangleBorder(
-                        //         borderRadius: BorderRadius.circular(8),
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ),
-                        
-                        _buildLocalNotificationsToggleCard(),
-                        Card(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: customColor[100],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                Icons.notifications_active,
-                                color: customColor[600],
-                                size: 24,
-                              ),
-                            ),
-                            title: const Text(
-                              'Permiso: acceso a notificaciones',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            subtitle: const Text(
-                              'Abre el ajuste del sistema para habilitar el acceso a notificaciones',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                            trailing: const Icon(Icons.arrow_forward_ios),
-                            onTap: _openNotificationListenerPermission,
-                          ),
-                        ),
-                      ],
-                    ),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(it.icon, color: statusColor[700]),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(it.title,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text(it.subtitle,
+                          style: const TextStyle(
+                              fontSize: 13, color: Colors.black54)),
+                    ],
                   ),
                 ),
-
-                const SizedBox(height: 8),
-
-                // Card para Configuraciones de Notificaciones Personalizadas
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: const Text(
-                            'Configuraciones Personalizadas',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: customColor[100],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.tune,
-                              color: customColor[600],
-                              size: 24,
-                            ),
-                          ),
-                          title: const Text(
-                            'Bloqueo, sonido y vibracion de Notificaciones',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          subtitle: const Text(
-                            'Gestionar configuraciones personalizadas de sonido, vibración y bloqueos segun contenido de notificaciones',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                          trailing: const Icon(Icons.arrow_forward_ios),
-                          onTap: () {
-                            Navigator.pushNamed(context, '/notification_settings_list');
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-
-                // Configuración de Notificaciones
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 8,
-                          ),
-                          child: Text(
-                            'Configuración de Notificaciones',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        // ✅ PRIMER SWITCH: ACTIVAR PANTALLA
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 15),
-                                  child: Text(
-                                    'Activar pantalla',
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: EdgeInsets.only(left: 15),
-                                  child: Text(
-                                    'Enciende la pantalla cuando \nllega una notificación',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Switch(
-                              value: _screenWakeEnabled,
-                              onChanged: _toggleScreenWake,
-                              activeColor: Colors.green,
-                              inactiveTrackColor: customColor[200],
-                              inactiveThumbColor: Colors.grey[300],
-                            ),
-                          ],
-                        ),
-                        // ✅ CAMBIO: SEGUNDO SWITCH: AUTO-APERTURA (AHORA INDEPENDIENTE)
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 15),
-                                  child: Text(
-                                    'Abrir aplicación automáticamente',
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: EdgeInsets.only(left: 15),
-                                  child: Column(
-                                    children: [
-                                      Text(
-                                        'Abre la aplicación automáticamente \ncuando llega una notificación',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontStyle: FontStyle.italic,
-                                        ),
-                                      ),
-                                      if (_autoOpenEnabled) ...[
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Desactivar requiere reinicio de la app',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontStyle: FontStyle.italic,
-                                            color: Colors.red,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Switch(
-                              value: _autoOpenEnabled,
-                              onChanged: _toggleAutoOpen,
-                              activeColor: Colors.green,
-                              inactiveTrackColor: customColor[200],
-                              inactiveThumbColor: Colors.grey[300],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: customColor[100],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.chat_bubble_outline,
-                              color: customColor[600],
-                              size: 24,
-                            ),
-                          ),
-                          title: const Text(
-                            'Conversaciones',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          subtitle: const Text(
-                            'Activar vista tipo chat por aplicación',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                          trailing: const Icon(Icons.arrow_forward_ios),
-                          onTap: () {
-                            Navigator.pushNamed(context, '/conversation_apps');
-                          },
-                        ),
-                        // ✅ TERCER SWITCH: VIBRACIÓN
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 15),
-                                  child: Text(
-                                    'Vibración',
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: EdgeInsets.only(left: 15),
-                                  child: Text(
-                                    'Activa la vibración cuando \nllega una notificación',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Switch(
-                              value: _vibrationEnabled,
-                              onChanged: _toggleVibration,
-                              activeColor: Colors.green,
-                              inactiveTrackColor: customColor[200],
-                              inactiveThumbColor: Colors.grey[300],
-                            ),
-                          ],
-                        ),
-                        // ✅ CUARTO SWITCH: SONIDO
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 15),
-                                  child: Text(
-                                    'Sonido',
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: EdgeInsets.only(left: 15),
-                                  child: Text(
-                                    'Activa el sonido cuando \nllega una notificación',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Switch(
-                              value: _soundEnabled,
-                              onChanged: _toggleSound,
-                              activeColor: Colors.green,
-                              inactiveTrackColor: customColor[200],
-                              inactiveThumbColor: Colors.grey[300],
-                            ),
-                          ],
-                        ),
-                        Divider(
-                          color: customColor[100],
-                          thickness: 3.0, // Set the thickness to 3.0 pixels
-                        ),
-                        // Botón para patrones de vibración (solo visible si vibración está activa)
-                        if (_vibrationEnabled) ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: customColor[100],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.vibration,
-                              color: customColor[600],
-                              size: 24,
-                            ),
-                          ),
-                          title: const Text(
-                            'Patrones de Vibración',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          subtitle: const Text(
-                            'Crear y gestionar patrones personalizados',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                          trailing: const Icon(Icons.arrow_forward_ios),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const VibrationPatternsScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        if (_vibrationEnabled) const Divider(),
-                        // Botón para selección de sonidos personalizados (solo visible si sonido está activo)
-                        if (_soundEnabled) ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: customColor[100],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              Icons.music_note,
-                              color: customColor[600],
-                              size: 24,
-                            ),
-                          ),
-                          title: const Text(
-                            'Sonidos Personalizados',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          subtitle: const Text(
-                            'Seleccionar sonidos desde el dispositivo',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                          trailing: const Icon(Icons.arrow_forward_ios),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    const CustomSoundSelectionScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        if (_soundEnabled) const Divider(),
-                      ],
-                    ),
-                  ),
-                ),
-
-
               ],
             ),
-      bottomNavigationBar: Column(
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(granted ? Icons.check_circle : Icons.cancel,
+                          size: 16, color: statusColor[700]),
+                      const SizedBox(width: 6),
+                      Text(granted ? 'Concedido' : 'No concedido',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: statusColor[800])),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await it.action();
+                    await _loadPermissions();
+                  },
+                  child: Text(granted ? 'Revisar' : it.actionLabel),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===== Pestañas =====
+  Widget _buildDeviceTab() {
+    return _tabPage([
+      _tabHeader('Dispositivo',
+          'Vinculación, conexión y herramientas del receptor.'),
+      _navCard(
+        icon: Icons.bluetooth_searching,
+        title: 'Configurar conexión Bluetooth',
+        subtitle: 'Ajusta la conexión Bluetooth con el dispositivo emisor.',
+        color: customColor[500],
+        onTap: () => Navigator.pushNamed(context, '/receptor_ble_signal'),
+      ),
+      _navCard(
+        icon: Icons.play_circle_outline,
+        title: 'Reproducción multimedia',
+        subtitle: 'Controla la reproducción del dispositivo vinculado.',
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  const MediaReproductionScreen(useLinkedDevice: true),
+            ),
+          );
+        },
+      ),
+      _navCard(
+        icon: Icons.radio_button_checked,
+        title: 'Configurar bola flotante',
+        subtitle: 'Personaliza la bola flotante, gestos y menú.',
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const FloatingBallSettingsScreen()),
+          );
+        },
+      ),
+      _navCard(
+        icon: Icons.developer_board,
+        title: 'Diagnóstico del dispositivo',
+        subtitle: 'Revisa el estado y los detalles técnicos del receptor.',
+        color: Colors.grey[700],
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const DeviceDiagnosticsScreen()),
+          );
+        },
+      ),
+      const SizedBox(height: 8),
+      _navCard(
+        icon: Icons.link_off,
+        title: 'Desvincular dispositivo',
+        subtitle: 'Quita el vínculo con el emisor y detiene la recepción.',
+        color: Colors.red,
+        onTap: _unlinkDevice,
+      ),
+    ]);
+  }
+
+  Widget _buildNotificationsTab() {
+    return _tabPage([
+      _tabHeader('Notificaciones',
+          'Comportamiento, sonido, vibración y filtros de las notificaciones recibidas.'),
+      _buildLocalNotificationsToggleCard(),
+      _switchCard(
+        icon: Icons.brightness_high,
+        title: 'Activar pantalla',
+        subtitle: 'Enciende la pantalla cuando llega una notificación.',
+        value: _screenWakeEnabled,
+        onChanged: _toggleScreenWake,
+      ),
+      _switchCard(
+        icon: Icons.open_in_new,
+        title: 'Abrir aplicación automáticamente',
+        subtitle: 'Abre la app automáticamente cuando llega una notificación.',
+        value: _autoOpenEnabled,
+        onChanged: _toggleAutoOpen,
+        warning: _autoOpenEnabled
+            ? 'Desactivar requiere reinicio de la app.'
+            : null,
+      ),
+      _switchCard(
+        icon: Icons.vibration,
+        title: 'Vibración',
+        subtitle: 'Activa la vibración cuando llega una notificación.',
+        value: _vibrationEnabled,
+        onChanged: _toggleVibration,
+      ),
+      if (_vibrationEnabled)
+        _navCard(
+          icon: Icons.graphic_eq,
+          title: 'Patrones de vibración',
+          subtitle: 'Crear y gestionar patrones personalizados.',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const VibrationPatternsScreen()),
+          ),
+        ),
+      _switchCard(
+        icon: Icons.volume_up,
+        title: 'Sonido',
+        subtitle: 'Activa el sonido cuando llega una notificación.',
+        value: _soundEnabled,
+        onChanged: _toggleSound,
+      ),
+      if (_soundEnabled)
+        _navCard(
+          icon: Icons.music_note,
+          title: 'Sonidos personalizados',
+          subtitle: 'Seleccionar sonidos desde el dispositivo.',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (context) => const CustomSoundSelectionScreen()),
+          ),
+        ),
+      const SizedBox(height: 8),
+      const Padding(
+        padding: EdgeInsets.fromLTRB(4, 8, 4, 4),
+        child: Text('Más opciones',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+      ),
+      _navCard(
+        icon: Icons.chat_bubble_outline,
+        title: 'Conversaciones',
+        subtitle: 'Activar vista tipo chat por aplicación.',
+        onTap: () => Navigator.pushNamed(context, '/conversation_apps'),
+      ),
+      _navCard(
+        icon: Icons.tune,
+        title: 'Bloqueo, sonido y vibración por notificación',
+        subtitle:
+            'Reglas personalizadas según el contenido de las notificaciones.',
+        onTap: () => Navigator.pushNamed(context, '/notification_settings_list'),
+      ),
+      _navCard(
+        icon: Icons.filter_alt,
+        title: 'Filtros de notificación',
+        subtitle: 'Define qué notificaciones se reciben o se ignoran.',
+        onTap: () => Navigator.pushNamed(context, '/notification_filters'),
+      ),
+    ]);
+  }
+
+  Widget _buildWidgetsTab() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: _tabHeader('Widgets',
+              'Widgets configurables de la app y de la pantalla de inicio.'),
+        ),
+        const Expanded(child: WidgetsConfigScreen(embedded: true)),
+      ],
+    );
+  }
+
+  Widget _buildPermissionsTab() {
+    return _tabPage([
+      _tabHeader('Permisos',
+          'Estado de los permisos que necesita el receptor. Tócalos para concederlos.'),
+      Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: _loadPermissions,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Actualizar'),
+        ),
+      ),
+      ..._permItems.map(_buildPermissionCard),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Configuración Receptor'),
+          backgroundColor: customColor[700],
+          foregroundColor: Colors.white,
+          bottom: _isLoading
+              ? null
+              : const TabBar(
+                  isScrollable: true,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  indicatorColor: Colors.white,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    Tab(text: 'Dispositivo'),
+                    Tab(text: 'Notificaciones'),
+                    Tab(text: 'Widgets'),
+                    Tab(text: 'Permisos'),
+                  ],
+                ),
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                children: [
+                  _buildDeviceTab(),
+                  _buildNotificationsTab(),
+                  _buildWidgetsTab(),
+                  _buildPermissionsTab(),
+                ],
+              ),
+        bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(height: 3, color: customColor[700]),
@@ -1157,6 +1076,7 @@ class _ReceptorSettingsScreenState extends State<ReceptorSettingsScreen>
             ],
           ),
         ],
+      ),
       ),
     );
   }

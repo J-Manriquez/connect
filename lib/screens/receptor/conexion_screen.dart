@@ -1432,6 +1432,9 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
                     '/unread_notifications',
                   );
                   break;
+                case 3:
+                  Navigator.pushReplacementNamed(context, '/receptor_salud');
+                  break;
               }
             },
             selectedFontSize: 14.0,
@@ -1457,6 +1460,10 @@ class _NotificacionesScreenState extends State<NotificacionesScreen> {
               const BottomNavigationBarItem(
                 icon: Icon(Icons.mark_email_unread),
                 label: 'Notificaciones',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.monitor_heart),
+                label: 'Salud',
               ),
             ],
           ),

@@ -8,10 +8,11 @@
         android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
+        android:scaleType="fitXY"
         android:src="@android:drawable/ic_menu_gallery" />
 
     <LinearLayout
+        android:id="@+id/widget_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
@@ -41,14 +42,12 @@
                 android:layout_marginStart="10dp"
                 android:visibility="gone">
 
-                <ProgressBar
+                <ImageView
                     android:id="@+id/widget_volume_progress"
-                    style="?android:attr/progressBarStyleHorizontal"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:progressDrawable="@drawable/widget_progress_with_thumb"
-                    android:max="100"
-                    android:progress="0" />
+                    android:scaleType="fitXY"
+                    android:contentDescription="@null" />
 
                 <LinearLayout
                     android:id="@+id/widget_volume_segments"
@@ -136,15 +135,13 @@
                 android:ellipsize="end" />
         </LinearLayout>
 
-        <ProgressBar
+        <ImageView
             android:id="@+id/widget_progress"
-            style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
-            android:layout_height="8dp"
+            android:layout_height="16dp"
             android:layout_marginTop="10dp"
-            android:progressDrawable="@drawable/widget_progress_with_thumb"
-            android:max="1000"
-            android:progress="0" />
+            android:scaleType="fitXY"
+            android:contentDescription="@null" />
 
         <LinearLayout
             android:id="@+id/widget_controls_row"

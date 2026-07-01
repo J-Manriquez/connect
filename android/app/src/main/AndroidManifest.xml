@@ -34,9 +34,10 @@
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     
-    <!-- ✅ PERMISOS PARA SELECCIÓN DE ARCHIVOS DE AUDIO -->
+    <!-- ✅ PERMISOS PARA SELECCIÓN DE ARCHIVOS DE AUDIO E IMÁGENES -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     
     <!-- ✅ NUEVOS PERMISOS PARA AUTO-APERTURA DESDE SEGUNDO PLANO -->
     <uses-permission android:name="android.permission.REORDER_TASKS" />
@@ -47,7 +48,13 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- Sensores corporales (HR, proximidad) -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.BODY_SENSORS_BACKGROUND" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+
     <application
         android:label="Connect Ɐ2"
         android:name="${applicationName}"
@@ -83,6 +90,60 @@
             android:exported="false"
             android:launchMode="singleTask"
             android:taskAffinity="com.example.connect.auto_open"
+            android:theme="@style/AutoOpenTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/AutoOpenTheme"
+              />
+        </activity>
+
+        <activity
+            android:name=".FloatingBallRemoteControlActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.connect.remote_control"
+            android:theme="@style/AutoOpenTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/AutoOpenTheme"
+              />
+        </activity>
+
+        <activity
+            android:name=".FloatingBallCalculatorActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.connect.calculator"
+            android:theme="@style/AutoOpenTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/AutoOpenTheme"
+              />
+        </activity>
+
+        <activity
+            android:name=".FloatingBallChatsActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.connect.chats"
             android:theme="@style/AutoOpenTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -160,24 +221,18 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <receiver
-            android:name=".MediaWidgetProvider"
+        <!-- Servicio de sensores corporales (HR, pasos, brújula, proximidad) -->
+        <service
+            android:name=".SensorForegroundService"
             android:enabled="true"
-            android:label="Connect - Multimedia (Estilo 1)"
             android:exported="false"
-            android:permission="android.permission.BIND_APPWIDGET">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/media_widget_info" />
-        </receiver>
+            android:foregroundServiceType="health" />
 
+        <!-- Widget de música 2x5: texto centrado + botón de app de música -->
         <receiver
             android:name=".MediaWidgetProviderStyle2"
             android:enabled="true"
-            android:label="Connect - Multimedia (Estilo 2)"
+            android:label="Connect - Música (centrado)"
             android:exported="false"
             android:permission="android.permission.BIND_APPWIDGET">
             <intent-filter>
@@ -188,10 +243,11 @@
                 android:resource="@xml/media_widget_info_style2" />
         </receiver>
 
+        <!-- Widget de música 2x5: texto a la izquierda + barra de progreso con tiempos -->
         <receiver
             android:name=".MediaWidgetProviderStyle3"
             android:enabled="true"
-            android:label="Connect - Multimedia (Estilo 3)"
+            android:label="Connect - Música (con progreso)"
             android:exported="false"
             android:permission="android.permission.BIND_APPWIDGET">
             <intent-filter>
@@ -202,10 +258,11 @@
                 android:resource="@xml/media_widget_info_style3" />
         </receiver>
 
+        <!-- Widget de música ancho 4x2: carátula a la izquierda + controles a la derecha -->
         <receiver
-            android:name=".MediaWidgetProviderStyle4"
+            android:name=".MediaWidgetProviderWide"
             android:enabled="true"
-            android:label="Connect - Multimedia (Estilo 4)"
+            android:label="Connect - Música (ancho)"
             android:exported="false"
             android:permission="android.permission.BIND_APPWIDGET">
             <intent-filter>
@@ -213,13 +270,21 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/media_widget_info_style4" />
+                android:resource="@xml/media_widget_info_wide" />
         </receiver>
 
-        <receiver
-            android:name=".MediaWidgetProviderStyle5"
+        <!-- Servicio de fondo del cronómetro y temporizador -->
+        <service
+            android:name=".StopwatchTimerFgService"
             android:enabled="true"
-            android:label="Connect - Multimedia (Estilo 5)"
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
+
+        <!-- Widget cronómetro: compacto -->
+        <receiver
+            android:name=".StopwatchWidgetProviderStyle1"
+            android:enabled="true"
+            android:label="Connect - Cronómetro (compacto)"
             android:exported="false"
             android:permission="android.permission.BIND_APPWIDGET">
             <intent-filter>
@@ -227,9 +292,80 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/media_widget_info_style5" />
+                android:resource="@xml/stopwatch_widget_info_style1" />
         </receiver>
-            
+
+        <!-- Widget cronómetro: circular -->
+        <receiver
+            android:name=".StopwatchWidgetProviderStyle3"
+            android:enabled="true"
+            android:label="Connect - Cronómetro (circular)"
+            android:exported="false"
+            android:permission="android.permission.BIND_APPWIDGET">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/stopwatch_widget_info_style3" />
+        </receiver>
+
+        <!-- Widget de calculadora: calculadora básica con historial en la pantalla de inicio -->
+        <receiver
+            android:name=".CalculatorWidgetProvider"
+            android:enabled="true"
+            android:label="Connect - Calculadora"
+            android:exported="false"
+            android:permission="android.permission.BIND_APPWIDGET">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/calculator_widget_info" />
+        </receiver>
+
+        <!-- Widget de imágenes: presentación de diapositivas desde una carpeta del dispositivo -->
+        <receiver
+            android:name=".ImageSlideShowWidgetProvider"
+            android:enabled="true"
+            android:label="Connect - Imágenes"
+            android:exported="false"
+            android:permission="android.permission.BIND_APPWIDGET">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.connect.IMAGE_WIDGET_ADVANCE" />
+                <action android:name="com.example.connect.IMAGE_WIDGET_PREV" />
+                <action android:name="com.example.connect.IMAGE_WIDGET_NEXT" />
+                <action android:name="com.example.connect.IMAGE_WIDGET_TOGGLE_CONTROLS" />
+                <action android:name="com.example.connect.IMAGE_WIDGET_HIDE_CONTROLS" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/image_slideshow_widget_info" />
+        </receiver>
+
+        <!-- Widget de clima: muestra el clima de la ciudad seleccionada -->
+        <receiver
+            android:name=".WeatherWidgetProvider"
+            android:enabled="true"
+            android:label="Connect - Clima"
+            android:exported="false"
+            android:permission="android.permission.BIND_APPWIDGET">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.connect.widget.WEATHER.PREV_VIEW" />
+                <action android:name="com.example.connect.widget.WEATHER.NEXT_VIEW" />
+                <action android:name="com.example.connect.widget.WEATHER.SCROLL_UP" />
+                <action android:name="com.example.connect.widget.WEATHER.SCROLL_DOWN" />
+                <action android:name="com.example.connect.widget.WEATHER.CYCLE_CITY" />
+                <action android:name="com.example.connect.widget.WEATHER.ANIMATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/weather_widget_info" />
+        </receiver>
+
         <!-- ✅ BROADCAST RECEIVER PARA AUTO-INICIO AL ENCENDER DISPOSITIVO -->
         <receiver android:name=".BootReceiver"
             android:enabled="true"

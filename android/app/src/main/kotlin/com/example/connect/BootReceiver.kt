@@ -65,6 +65,21 @@ class BootReceiver : BroadcastReceiver() {
                 }
                 Log.d(TAG, "Starting FloatingBallService automatically after boot")
             }
+
+            // Restaurar el widget de imágenes tras el reinicio (el AlarmManager se pierde en el boot)
+            Thread {
+                try {
+                    val cfg = ImageSlideShowWidgetProvider.readCfg(context)
+                    ImageSlideShowWidgetProvider.updateAll(context, cfg)
+                    if (cfg.imageList.isNotEmpty()) {
+                        ImageSlideShowWidgetProvider.scheduleAdvance(context, cfg.intervalSec)
+                        Log.d(TAG, "ImageSlideShowWidget restored after boot (${cfg.imageList.size} images)")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error restoring ImageSlideShowWidget: ${e.message}")
+                }
+            }.start()
+
         } catch (e: Exception) {
             Log.e(TAG, "Error in handleBootCompleted: ${e.message}", e)
         }

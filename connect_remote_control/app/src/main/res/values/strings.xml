@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">connect remote control</string>
+    <string name="accessibility_service_label">Control remoto de connect</string>
+    <string name="accessibility_service_description">Permite que la app connect mueva el cursor, haga clic, desplace pantallas y escriba texto en este dispositivo de forma remota.</string>
+</resources>

@@ -216,6 +216,204 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             updateAppWidgets(context, mgr, ids, layoutResId, uiPrefsName, providerClass)
         }
  
+        // ===== Configuración editable del widget (claves flutter.widget_cfg_<id>_<prop>) =====
+
+        private data class WidgetCfg(
+            val scale: Float,
+            val titleSp: Float, val titleColor: Int, val titleBold: Boolean,
+            val subtitleSp: Float, val subtitleColor: Int, val subtitleBold: Boolean,
+            val timeSp: Float, val timeColor: Int, val timeBold: Boolean,
+            val bgNoImage: Int, val scrim: Int, val artAlpha: Int,
+            val iconColor: Int, val applyIconColor: Boolean, val iconSizeDp: Int,
+            val iconPrev: String, val iconPlay: String, val iconPause: String,
+            val iconNext: String, val iconVolume: String,
+            val barTrack: Int, val barFill: Int, val barProgThickDp: Int, val barVolThickDp: Int,
+            val noMediaTitle: String, val noMediaSubtitle: String,
+            val paddingDp: Int, val showDefaultAppBtn: Boolean, val rowSpacingDp: Int,
+            val artAsBackground: Boolean, val artScaleType: String
+        )
+
+        private fun hasDefaultAppBtn(layoutResId: Int): Boolean =
+            layoutResId == R.layout.widget_media_style2 ||
+                layoutResId == R.layout.widget_media_style3 ||
+                layoutResId == R.layout.widget_media_wide
+
+        private fun dp(context: Context, v: Float): Int =
+            (v * context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
+
+        private fun fLong(p: android.content.SharedPreferences, k: String, d: Long): Long {
+            return try {
+                when (val v = p.all[k]) {
+                    is Long -> v
+                    is Int -> v.toLong()
+                    is Float -> v.toLong()
+                    is Double -> v.toLong()
+                    is String -> v.toLongOrNull() ?: d
+                    else -> d
+                }
+            } catch (_: Exception) { d }
+        }
+
+        private fun fInt(p: android.content.SharedPreferences, k: String, d: Int): Int =
+            fLong(p, k, d.toLong()).toInt()
+
+        private fun fColor(p: android.content.SharedPreferences, k: String, d: Int): Int =
+            fLong(p, k, d.toLong() and 0xFFFFFFFFL).toInt()
+
+        private fun fStr(p: android.content.SharedPreferences, k: String, d: String): String {
+            return try { (p.all[k] as? String)?.takeIf { it.isNotEmpty() } ?: d } catch (_: Exception) { d }
+        }
+
+        private fun readWidgetCfg(prefs: android.content.SharedPreferences, configId: String): WidgetCfg {
+            val pf = "flutter.widget_cfg_${configId}_"
+            val scale = fInt(prefs, pf + "content_scale_pct", 100).coerceIn(50, 200) / 100f
+            val defProgThick = if (configId == "style3") 24 else 8
+            return WidgetCfg(
+                scale = scale,
+                titleSp = fInt(prefs, pf + "title_size_sp", 33).coerceIn(8, 80) * scale,
+                titleColor = fColor(prefs, pf + "title_color_argb", 0xFFFFFFFF.toInt()),
+                titleBold = readFlutterBool(prefs, pf + "title_bold", true),
+                subtitleSp = fInt(prefs, pf + "subtitle_size_sp", 21).coerceIn(8, 80) * scale,
+                subtitleColor = fColor(prefs, pf + "subtitle_color_argb", 0xFFFFFFFF.toInt()),
+                subtitleBold = readFlutterBool(prefs, pf + "subtitle_bold", false),
+                timeSp = fInt(prefs, pf + "time_size_sp", 18).coerceIn(8, 80) * scale,
+                timeColor = fColor(prefs, pf + "time_color_argb", 0xFFFFFFFF.toInt()),
+                timeBold = readFlutterBool(prefs, pf + "time_bold", false),
+                bgNoImage = fColor(prefs, pf + "bg_no_image_argb", 0xFF000000.toInt()),
+                scrim = fColor(prefs, pf + "scrim_argb", 0x80000000.toInt()),
+                artAlpha = fInt(prefs, pf + "art_alpha", 255).coerceIn(0, 255),
+                iconColor = fColor(prefs, pf + "icon_color_argb", 0xFFFFFFFF.toInt()),
+                applyIconColor = try { prefs.all.containsKey(pf + "icon_color_argb") } catch (_: Exception) { false },
+                iconSizeDp = fInt(prefs, pf + "icon_size_dp", 0).coerceIn(0, 64),
+                iconPrev = fStr(prefs, pf + "icon_prev_b64", ""),
+                iconPlay = fStr(prefs, pf + "icon_play_b64", ""),
+                iconPause = fStr(prefs, pf + "icon_pause_b64", ""),
+                iconNext = fStr(prefs, pf + "icon_next_b64", ""),
+                iconVolume = fStr(prefs, pf + "icon_volume_b64", ""),
+                barTrack = fColor(prefs, pf + "bar_track_argb", 0x33FFFFFF),
+                barFill = fColor(prefs, pf + "bar_fill_argb", 0xFFFFFFFF.toInt()),
+                barProgThickDp = fInt(prefs, pf + "bar_progress_thickness_dp", defProgThick).coerceIn(1, 48),
+                barVolThickDp = fInt(prefs, pf + "bar_volume_thickness_dp", 28).coerceIn(1, 48),
+                noMediaTitle = fStr(prefs, pf + "no_media_title", "Sin reproducción"),
+                noMediaSubtitle = fStr(prefs, pf + "no_media_subtitle", "Conecta el emisor para controlar"),
+                paddingDp = (12 * scale).toInt().coerceAtLeast(0),
+                showDefaultAppBtn = readFlutterBool(prefs, pf + "show_default_app_btn", true),
+                rowSpacingDp = fInt(prefs, pf + "row_spacing_dp", 0).coerceIn(0, 48),
+                artAsBackground = readFlutterBool(prefs, pf + "art_as_background", false),
+                artScaleType = fStr(prefs, pf + "art_scale_type", "crop")
+            )
+        }
+
+        private fun styled(text: String, bold: Boolean): CharSequence {
+            if (!bold || text.isEmpty()) return text
+            val s = android.text.SpannableString(text)
+            s.setSpan(
+                android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                0, text.length, android.text.Spannable.SPAN_INCLUSIVE_INCLUSIVE
+            )
+            return s
+        }
+
+        private fun applyTextStyles(views: RemoteViews, layoutResId: Int, cfg: WidgetCfg) {
+            val sp = android.util.TypedValue.COMPLEX_UNIT_SP
+            views.setTextViewTextSize(R.id.widget_title, sp, cfg.titleSp)
+            views.setTextColor(R.id.widget_title, cfg.titleColor)
+            views.setTextViewTextSize(R.id.widget_subtitle, sp, cfg.subtitleSp)
+            views.setTextColor(R.id.widget_subtitle, cfg.subtitleColor)
+            views.setTextViewTextSize(R.id.widget_time, sp, cfg.timeSp)
+            views.setTextColor(R.id.widget_time, cfg.timeColor)
+            if (layoutResId == R.layout.widget_media_style2) {
+                try {
+                    views.setTextViewTextSize(R.id.widget_app_name, sp, cfg.subtitleSp)
+                    views.setTextColor(R.id.widget_app_name, cfg.subtitleColor)
+                } catch (_: Exception) {}
+            }
+            if (layoutResId == R.layout.widget_media_style3) {
+                try {
+                    for (id in intArrayOf(R.id.widget_time_current, R.id.widget_time_app, R.id.widget_time_total)) {
+                        views.setTextViewTextSize(id, sp, cfg.timeSp)
+                        views.setTextColor(id, cfg.timeColor)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        private fun drawableToBitmap(context: Context, resId: Int, px: Int, tint: Int): Bitmap? {
+            return try {
+                val d = context.getDrawable(resId)?.mutate() ?: return null
+                d.setTint(tint)
+                val size = px.coerceAtLeast(1)
+                val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                val c = android.graphics.Canvas(bmp)
+                d.setBounds(0, 0, size, size)
+                d.draw(c)
+                bmp
+            } catch (_: Exception) { null }
+        }
+
+        private fun applyControlIcon(
+            context: Context,
+            views: RemoteViews,
+            viewId: Int,
+            overrideB64: String,
+            builtinResId: Int,
+            cfg: WidgetCfg
+        ) {
+            val px = when {
+                cfg.iconSizeDp > 0 -> dp(context, cfg.iconSizeDp * cfg.scale)
+                cfg.scale != 1f -> dp(context, 34f * cfg.scale)
+                else -> 0
+            }
+            if (overrideB64.isNotBlank()) {
+                val decoded = decodeArtBitmap(overrideB64, if (px > 0) px else 96)
+                if (decoded != null) {
+                    val out = if (px > 0) {
+                        try { Bitmap.createScaledBitmap(decoded, px, px, true) } catch (_: Exception) { decoded }
+                    } else decoded
+                    try { views.setImageViewBitmap(viewId, out); return } catch (_: Exception) {}
+                }
+            }
+            if (px > 0) {
+                val tint = if (cfg.applyIconColor) cfg.iconColor else 0xFFFFFFFF.toInt()
+                val bmp = drawableToBitmap(context, builtinResId, px, tint)
+                if (bmp != null) {
+                    try { views.setImageViewBitmap(viewId, bmp); return } catch (_: Exception) {}
+                }
+            }
+            try { views.setImageViewResource(viewId, builtinResId) } catch (_: Exception) {}
+            if (cfg.applyIconColor) {
+                try { views.setInt(viewId, "setColorFilter", cfg.iconColor) } catch (_: Exception) {}
+            }
+        }
+
+        private fun renderBar(
+            widthPx: Int, heightPx: Int, thicknessPx: Int,
+            progress: Float, track: Int, fill: Int, drawThumb: Boolean
+        ): Bitmap {
+            val w = widthPx.coerceAtLeast(1)
+            val h = heightPx.coerceAtLeast(1)
+            val th = thicknessPx.coerceIn(1, h)
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val c = android.graphics.Canvas(bmp)
+            val top = (h - th) / 2f
+            val bottom = top + th
+            val r = th / 2f
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            paint.color = track
+            c.drawRoundRect(android.graphics.RectF(0f, top, w.toFloat(), bottom), r, r, paint)
+            val p = progress.coerceIn(0f, 1f)
+            val fw = w * p
+            if (fw > 0f) {
+                paint.color = fill
+                c.drawRoundRect(android.graphics.RectF(0f, top, fw, bottom), r, r, paint)
+                if (drawThumb) {
+                    val cx = fw.coerceIn(r, w - r)
+                    c.drawCircle(cx, h / 2f, (th * 0.6f).coerceAtLeast(r), paint)
+                }
+            }
+            return bmp
+        }
+
         private fun updateAppWidgets(
             context: Context,
             appWidgetManager: AppWidgetManager,
@@ -267,20 +465,25 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, layoutResId)
 
             val prefsFlutter = context.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
-            val textSp = (try { prefsFlutter.getInt(KEY_FLUTTER_WIDGET_TEXT_SP, 22) } catch (_: Exception) { 22 }).coerceIn(12, 34)
-            val scale = if (layoutResId == R.layout.widget_media_style2 || layoutResId == R.layout.widget_media_style3) 1.5f else 1f
-            val titleSp = (textSp.toFloat() * scale).coerceAtLeast(12f)
-            val subtitleSp = ((textSp - 8).coerceAtLeast(12).toFloat() * scale).coerceAtLeast(12f)
-            val timeSp = ((textSp - 10).coerceAtLeast(12).toFloat() * scale).coerceAtLeast(12f)
+            val configId = providerClass.simpleName.removePrefix("MediaWidgetProvider").lowercase()
+            val cfg = readWidgetCfg(prefsFlutter, configId)
 
-            views.setTextViewTextSize(R.id.widget_title, android.util.TypedValue.COMPLEX_UNIT_SP, titleSp)
-            views.setTextViewTextSize(R.id.widget_subtitle, android.util.TypedValue.COMPLEX_UNIT_SP, subtitleSp)
-            views.setTextViewTextSize(R.id.widget_time, android.util.TypedValue.COMPLEX_UNIT_SP, timeSp)
-            if (layoutResId == R.layout.widget_media_style3) {
-                views.setTextViewTextSize(R.id.widget_time_current, android.util.TypedValue.COMPLEX_UNIT_SP, timeSp)
-                views.setTextViewTextSize(R.id.widget_time_app, android.util.TypedValue.COMPLEX_UNIT_SP, timeSp)
-                views.setTextViewTextSize(R.id.widget_time_total, android.util.TypedValue.COMPLEX_UNIT_SP, timeSp)
-            }
+            // Dimensiones reales del widget para pre-procesar el bitmap según artScaleType.
+            val widgetMgr = try { AppWidgetManager.getInstance(context) } catch (_: Exception) { null }
+            val widgetOpts = try { widgetMgr?.getAppWidgetOptions(appWidgetId) } catch (_: Exception) { null }
+            val density = context.resources.displayMetrics.density
+            val widthDp = widgetOpts?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0) ?: 0
+            val heightDp = widgetOpts?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0) ?: 0
+            val artCanvasW = if (widthDp > 0) (widthDp * density).toInt().coerceIn(100, 1200) else 600
+            val artCanvasH = if (heightDp > 0) (heightDp * density).toInt().coerceIn(100, 1200) else 400
+
+            applyTextStyles(views, layoutResId, cfg)
+            val padPx = dp(context, cfg.paddingDp.toFloat())
+            try { views.setViewPadding(R.id.widget_overlay, padPx, padPx, padPx, padPx) } catch (_: Exception) {}
+
+            applyControlIcon(context, views, R.id.widget_prev, cfg.iconPrev, R.drawable.widget_ic_prev, cfg)
+            applyControlIcon(context, views, R.id.widget_next, cfg.iconNext, R.drawable.widget_ic_next, cfg)
+            applyControlIcon(context, views, R.id.widget_volume_btn, cfg.iconVolume, R.drawable.widget_ic_volume, cfg)
 
             val noopRootPending = PendingIntent.getBroadcast(
                 context,
@@ -338,7 +541,7 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_next, nextPending)
             views.setOnClickPendingIntent(R.id.widget_volume_btn, toggleVolumePending)
 
-            if (layoutResId == R.layout.widget_media_style2) {
+            if (hasDefaultAppBtn(layoutResId)) {
                 val defaultAppPending = PendingIntent.getBroadcast(
                     context,
                     stableRequestCode(providerClass.name, 700000, appWidgetId),
@@ -355,13 +558,31 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             val volumeExpanded = try { uiPrefs.getBoolean(expandedKey, false) } catch (_: Exception) { false }
             if (layoutResId == R.layout.widget_media_style2) {
                 views.setViewVisibility(R.id.widget_volume_panel, if (volumeExpanded) android.view.View.VISIBLE else android.view.View.INVISIBLE)
-                views.setViewVisibility(R.id.widget_default_app, if (volumeExpanded) android.view.View.GONE else android.view.View.VISIBLE)
+                views.setViewVisibility(
+                    R.id.widget_default_app,
+                    if (volumeExpanded || !cfg.showDefaultAppBtn) android.view.View.GONE else android.view.View.VISIBLE
+                )
             } else {
                 views.setViewVisibility(R.id.widget_volume_panel, if (volumeExpanded) android.view.View.VISIBLE else android.view.View.GONE)
             }
             if (layoutResId == R.layout.widget_media_style3) {
                 views.setViewVisibility(R.id.widget_title, if (volumeExpanded) android.view.View.GONE else android.view.View.VISIBLE)
                 views.setViewVisibility(R.id.widget_subtitle, if (volumeExpanded) android.view.View.GONE else android.view.View.VISIBLE)
+                // Espaciado configurable entre filas (encima de la barra y de los controles).
+                val gap = dp(context, cfg.rowSpacingDp.toFloat())
+                try { views.setViewPadding(R.id.widget_middle, 0, gap, 0, 0) } catch (_: Exception) {}
+                try { views.setViewPadding(R.id.widget_controls_row, 0, gap, 0, 0) } catch (_: Exception) {}
+            }
+            if (layoutResId == R.layout.widget_media_wide) {
+                // El widget ancho intercambia la fila de controles por la barra de volumen.
+                views.setViewVisibility(R.id.widget_controls_row, if (volumeExpanded) android.view.View.GONE else android.view.View.VISIBLE)
+            }
+            // Visibilidad del botón "abrir app" en los widgets que lo tienen aparte del centrado.
+            if (layoutResId == R.layout.widget_media_style3 || layoutResId == R.layout.widget_media_wide) {
+                views.setViewVisibility(
+                    R.id.widget_default_app,
+                    if (cfg.showDefaultAppBtn) android.view.View.VISIBLE else android.view.View.GONE
+                )
             }
 
             fun bindVolumeSegment(viewId: Int, pct: Int) {
@@ -423,20 +644,33 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             } else {
                 if (volumeStale) 0 else volumePrefs.getInt(KEY_VOLUME_PCT, 0).coerceIn(0, 100)
             }
-            views.setProgressBar(R.id.widget_volume_progress, 100, volumePct, false)
+            try {
+                val volBar = renderBar(
+                    600, dp(context, 28f), dp(context, cfg.barVolThickDp.toFloat()),
+                    volumePct / 100f, cfg.barTrack, cfg.barFill, true
+                )
+                views.setImageViewBitmap(R.id.widget_volume_progress, volBar)
+            } catch (_: Exception) {}
 
             if (stale) {
                 applyMedia(
+                    context,
                     views,
-                    title = "Sin reproducción",
-                    subtitle = "Conecta el emisor o reproduce local",
+                    layoutResId,
+                    cfg,
+                    title = cfg.noMediaTitle,
+                    subtitle = cfg.noMediaSubtitle,
                     timeText = "0:00 / 0:00",
                     progress = 0,
                     isPlaying = false
                 )
                 views.setOnClickPendingIntent(R.id.widget_root, launchDefaultAppPending)
-                applyNoPlaybackBackground(views, layoutResId)
-                if (layoutResId == R.layout.widget_media_style2) {
+                applyNoPlaybackBackground(views, cfg.bgNoImage)
+                if (layoutResId == R.layout.widget_media_wide) {
+                    try { views.setInt(R.id.widget_bg, "setImageAlpha", 0) } catch (_: Exception) {}
+                    try { views.setViewVisibility(R.id.widget_art_thumb, android.view.View.VISIBLE) } catch (_: Exception) {}
+                }
+                if (hasDefaultAppBtn(layoutResId)) {
                     applyDefaultAppIcon(context, views, grayscaleIfMissing = true)
                 }
                 return views
@@ -445,16 +679,23 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             val obj = try { JSONObject(json) } catch (_: Exception) { null }
             if (obj == null) {
                 applyMedia(
+                    context,
                     views,
-                    title = "Sin reproducción",
-                    subtitle = "Conecta el emisor para controlar",
+                    layoutResId,
+                    cfg,
+                    title = cfg.noMediaTitle,
+                    subtitle = cfg.noMediaSubtitle,
                     timeText = "0:00 / 0:00",
                     progress = 0,
                     isPlaying = false
                 )
                 views.setOnClickPendingIntent(R.id.widget_root, launchDefaultAppPending)
-                applyNoPlaybackBackground(views, layoutResId)
-                if (layoutResId == R.layout.widget_media_style2) {
+                applyNoPlaybackBackground(views, cfg.bgNoImage)
+                if (layoutResId == R.layout.widget_media_wide) {
+                    try { views.setInt(R.id.widget_bg, "setImageAlpha", 0) } catch (_: Exception) {}
+                    try { views.setViewVisibility(R.id.widget_art_thumb, android.view.View.VISIBLE) } catch (_: Exception) {}
+                }
+                if (hasDefaultAppBtn(layoutResId)) {
                     applyDefaultAppIcon(context, views, grayscaleIfMissing = true)
                 }
                 return views
@@ -488,20 +729,23 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             }
             val timeText = "${formatMs(positionMs)} / ${formatMs(durationMs)}"
             applyMedia(
+                context,
                 views,
-                title = if (title.isNotBlank()) title else "Sin reproducción",
+                layoutResId,
+                cfg,
+                title = if (title.isNotBlank()) title else cfg.noMediaTitle,
                 subtitle = subtitle,
                 timeText = timeText,
                 progress = progress,
                 isPlaying = isPlaying
             )
             if (layoutResId == R.layout.widget_media_style2) {
-                try { views.setTextViewText(R.id.widget_app_name, appName) } catch (_: Exception) {}
+                try { views.setTextViewText(R.id.widget_app_name, styled(appName, cfg.subtitleBold)) } catch (_: Exception) {}
             }
             if (layoutResId == R.layout.widget_media_style3) {
-                try { views.setTextViewText(R.id.widget_time_current, formatMs(positionMs)) } catch (_: Exception) {}
-                try { views.setTextViewText(R.id.widget_time_app, appName) } catch (_: Exception) {}
-                try { views.setTextViewText(R.id.widget_time_total, formatMs(durationMs)) } catch (_: Exception) {}
+                try { views.setTextViewText(R.id.widget_time_current, styled(formatMs(positionMs), cfg.timeBold)) } catch (_: Exception) {}
+                try { views.setTextViewText(R.id.widget_time_app, styled(appName, cfg.timeBold)) } catch (_: Exception) {}
+                try { views.setTextViewText(R.id.widget_time_total, styled(formatMs(durationMs), cfg.timeBold)) } catch (_: Exception) {}
             }
 
             val artKey = "${packageName}|${title}|${artist}|${album}|${durationMs}".trim()
@@ -534,16 +778,39 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
                 }
             }
 
-            if (effectiveArtBase64.isNotBlank()) {
-                val artBitmap = decodeArtBitmap(effectiveArtBase64, 340)
-                if (artBitmap != null) {
-                    views.setImageViewBitmap(R.id.widget_bg, artBitmap)
+            if (layoutResId == R.layout.widget_media_wide && !cfg.artAsBackground) {
+                // Modo miniatura: carátula en widget_art_thumb (84×84), widget_bg invisible.
+                try { views.setViewVisibility(R.id.widget_art_thumb, android.view.View.VISIBLE) } catch (_: Exception) {}
+                try { views.setInt(R.id.widget_bg, "setImageAlpha", 0) } catch (_: Exception) {}
+                if (effectiveArtBase64.isNotBlank()) {
+                    val rawBitmap = decodeArtBitmap(effectiveArtBase64, 220)
+                    if (rawBitmap != null) {
+                        val artBitmap = applyArtScaleType(rawBitmap, 220, 220, cfg.artScaleType)
+                        try { views.setImageViewBitmap(R.id.widget_art_thumb, artBitmap) } catch (_: Exception) {}
+                    }
                 }
             } else {
-                applyNoPlaybackBackground(views, layoutResId)
+                // Modo fondo completo (style2, style3 y wide con artAsBackground=true).
+                if (layoutResId == R.layout.widget_media_wide) {
+                    try { views.setViewVisibility(R.id.widget_art_thumb, android.view.View.GONE) } catch (_: Exception) {}
+                }
+                if (effectiveArtBase64.isNotBlank()) {
+                    val maxDim = maxOf(artCanvasW, artCanvasH).coerceAtMost(1200)
+                    val rawBitmap = decodeArtBitmap(effectiveArtBase64, maxDim)
+                    if (rawBitmap != null) {
+                        val artBitmap = applyArtScaleType(rawBitmap, artCanvasW, artCanvasH, cfg.artScaleType)
+                        views.setImageViewBitmap(R.id.widget_bg, artBitmap)
+                        try { views.setInt(R.id.widget_bg, "setImageAlpha", cfg.artAlpha) } catch (_: Exception) {}
+                        try { views.setInt(R.id.widget_overlay, "setBackgroundColor", cfg.scrim) } catch (_: Exception) {}
+                    } else {
+                        applyNoPlaybackBackground(views, cfg.bgNoImage)
+                    }
+                } else {
+                    applyNoPlaybackBackground(views, cfg.bgNoImage)
+                }
             }
 
-            if (layoutResId == R.layout.widget_media_style2) {
+            if (hasDefaultAppBtn(layoutResId)) {
                 applyDefaultAppIcon(context, views, grayscaleIfMissing = true)
             }
             return views
@@ -635,21 +902,33 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
         }
 
         private fun applyMedia(
+            context: Context,
             views: RemoteViews,
+            layoutResId: Int,
+            cfg: WidgetCfg,
             title: String,
             subtitle: String,
             timeText: String,
             progress: Int,
             isPlaying: Boolean
         ) {
-            views.setTextViewText(R.id.widget_title, title)
-            views.setTextViewText(R.id.widget_subtitle, subtitle)
-            views.setTextViewText(R.id.widget_time, timeText)
-            views.setProgressBar(R.id.widget_progress, 1000, progress, false)
-            views.setImageViewResource(
-                R.id.widget_play_pause,
-                if (isPlaying) R.drawable.widget_ic_pause else R.drawable.widget_ic_play
+            views.setTextViewText(R.id.widget_title, styled(title, cfg.titleBold))
+            views.setTextViewText(R.id.widget_subtitle, styled(subtitle, cfg.subtitleBold))
+            views.setTextViewText(R.id.widget_time, styled(timeText, cfg.timeBold))
+            applyControlIcon(
+                context, views, R.id.widget_play_pause,
+                if (isPlaying) cfg.iconPause else cfg.iconPlay,
+                if (isPlaying) R.drawable.widget_ic_pause else R.drawable.widget_ic_play,
+                cfg
             )
+            try {
+                val boxDp = if (layoutResId == R.layout.widget_media_style3) 24f else 16f
+                val bar = renderBar(
+                    600, dp(context, boxDp), dp(context, cfg.barProgThickDp.toFloat()),
+                    progress / 1000f, cfg.barTrack, cfg.barFill, true
+                )
+                views.setImageViewBitmap(R.id.widget_progress, bar)
+            } catch (_: Exception) {}
         }
 
         private fun toggleVolumeExpanded(context: Context, uiPrefsName: String, appWidgetId: Int) {
@@ -681,19 +960,82 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
             return try { Bitmap.createScaledBitmap(decoded, nw, nh, true) } catch (_: Exception) { decoded }
         }
 
-        private fun applyNoPlaybackBackground(views: RemoteViews, layoutResId: Int) {
-            if (layoutResId == R.layout.widget_media_style2 || layoutResId == R.layout.widget_media_style3) {
-                try {
-                    views.setInt(R.id.widget_bg, "setBackgroundColor", Color.BLACK)
-                } catch (_: Exception) {
+        private fun applyArtScaleType(
+            src: Bitmap,
+            canvasW: Int,
+            canvasH: Int,
+            scaleType: String
+        ): Bitmap {
+            val w = canvasW.coerceAtLeast(1)
+            val h = canvasH.coerceAtLeast(1)
+            val srcW = src.width.coerceAtLeast(1)
+            val srcH = src.height.coerceAtLeast(1)
+            return when (scaleType) {
+                "stretch" -> {
+                    Bitmap.createScaledBitmap(src, w, h, true)
                 }
-                try {
-                    views.setImageViewResource(R.id.widget_bg, R.drawable.widget_bg_black)
-                } catch (_: Exception) {
+                "contain", "inside" -> {
+                    val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(result)
+                    canvas.drawColor(android.graphics.Color.BLACK)
+                    val onlyDownscale = scaleType == "inside" && srcW <= w && srcH <= h
+                    if (onlyDownscale) {
+                        canvas.drawBitmap(src, ((w - srcW) / 2f), ((h - srcH) / 2f), null)
+                    } else {
+                        val scale = minOf(w.toFloat() / srcW, h.toFloat() / srcH)
+                        val scaledW = (srcW * scale).toInt().coerceAtLeast(1)
+                        val scaledH = (srcH * scale).toInt().coerceAtLeast(1)
+                        val scaled = Bitmap.createScaledBitmap(src, scaledW, scaledH, true)
+                        canvas.drawBitmap(scaled, ((w - scaledW) / 2f), ((h - scaledH) / 2f), null)
+                    }
+                    result
                 }
-            } else {
-                views.setImageViewResource(R.id.widget_bg, android.R.drawable.ic_menu_gallery)
+                "center" -> {
+                    val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(result)
+                    canvas.drawColor(android.graphics.Color.BLACK)
+                    canvas.drawBitmap(src, ((w - srcW) / 2f), ((h - srcH) / 2f), null)
+                    result
+                }
+                "start" -> {
+                    val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(result)
+                    canvas.drawColor(android.graphics.Color.BLACK)
+                    val scale = minOf(w.toFloat() / srcW, h.toFloat() / srcH)
+                    val scaledW = (srcW * scale).toInt().coerceAtLeast(1)
+                    val scaledH = (srcH * scale).toInt().coerceAtLeast(1)
+                    canvas.drawBitmap(Bitmap.createScaledBitmap(src, scaledW, scaledH, true), 0f, 0f, null)
+                    result
+                }
+                "end" -> {
+                    val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(result)
+                    canvas.drawColor(android.graphics.Color.BLACK)
+                    val scale = minOf(w.toFloat() / srcW, h.toFloat() / srcH)
+                    val scaledW = (srcW * scale).toInt().coerceAtLeast(1)
+                    val scaledH = (srcH * scale).toInt().coerceAtLeast(1)
+                    val scaled = Bitmap.createScaledBitmap(src, scaledW, scaledH, true)
+                    canvas.drawBitmap(scaled, (w - scaledW).toFloat(), (h - scaledH).toFloat(), null)
+                    result
+                }
+                else -> {
+                    // "crop" → CENTER_CROP: rellenar recortando el centro
+                    val scale = maxOf(w.toFloat() / srcW, h.toFloat() / srcH)
+                    val scaledW = (srcW * scale).toInt().coerceAtLeast(w)
+                    val scaledH = (srcH * scale).toInt().coerceAtLeast(h)
+                    val scaled = Bitmap.createScaledBitmap(src, scaledW, scaledH, true)
+                    val x = ((scaledW - w) / 2).coerceAtLeast(0)
+                    val y = ((scaledH - h) / 2).coerceAtLeast(0)
+                    Bitmap.createBitmap(scaled, x, y, w, h)
+                }
             }
+        }
+
+        private fun applyNoPlaybackBackground(views: RemoteViews, bgColor: Int) {
+            // El color de fondo "sin imagen" lo pinta el velo (widget_overlay) y se oculta
+            // la carátula para que solo se vea ese color.
+            try { views.setInt(R.id.widget_overlay, "setBackgroundColor", bgColor) } catch (_: Exception) {}
+            try { views.setInt(R.id.widget_bg, "setImageAlpha", 0) } catch (_: Exception) {}
         }
 
         private fun sendLaunchDefaultMediaApp(context: Context) {
@@ -712,7 +1054,23 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
                 } catch (_: Exception) {
                     ""
                 }
-                println("$WIDGET_LOG_PREFIX sendLaunchDefaultMediaApp forcePlay=$forcePlay pauseOthers=$pauseOthers pkg='${selectedPkg.take(120)}'")
+                val flutterPrefs = context.getSharedPreferences(PREFS_FLUTTER_SHARED, Context.MODE_PRIVATE)
+                val prioritizeLocal = readFlutterBool(flutterPrefs, KEY_FLUTTER_PRIORITIZE_LOCAL_MEDIA, false)
+                println("$WIDGET_LOG_PREFIX sendLaunchDefaultMediaApp forcePlay=$forcePlay pauseOthers=$pauseOthers pkg='${selectedPkg.take(120)}' prioritizeLocal=$prioritizeLocal")
+
+                if (prioritizeLocal) {
+                    if (selectedPkg.isNotBlank()) {
+                        try {
+                            val launchIntent = context.packageManager.getLaunchIntentForPackage(selectedPkg)
+                            if (launchIntent != null) {
+                                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(launchIntent)
+                            }
+                        } catch (_: Exception) {}
+                    }
+                    return
+                }
+
                 val payload = org.json.JSONObject()
                 payload.put("type", "launch_default_media_app")
                 payload.put("packageName", selectedPkg)
@@ -890,16 +1248,7 @@ abstract class BaseMediaWidgetProvider : AppWidgetProvider() {
     }
 }
 
-class MediaWidgetProvider : BaseMediaWidgetProvider() {
-    override val layoutResId: Int = R.layout.widget_media
-
-    companion object {
-        fun updateAll(context: Context) {
-            BaseMediaWidgetProvider.updateAll(context, MediaWidgetProvider::class.java, R.layout.widget_media)
-        }
-    }
-}
-
+// Widget de música 2x5: texto centrado + botón de app de música por defecto.
 class MediaWidgetProviderStyle2 : BaseMediaWidgetProvider() {
     override val layoutResId: Int = R.layout.widget_media_style2
 
@@ -910,6 +1259,7 @@ class MediaWidgetProviderStyle2 : BaseMediaWidgetProvider() {
     }
 }
 
+// Widget de música 2x5: texto a la izquierda + barra de progreso con tiempos.
 class MediaWidgetProviderStyle3 : BaseMediaWidgetProvider() {
     override val layoutResId: Int = R.layout.widget_media_style3
 
@@ -920,22 +1270,13 @@ class MediaWidgetProviderStyle3 : BaseMediaWidgetProvider() {
     }
 }
 
-class MediaWidgetProviderStyle4 : BaseMediaWidgetProvider() {
-    override val layoutResId: Int = R.layout.widget_media_style4
+// Widget de música ancho (4x2): carátula a la izquierda + controles y volumen a la derecha.
+class MediaWidgetProviderWide : BaseMediaWidgetProvider() {
+    override val layoutResId: Int = R.layout.widget_media_wide
 
     companion object {
         fun updateAll(context: Context) {
-            BaseMediaWidgetProvider.updateAll(context, MediaWidgetProviderStyle4::class.java, R.layout.widget_media_style4)
-        }
-    }
-}
-
-class MediaWidgetProviderStyle5 : BaseMediaWidgetProvider() {
-    override val layoutResId: Int = R.layout.widget_media_style5
-
-    companion object {
-        fun updateAll(context: Context) {
-            BaseMediaWidgetProvider.updateAll(context, MediaWidgetProviderStyle5::class.java, R.layout.widget_media_style5)
+            BaseMediaWidgetProvider.updateAll(context, MediaWidgetProviderWide::class.java, R.layout.widget_media_wide)
         }
     }
 }

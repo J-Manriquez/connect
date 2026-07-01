@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Layout RemoteViews del widget de calculadora.
+  IDs referenciados en CalculatorWidgetProvider.kt:
+    calc_root, calc_display_rounded_bg, calc_display_bg,
+    calc_expr, calc_result, calc_btn_history,
+    calc_keypad, calc_row0..calc_row4,
+    k00..k03, k10..k13, k20..k23, k30..k33, k40..k43,
+    calc_history_panel, h0..h2, h0_expr, h0_result .. h2_expr, h2_result,
+    calc_hist_up, calc_hist_down.
+  Solo Views compatibles con RemoteViews: FrameLayout, LinearLayout,
+  TextView, ImageView. Sin ConstraintLayout ni custom views.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/calc_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#FF1C1C1E">
+
+    <!-- Display: expresión + resultado.
+         FrameLayout permite superponer calc_display_rounded_bg (ImageView detrás)
+         para que Kotlin dibuje las esquinas superiores redondeadas. -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- Fondo del display con esquinas superiores redondeadas (Kotlin dibuja el bitmap) -->
+        <ImageView
+            android:id="@+id/calc_display_rounded_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitXY" />
+
+        <LinearLayout
+            android:id="@+id/calc_display_bg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="6dp">
+
+            <!-- Botón de historial (expandir se eliminó; la expresión siempre es visible) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <ImageView
+                    android:id="@+id/calc_btn_history"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:src="@android:drawable/ic_menu_recent_history"
+                    android:scaleType="fitXY" />
+            </LinearLayout>
+
+            <!-- Expresión: siempre visible -->
+            <TextView
+                android:id="@+id/calc_expr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFAAAAAA"
+                android:textSize="18sp"
+                android:gravity="end"
+                android:maxLines="2"
+                android:ellipsize="start"
+                android:paddingTop="2dp"
+                android:visibility="visible" />
+
+            <!-- Resultado -->
+            <TextView
+                android:id="@+id/calc_result"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="#FFFFFFFF"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:gravity="end"
+                android:maxLines="1"
+                android:ellipsize="start"
+                android:paddingBottom="2dp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- ───── Teclado ─────
+         paddingLeft/Right=0 para que los botones lleguen a los bordes del widget
+         (habilita efecto de esquina en k40/k43). paddingTop=6dp mantiene separación
+         con el display. paddingBottom=0 para que = y 0 lleguen al borde inferior. -->
+    <LinearLayout
+        android:id="@+id/calc_keypad"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingLeft="0dp"
+        android:paddingRight="0dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="0dp">
+
+        <!-- Fila 0: ( ) C ÷ -->
+        <LinearLayout
+            android:id="@+id/calc_row0"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+            <TextView android:id="@+id/k00" style="@style/CalcKeyFn" android:text="(" />
+            <TextView android:id="@+id/k01" style="@style/CalcKeyFn" android:text=")" />
+            <TextView android:id="@+id/k02" style="@style/CalcKeyFn" android:text="C" />
+            <TextView android:id="@+id/k03" style="@style/CalcKeyOp" android:text="÷" />
+        </LinearLayout>
+
+        <!-- Fila 1: 7 8 9 × -->
+        <LinearLayout
+            android:id="@+id/calc_row1"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+            <TextView android:id="@+id/k10" style="@style/CalcKeyNum" android:text="7" />
+            <TextView android:id="@+id/k11" style="@style/CalcKeyNum" android:text="8" />
+            <TextView android:id="@+id/k12" style="@style/CalcKeyNum" android:text="9" />
+            <TextView android:id="@+id/k13" style="@style/CalcKeyOp" android:text="×" />
+        </LinearLayout>
+
+        <!-- Fila 2: 4 5 6 − -->
+        <LinearLayout
+            android:id="@+id/calc_row2"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+            <TextView android:id="@+id/k20" style="@style/CalcKeyNum" android:text="4" />
+            <TextView android:id="@+id/k21" style="@style/CalcKeyNum" android:text="5" />
+            <TextView android:id="@+id/k22" style="@style/CalcKeyNum" android:text="6" />
+            <TextView android:id="@+id/k23" style="@style/CalcKeyOp" android:text="−" />
+        </LinearLayout>
+
+        <!-- Fila 3: 1 2 3 + -->
+        <LinearLayout
+            android:id="@+id/calc_row3"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+            <TextView android:id="@+id/k30" style="@style/CalcKeyNum" android:text="1" />
+            <TextView android:id="@+id/k31" style="@style/CalcKeyNum" android:text="2" />
+            <TextView android:id="@+id/k32" style="@style/CalcKeyNum" android:text="3" />
+            <TextView android:id="@+id/k33" style="@style/CalcKeyOp" android:text="+" />
+        </LinearLayout>
+
+        <!-- Fila 4 (inferior): 0 . ⌫ =
+             k40 (0): ImageView sin marginStart — toca el borde izquierdo del widget.
+                      Kotlin dibuja bitmap con texto "0" + esquina inferior-izquierda redondeada.
+             k43 (=): ImageView — Kotlin dibuja bitmap con texto "=" + esquina inferior-derecha. -->
+        <LinearLayout
+            android:id="@+id/calc_row4"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+            <ImageView android:id="@+id/k40"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="2dp"
+                android:scaleType="fitXY" />
+            <TextView android:id="@+id/k41" style="@style/CalcKeyFn" android:text="." />
+            <ImageView android:id="@+id/k42"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="2dp"
+                android:scaleType="centerInside"
+                android:padding="6dp"
+                android:src="@android:drawable/ic_input_delete" />
+            <ImageView android:id="@+id/k43"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="2dp"
+                android:scaleType="fitXY" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- ───── Panel de historial (alterna con teclado) ───── -->
+    <LinearLayout
+        android:id="@+id/calc_history_panel"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:padding="4dp">
+
+        <!-- Fila historial 0 -->
+        <LinearLayout
+            android:id="@+id/h0"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:background="#FF2C2C2E"
+            android:padding="4dp">
+            <TextView android:id="@+id/h0_expr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFAAAAAA"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="start" />
+            <TextView android:id="@+id/h0_result"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFFFF"
+                android:textSize="18sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <!-- Fila historial 1 -->
+        <LinearLayout
+            android:id="@+id/h1"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:background="#FF2C2C2E"
+            android:padding="4dp"
+            android:layout_marginTop="4dp">
+            <TextView android:id="@+id/h1_expr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFAAAAAA"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="start" />
+            <TextView android:id="@+id/h1_result"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFFFF"
+                android:textSize="18sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <!-- Fila historial 2 -->
+        <LinearLayout
+            android:id="@+id/h2"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:background="#FF2C2C2E"
+            android:padding="4dp"
+            android:layout_marginTop="4dp">
+            <TextView android:id="@+id/h2_expr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFAAAAAA"
+                android:textSize="14sp"
+                android:maxLines="1"
+                android:ellipsize="start" />
+            <TextView android:id="@+id/h2_result"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFFFF"
+                android:textSize="18sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <!-- Navegación ▲▼ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end"
+            android:layout_marginTop="4dp">
+            <TextView android:id="@+id/calc_hist_up"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="▲"
+                android:textColor="#FFFFFFFF"
+                android:textSize="18sp"
+                android:padding="8dp" />
+            <TextView android:id="@+id/calc_hist_down"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="▼"
+                android:textColor="#FFFFFFFF"
+                android:textSize="18sp"
+                android:padding="8dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

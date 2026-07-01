@@ -8,8 +8,8 @@ import 'package:connect/screens/emisor/floating_ball_popup_reorder_screen.dart';
 import 'package:connect/screens/emisor/svg_icon_gallery_screen.dart';
 import 'package:connect/services/floating_ball_service.dart';
 import 'package:connect/theme_colors.dart';
-import 'package:connect/widgets/fs_media_section.dart';
 import 'package:connect/widgets/color_input_widget.dart';
+import 'package:connect/widgets/floating_ball_backup_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart' as vg;
 
@@ -31,6 +31,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
   int _ballSizeDp = 56;
   bool _fullScreen = false;
   int _fsBgColor = 0xDD111111;
+  bool _fsUnifiedBg = false;
   int _fsButtonColor = 0x22111111;
   int _fsAppsButtonColor = 0x22111111;
   int _fsContentColor = 0xFFFFFFFF;
@@ -115,6 +116,20 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
   int _conversationReplyModalSendIconSizeDp = 22;
   int _conversationReplyModalSendBgColor = 0x00000000;
   int _conversationReplyModalSendBorderColor = 0x22FFFFFF;
+  // Menú de chats
+  bool _fsChatsMenuEnabled = false;
+  int _chatsBgColor = 0xDD111111;
+  int _chatsItemBgColor = 0x22111111;
+  int _chatsItemBorderColor = 0x22FFFFFF;
+  int _chatsTitleColor = 0xFFFFFFFF;
+  int _chatsTitleSizeSp = 16;
+  int _chatsTextColor = 0xFFFFFFFF;
+  int _chatsTextSizeSp = 14;
+  String _fsChatsText = 'Chats';
+  String _fsChatsIconId = 'chat';
+  String? _fsChatsIconPngBase64;
+  String _popupChatsIconId = 'chat';
+  String? _popupChatsIconPngBase64;
   int _fsBarHeightDp = 54;
   int _fsBarBgColor = 0xCC111111;
   int _fsBarContentColor = 0xFFFFFFFF;
@@ -320,6 +335,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     int nextBallSizeDp = _ballSizeDp;
     bool nextFullScreen = _fullScreen;
     int nextFsBg = _fsBgColor;
+    bool nextFsUnifiedBg = _fsUnifiedBg;
     int nextFsBtn = _fsButtonColor;
     int nextFsAppsBtn = _fsAppsButtonColor;
     int nextFsContent = _fsContentColor;
@@ -345,6 +361,19 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     bool nextFsBarEnabled = _fsBarEnabled;
     bool nextFsCustomNotificationsEnabled = _fsCustomNotificationsEnabled;
     bool nextFsConversationEnabled = _fsConversationEnabled;
+    bool nextFsChatsMenuEnabled = _fsChatsMenuEnabled;
+    int nextChatsBgColor = _chatsBgColor;
+    int nextChatsItemBgColor = _chatsItemBgColor;
+    int nextChatsItemBorderColor = _chatsItemBorderColor;
+    int nextChatsTitleColor = _chatsTitleColor;
+    int nextChatsTitleSizeSp = _chatsTitleSizeSp;
+    int nextChatsTextColor = _chatsTextColor;
+    int nextChatsTextSizeSp = _chatsTextSizeSp;
+    String nextFsChatsText = _fsChatsText;
+    String nextFsChatsIconId = _fsChatsIconId;
+    String? nextFsChatsIconPngBase64 = _fsChatsIconPngBase64;
+    String nextPopupChatsIconId = _popupChatsIconId;
+    String? nextPopupChatsIconPngBase64 = _popupChatsIconPngBase64;
     int nextCustomNotifsBgColor = _customNotifsBgColor;
     int nextCustomNotifsItemBgColor = _customNotifsItemBgColor;
     int nextCustomNotifsItemBorderColor = _customNotifsItemBorderColor;
@@ -530,6 +559,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       }
       nextFullScreen = await FloatingBallService.isFullScreenEnabled();
       nextFsBg = await FloatingBallService.getFullScreenBgColor();
+      nextFsUnifiedBg = await FloatingBallService.isUnifiedBackgroundEnabled();
       nextFsBtn = await FloatingBallService.getFullScreenButtonColor();
       nextFsAppsBtn = await FloatingBallService.getFullScreenAppsButtonColor();
       nextFsContent = await FloatingBallService.getFullScreenContentColor();
@@ -606,6 +636,23 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
           await FloatingBallService.getCustomNotificationsClearAllText();
       nextFsConversationEnabled =
           await FloatingBallService.isFullScreenConversationEnabled();
+      nextFsChatsMenuEnabled =
+          await FloatingBallService.isFullScreenChatsMenuEnabled();
+      nextChatsBgColor = await FloatingBallService.getChatsBgColor();
+      nextChatsItemBgColor = await FloatingBallService.getChatsItemBgColor();
+      nextChatsItemBorderColor =
+          await FloatingBallService.getChatsItemBorderColor();
+      nextChatsTitleColor = await FloatingBallService.getChatsTitleColor();
+      nextChatsTitleSizeSp = await FloatingBallService.getChatsTitleSizeSp();
+      nextChatsTextColor = await FloatingBallService.getChatsTextColor();
+      nextChatsTextSizeSp = await FloatingBallService.getChatsTextSizeSp();
+      nextFsChatsText = await FloatingBallService.getFullScreenChatsText();
+      nextFsChatsIconId = await FloatingBallService.getFullScreenChatsIconId();
+      nextFsChatsIconPngBase64 =
+          await FloatingBallService.getFullScreenChatsIconPngBase64();
+      nextPopupChatsIconId = await FloatingBallService.getPopupChatsIconId();
+      nextPopupChatsIconPngBase64 =
+          await FloatingBallService.getPopupChatsIconPngBase64();
       nextConversationBgColor =
           await FloatingBallService.getConversationBgColor();
       nextConversationIncomingColor =
@@ -830,6 +877,7 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       _ballSizeDp = nextBallSizeDp;
       _fullScreen = nextFullScreen;
       _fsBgColor = nextFsBg;
+      _fsUnifiedBg = nextFsUnifiedBg;
       _fsButtonColor = nextFsBtn;
       _fsAppsButtonColor = nextFsAppsBtn;
       _fsContentColor = nextFsContent;
@@ -855,6 +903,19 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       _fsBarEnabled = nextFsBarEnabled;
       _fsCustomNotificationsEnabled = nextFsCustomNotificationsEnabled;
       _fsConversationEnabled = nextFsConversationEnabled;
+      _fsChatsMenuEnabled = nextFsChatsMenuEnabled;
+      _chatsBgColor = nextChatsBgColor;
+      _chatsItemBgColor = nextChatsItemBgColor;
+      _chatsItemBorderColor = nextChatsItemBorderColor;
+      _chatsTitleColor = nextChatsTitleColor;
+      _chatsTitleSizeSp = nextChatsTitleSizeSp;
+      _chatsTextColor = nextChatsTextColor;
+      _chatsTextSizeSp = nextChatsTextSizeSp;
+      _fsChatsText = nextFsChatsText;
+      _fsChatsIconId = nextFsChatsIconId;
+      _fsChatsIconPngBase64 = nextFsChatsIconPngBase64;
+      _popupChatsIconId = nextPopupChatsIconId;
+      _popupChatsIconPngBase64 = nextPopupChatsIconPngBase64;
       _customNotifsBgColor = nextCustomNotifsBgColor;
       _customNotifsItemBgColor = nextCustomNotifsItemBgColor;
       _customNotifsItemBorderColor = nextCustomNotifsItemBorderColor;
@@ -1386,13 +1447,39 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     await FloatingBallService.setPopupAppButtonPaddingDp(picked);
   }
 
+  // Aplica el mismo color de fondo a pantalla completa, conversación,
+  // notificaciones y chats (sin tocar la barra). Usado por el modo unificado.
+  Future<void> _applyUnifiedBg(int picked) async {
+    setState(() {
+      _fsBgColor = picked;
+      _conversationBgColor = picked;
+      _customNotifsBgColor = picked;
+      _chatsBgColor = picked;
+    });
+    await FloatingBallService.setUnifiedBackgroundColor(picked);
+  }
+
+  Future<void> _toggleFsUnifiedBg(bool v) async {
+    setState(() => _fsUnifiedBg = v);
+    await FloatingBallService.setUnifiedBackgroundEnabled(v);
+    // Al activarlo, igualar de inmediato todas las pantallas al color de
+    // fondo de pantalla completa.
+    if (v) await _applyUnifiedBg(_fsBgColor);
+  }
+
   Future<void> _setFsBgColor() async {
     final picked = await _showColorPickerInt(
       currentArgb: _fsBgColor,
-      title: 'Color de fondo',
+      title: _fsUnifiedBg
+          ? 'Color de fondo (todas las pantallas)'
+          : 'Color de fondo',
       label: 'Color',
     );
     if (picked == null) return;
+    if (_fsUnifiedBg) {
+      await _applyUnifiedBg(picked);
+      return;
+    }
     setState(() => _fsBgColor = picked);
     await FloatingBallService.setFullScreenBgColor(picked);
   }
@@ -1472,6 +1559,107 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     await FloatingBallService.setFullScreenConversationEnabled(v);
   }
 
+  // ===== Menú de chats =====
+  Future<void> _toggleFsChatsMenuEnabled(bool v) async {
+    setState(() => _fsChatsMenuEnabled = v);
+    await FloatingBallService.setFullScreenChatsMenuEnabled(v);
+  }
+
+  Future<void> _setChatsBgColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _chatsBgColor,
+      title: 'Color de fondo (menú de chats)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    if (_fsUnifiedBg) {
+      await _applyUnifiedBg(picked);
+      return;
+    }
+    setState(() => _chatsBgColor = picked);
+    await FloatingBallService.setChatsBgColor(picked);
+  }
+
+  Future<void> _setChatsItemBgColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _chatsItemBgColor,
+      title: 'Color de fondo (chat)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _chatsItemBgColor = picked);
+    await FloatingBallService.setChatsItemBgColor(picked);
+  }
+
+  Future<void> _setChatsItemBorderColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _chatsItemBorderColor,
+      title: 'Color de borde (chat)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _chatsItemBorderColor = picked);
+    await FloatingBallService.setChatsItemBorderColor(picked);
+  }
+
+  Future<void> _setChatsTitleColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _chatsTitleColor,
+      title: 'Color de título (chat)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _chatsTitleColor = picked);
+    await FloatingBallService.setChatsTitleColor(picked);
+  }
+
+  Future<void> _setChatsTitleSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño de título (chat)',
+      current: _chatsTitleSizeSp,
+      min: 8,
+      max: 32,
+      suffix: 'sp',
+    );
+    if (picked == null) return;
+    setState(() => _chatsTitleSizeSp = picked);
+    await FloatingBallService.setChatsTitleSizeSp(picked);
+  }
+
+  Future<void> _setChatsTextColor() async {
+    final picked = await _showColorPickerInt(
+      currentArgb: _chatsTextColor,
+      title: 'Color de texto (chat)',
+      label: 'Color',
+    );
+    if (picked == null) return;
+    setState(() => _chatsTextColor = picked);
+    await FloatingBallService.setChatsTextColor(picked);
+  }
+
+  Future<void> _setChatsTextSize() async {
+    final picked = await _showIntSlider(
+      title: 'Tamaño de texto (chat)',
+      current: _chatsTextSizeSp,
+      min: 8,
+      max: 32,
+      suffix: 'sp',
+    );
+    if (picked == null) return;
+    setState(() => _chatsTextSizeSp = picked);
+    await FloatingBallService.setChatsTextSizeSp(picked);
+  }
+
+  Future<void> _setFsChatsText() async {
+    final picked = await _showTextDialog(
+      title: 'Texto del botón Chats',
+      current: _fsChatsText,
+    );
+    if (picked == null || picked.isEmpty) return;
+    setState(() => _fsChatsText = picked);
+    await FloatingBallService.setFullScreenChatsText(picked);
+  }
+
   Future<void> _setCustomNotifsBgColor() async {
     final picked = await _showColorPickerInt(
       currentArgb: _customNotifsBgColor,
@@ -1479,6 +1667,10 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       label: 'Color',
     );
     if (picked == null) return;
+    if (_fsUnifiedBg) {
+      await _applyUnifiedBg(picked);
+      return;
+    }
     setState(() => _customNotifsBgColor = picked);
     await FloatingBallService.setCustomNotificationsBgColor(picked);
   }
@@ -1490,6 +1682,10 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       label: 'Color',
     );
     if (picked == null) return;
+    if (_fsUnifiedBg) {
+      await _applyUnifiedBg(picked);
+      return;
+    }
     setState(() => _conversationBgColor = picked);
     await FloatingBallService.setConversationBgColor(picked);
   }
@@ -3016,6 +3212,15 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
         _fsSettingsIconId = iconId;
         _fsSettingsIconPngBase64 = png;
       });
+    } else if (which == 'chats') {
+      await FloatingBallService.setFullScreenChatsIconWithPng(
+        iconId: iconId,
+        iconPngBase64: png,
+      );
+      setState(() {
+        _fsChatsIconId = iconId;
+        _fsChatsIconPngBase64 = png;
+      });
     }
   }
 
@@ -3084,6 +3289,15 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
       setState(() {
         _popupSettingsIconId = iconId;
         _popupSettingsIconPngBase64 = png;
+      });
+    } else if (which == 'chats') {
+      await FloatingBallService.setPopupChatsIconWithPng(
+        iconId: iconId,
+        iconPngBase64: png,
+      );
+      setState(() {
+        _popupChatsIconId = iconId;
+        _popupChatsIconPngBase64 = png;
       });
     }
   }
@@ -3311,63 +3525,83 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
     await FloatingBallService.setFullScreenEnabled(v);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Personalizar bola'),
-        backgroundColor: customColor[700],
-        actions: [
-          IconButton(
-            onPressed: () {
-              final next = !_mediaVisible;
-              print('[floating_ball_style] mediaVisible -> $next (from appbar)');
-              setState(() {
-                _mediaVisible = next;
-              });
-            },
-            icon: Icon(_mediaVisible ? Icons.music_off : Icons.music_note),
-            tooltip: _mediaVisible ? 'Ocultar multimedia' : 'Mostrar multimedia',
+  // Contenedor desplazable de una pestaña. Reemplaza a las antiguas
+  // tarjetas expandibles: cada pestaña muestra directamente su contenido.
+  Widget _tabPage(List<Widget> children) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      children: children,
+    );
+  }
+
+  // Encabezado descriptivo que se muestra al inicio de cada pestaña.
+  Widget _tabHeader(String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 13, color: Colors.black54),
+          ),
+          const Divider(height: 20),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(8),
-              child: Column(
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      key: ValueKey(_fullScreen),
+      length: _fullScreen ? 11 : 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Personalizar bola'),
+          backgroundColor: customColor[700],
+          foregroundColor: Colors.white,
+          bottom: _loading
+              ? null
+              : TabBar(
+                  isScrollable: true,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  indicatorColor: Colors.white,
+                  tabAlignment: TabAlignment.start,
+                  tabs: [
+                    const Tab(text: 'Bola'),
+                    if (!_fullScreen) const Tab(text: 'Popup'),
+                    if (_fullScreen) ...[
+                      const Tab(text: 'Diseño'),
+                      const Tab(text: 'Barra'),
+                      const Tab(text: 'Notificaciones'),
+                      const Tab(text: 'Botones inf.'),
+                      const Tab(text: 'Conversación'),
+                      const Tab(text: 'Chats'),
+                      const Tab(text: 'Multimedia'),
+                      const Tab(text: 'Sistema'),
+                      const Tab(text: 'Cerrar'),
+                    ],
+                    const Tab(text: 'Respaldo'),
+                  ],
+                ),
+        ),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
                 children: [
-                  FsMediaSection(
-                    visible: _mediaVisible,
-                    onVisibleChanged: (v) {
-                      print('[floating_ball_style] mediaVisible -> $v (from section)');
-                      setState(() {
-                        _mediaVisible = v;
-                      });
-                    },
-                  ),
-                  Card(
-                    elevation: 3,
-                    child: ExpansionTile(
-                      initiallyExpanded: false,
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: customColor[100],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.bubble_chart, color: customColor[600], size: 24),
-                      ),
-                      title: const Text(
-                        'Bola flotante',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: const Text(
-                        'Cambia el aspecto del botón flotante y el modo de visualización (popup o pantalla completa).',
-                      ),
-                      children: [
+                  _tabPage([
+                    _tabHeader(
+                      'Bola flotante',
+                      'Cambia el aspecto del botón flotante y el modo de visualización (popup o pantalla completa).',
+                    ),
                         Row(
                           children: [
                             Container(
@@ -3465,34 +3699,13 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                           value: _fullScreen,
                           onChanged: _toggleFullScreen,
                         ),
-                      ],
-                    ),
-                  ),
-                  if (!_fullScreen) ...[
-                    const SizedBox(height: 16),
-                    Card(
-                      elevation: 3,
-                      child: ExpansionTile(
-                        initiallyExpanded: false,
-                        tilePadding:
-                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: customColor[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(Icons.dashboard, color: customColor[600], size: 24),
-                        ),
-                        title: const Text(
-                          'Popup (modo compacto)',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: const Text(
-                          'Personaliza el menú compacto que aparece junto a la bola (colores, posición e iconos).',
-                        ),
-                        children: [
+                  ]),
+                  if (!_fullScreen)
+                    _tabPage([
+                      _tabHeader(
+                        'Popup (modo compacto)',
+                        'Personaliza el menú compacto que aparece junto a la bola (colores, posición e iconos).',
+                      ),
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             title: const Text('Color de fondo'),
@@ -3745,6 +3958,18 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 ),
                                 onTap: () => _pickPopupButtonIcon('settings'),
                               ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Chats'),
+                                subtitle: const Text('Acción: abrir menú de chats'),
+                                trailing: _buildPngIconPreview(
+                                  base64Png: _popupChatsIconPngBase64,
+                                  size: 22,
+                                  tint: Color(_popupIconColor),
+                                  fallback: Icons.chat,
+                                ),
+                                onTap: () => _pickPopupButtonIcon('chats'),
+                              ),
                               const Divider(height: 16),
                               const Padding(
                                 padding: EdgeInsets.only(bottom: 6),
@@ -3780,44 +4005,13 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                               );
                             },
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ]),
                   if (_fullScreen) ...[
-                    const SizedBox(height: 16),
-                    Card(
-                      elevation: 3,
-                      child: ExpansionTile(
-                        initiallyExpanded: false,
-                        tilePadding:
-                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: customColor[100],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(Icons.fullscreen, color: customColor[600], size: 24),
-                        ),
-                        title: const Text(
-                          'Pantalla completa',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: const Text(
-                          'Personaliza el menú en pantalla completa: colores, distribución, barra, notificaciones, conversación y multimedia.',
-                        ),
-                        children: [
-                          Column(
-                            children: [
-                              ExpansionTile(
-                                tilePadding: EdgeInsets.zero,
-                                title: const Text('Diseño y distribución'),
-                                subtitle: const Text(
-                                  'Colores, tamaños y espaciados del menú principal en pantalla completa.',
-                                ),
-                                children: [
+                    _tabPage([
+                      _tabHeader(
+                        'Diseño y distribución',
+                        'Colores, tamaños y espaciados del menú principal en pantalla completa.',
+                      ),
                                   ListTile(
                                     contentPadding: EdgeInsets.zero,
                                     title: const Text('Color de fondo'),
@@ -3833,6 +4027,19 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                       ],
                                     ),
                                     onTap: _setFsBgColor,
+                                  ),
+                                  SwitchListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: const Text(
+                                      'Mismo color de fondo en todas las pantallas',
+                                    ),
+                                    subtitle: const Text(
+                                      'Usa el color de fondo de arriba también en conversación, '
+                                      'notificaciones y chats. La barra superior conserva su color propio. '
+                                      'Si lo desactivas, cada pantalla mantiene su color.',
+                                    ),
+                                    value: _fsUnifiedBg,
+                                    onChanged: _toggleFsUnifiedBg,
                                   ),
                                   ListTile(
                               contentPadding: EdgeInsets.zero,
@@ -4037,16 +4244,12 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                               trailing: const Icon(Icons.chevron_right),
                               onTap: _setFsAppsCols,
                             ),
-                                ],
-                              ),
-                              const Divider(height: 22),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Barra superior'),
-                              subtitle: const Text(
-                                'Muestra una barra con estado del sistema y acceso a notificaciones.',
-                              ),
-                              children: [
+                    ]),
+                    _tabPage([
+                      _tabHeader(
+                        'Barra superior',
+                        'Muestra una barra con estado del sistema y acceso a notificaciones.',
+                      ),
                                 SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Mostrar sección Barra'),
@@ -4316,16 +4519,12 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 ),
                               ],
                             ),
-                              ],
-                            ),
-                            const Divider(height: 22),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Pantalla de notificaciones'),
-                              subtitle: const Text(
-                                'Estilo de la pantalla que se abre desde la barra (batería).',
-                              ),
-                              children: [
+                    ]),
+                    _tabPage([
+                      _tabHeader(
+                        'Pantalla de notificaciones',
+                        'Estilo de la pantalla que se abre desde la barra (batería).',
+                      ),
                                 SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Pantalla de notificaciones personalizada'),
@@ -4611,16 +4810,12 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                   ? _setCustomNotifsTextSize
                                   : null,
                             ),
-                              ],
-                            ),
-                            const Divider(height: 22),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Botones inferiores'),
-                              subtitle: const Text(
-                                'Se aplica a: Conversación y Pantalla de notificaciones (botones inferiores).',
-                              ),
-                              children: [
+                    ]),
+                    _tabPage([
+                      _tabHeader(
+                        'Botones inferiores',
+                        'Se aplica a: Conversación y Pantalla de notificaciones (botones inferiores).',
+                      ),
                                 ListTile(
                                   contentPadding: EdgeInsets.zero,
                                   title: const Text('Espacio entre botones'),
@@ -4642,16 +4837,12 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                   trailing: const Icon(Icons.chevron_right),
                                   onTap: _setConversationBottomButtonsPaddingVert,
                                 ),
-                              ],
-                            ),
-                            const Divider(height: 22),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Conversación'),
-                              subtitle: const Text(
-                                'Vista tipo chat (burbujas) para notificaciones compatibles.',
-                              ),
-                              children: [
+                    ]),
+                    _tabPage([
+                      _tabHeader(
+                        'Conversación',
+                        'Vista tipo chat (burbujas) para notificaciones compatibles.',
+                      ),
                                 SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Habilitar sección de conversación'),
@@ -5088,16 +5279,141 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 ),
                               ],
                             ),
-                              ],
+                    ]),
+                    _tabPage([
+                      _tabHeader(
+                        'Chats',
+                        'Menú con la lista de conversaciones. Se abre desde el botón "Chats" del menú de la bola.',
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Habilitar menú de chats'),
+                        subtitle: const Text(
+                          'Muestra el botón "Chats" en el menú de la bola (solo si hay al menos una app con conversación activa).',
+                        ),
+                        value: _fsChatsMenuEnabled,
+                        onChanged: _toggleFsChatsMenuEnabled,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Color de fondo (menú de chats)'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _colorDot(Color(_chatsBgColor)),
+                            const SizedBox(width: 10),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: _fsChatsMenuEnabled ? _setChatsBgColor : null,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Color de fondo (chat)'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _colorDot(Color(_chatsItemBgColor)),
+                            const SizedBox(width: 10),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: _fsChatsMenuEnabled ? _setChatsItemBgColor : null,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Color de borde (chat)'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _colorDot(Color(_chatsItemBorderColor)),
+                            const SizedBox(width: 10),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap:
+                            _fsChatsMenuEnabled ? _setChatsItemBorderColor : null,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Color de título (chat)'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _colorDot(Color(_chatsTitleColor)),
+                            const SizedBox(width: 10),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: _fsChatsMenuEnabled ? _setChatsTitleColor : null,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Tamaño de título (chat)'),
+                        subtitle: Text('${_chatsTitleSizeSp}sp'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _fsChatsMenuEnabled ? _setChatsTitleSize : null,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Color de texto (chat)'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _colorDot(Color(_chatsTextColor)),
+                            const SizedBox(width: 10),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: _fsChatsMenuEnabled ? _setChatsTextColor : null,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Tamaño de texto (chat)'),
+                        subtitle: Text('${_chatsTextSizeSp}sp'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _fsChatsMenuEnabled ? _setChatsTextSize : null,
+                      ),
+                      const Divider(height: 24),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Botón del menú (Chats)',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Texto'),
+                        subtitle: Text(_fsChatsText),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _setFsChatsText,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Icono'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildPngIconPreview(
+                              base64Png: _fsChatsIconPngBase64,
+                              size: 22,
+                              tint: Color(_fsIconColor),
+                              fallback: Icons.chat,
                             ),
-                            const Divider(height: 22),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Multimedia'),
-                              subtitle: const Text(
-                                'Configura el panel multimedia y sus iconos.',
-                              ),
-                              children: [
+                            const SizedBox(width: 10),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: () => _pickFsButtonIcon('chats'),
+                      ),
+                    ]),
+                    _tabPage([
+                      _tabHeader(
+                        'Multimedia',
+                        'Configura el panel multimedia y sus iconos.',
+                      ),
                                 SwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: const Text('Mostrar automáticamente'),
@@ -5199,16 +5515,12 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 ),
                               ],
                             ),
-                              ],
-                            ),
-                            const Divider(height: 22),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Botones del sistema'),
-                              subtitle: const Text(
-                                'Personaliza textos e iconos (Back, Home, Recientes, etc.).',
-                              ),
-                              children: [
+                    ]),
+                    _tabPage([
+                      _tabHeader(
+                        'Botones del sistema',
+                        'Personaliza textos e iconos (Back, Home, Recientes, etc.).',
+                      ),
                                 ExpansionTile(
                               tilePadding: EdgeInsets.zero,
                               title: const Text('Back'),
@@ -5387,14 +5699,12 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                 );
                               },
                             ),
-                              ],
-                            ),
-                            const Divider(height: 22),
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text('Botón Cerrar'),
-                              subtitle: const Text('Configura el botón inferior para salir del menú.'),
-                              children: [
+                    ]),
+                    _tabPage([
+                      _tabHeader(
+                        'Botón Cerrar',
+                        'Configura el botón inferior para salir del menú.',
+                      ),
                                 ListTile(
                               contentPadding: EdgeInsets.zero,
                               enabled: !_fsCloseHideText,
@@ -5470,17 +5780,18 @@ class _FloatingBallStyleScreenState extends State<FloatingBallStyleScreen> {
                                   ? _toggleFsCloseDisableStickyWhenMediaActive
                                   : null,
                             ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
+                    ]),
+                  ],
+                  _tabPage([
+                    _tabHeader(
+                      'Respaldo',
+                      'Guarda y restaura toda la configuración de la bola flotante (estilo, gestos, apps y más), en la nube o en un archivo .json.',
                     ),
-                  ),
+                    FloatingBallBackupSection(onRestored: _load),
+                  ]),
                 ],
-              ],
               ),
-            ),
+        ),
     );
   }
 }

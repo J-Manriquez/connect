@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Style 1: Compacto — título + tiempo + fila de botones modo-dependientes -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/sw_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
+    <!-- Título: CRONÓMETRO / TEMPORIZADOR -->
+    <TextView
+        android:id="@+id/sw_mode_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="CRONÓMETRO"
+        android:textSize="7sp"
+        android:textColor="#FF88AAFF"
+        android:gravity="center"
+        android:letterSpacing="0.15" />
+
+    <!-- Tiempo principal -->
+    <TextView
+        android:id="@+id/sw_time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="00:00"
+        android:textSize="22sp"
+        android:textColor="#FFFFFFFF"
+        android:textStyle="bold"
+        android:singleLine="true" />
+
+    <!-- Botones -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginTop="2dp">
+
+        <!-- Temporizador: restar paso (oculto en cronómetro) -->
+        <ImageButton
+            android:id="@+id/btn_timer_sub"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@android:drawable/ic_input_delete"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:visibility="gone"
+            android:contentDescription="-min" />
+
+        <!-- Cronómetro: vuelta (oculto en temporizador) -->
+        <ImageButton
+            android:id="@+id/btn_lap"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@android:drawable/ic_media_ff"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:visibility="gone"
+            android:contentDescription="Vuelta" />
+
+        <!-- Reset -->
+        <ImageButton
+            android:id="@+id/btn_reset"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Reset" />
+
+        <!-- Play/Pause -->
+        <ImageButton
+            android:id="@+id/btn_start_pause"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@android:drawable/ic_media_play"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Play/Pause" />
+
+        <!-- Cambiar modo -->
+        <ImageButton
+            android:id="@+id/btn_toggle_mode"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Cambiar modo" />
+
+        <!-- Temporizador: sumar paso (oculto en cronómetro) -->
+        <ImageButton
+            android:id="@+id/btn_timer_add"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@android:drawable/ic_input_add"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:visibility="gone"
+            android:contentDescription="+min" />
+
+    </LinearLayout>
+
+</LinearLayout>
