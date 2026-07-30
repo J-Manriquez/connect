@@ -84,86 +84,28 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
         for (id in ids) render(context, mgr, id)
     }
 
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        when (intent.action) {
-            ACTION_START_PAUSE    -> toggleStartPause(context)
-            ACTION_RESET          -> sendToService(context, StopwatchTimerFgService.ACTION_RESET)
-            ACTION_LAP            -> sendToService(context, StopwatchTimerFgService.ACTION_LAP)
-            ACTION_TOGGLE_MODE    -> toggleMode(context)
-            ACTION_OPEN_APP       -> openApp(context)
-            ACTION_TIMER_ADD_STEP -> adjustTimerStep(context, add = true)
-            ACTION_TIMER_SUB_STEP -> adjustTimerStep(context, add = false)
-        }
-    }
-
-    private fun toggleStartPause(context: Context) {
-        val prefs = getPrefs(context)
-        val state = prefs.getString(StopwatchTimerFgService.KEY_STATE, StopwatchTimerFgService.STATE_IDLE) ?: ""
-        if (state == StopwatchTimerFgService.STATE_RUNNING) {
-            sendToService(context, StopwatchTimerFgService.ACTION_PAUSE)
-        } else {
-            sendToService(context, StopwatchTimerFgService.ACTION_START)
-        }
-    }
-
-    private fun toggleMode(context: Context) {
-        val prefs   = getPrefs(context)
-        val current = prefs.getString(StopwatchTimerFgService.KEY_MODE, StopwatchTimerFgService.MODE_STOPWATCH) ?: ""
-        val newMode = if (current == StopwatchTimerFgService.MODE_STOPWATCH)
-            StopwatchTimerFgService.MODE_TIMER else StopwatchTimerFgService.MODE_STOPWATCH
-        sendToServiceWithMode(context, StopwatchTimerFgService.ACTION_SET_MODE, newMode)
-    }
-
-    private fun adjustTimerStep(context: Context, add: Boolean) {
-        val prefs  = getPrefs(context)
-        val cfgId  = layoutIdToCfgId()
-        val cfg    = readWidgetCfg(prefs, cfgId)
-        val stepMs = cfg.timerStepMinutes * 60_000L
-        val i = Intent(context, StopwatchTimerFgService::class.java)
-            .setAction(if (add) StopwatchTimerFgService.ACTION_TIMER_ADD_STEP
-                       else     StopwatchTimerFgService.ACTION_TIMER_SUB_STEP)
-            .putExtra(StopwatchTimerFgService.EXTRA_TIMER_STEP_MS, stepMs)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(i)
-            else context.startService(i)
-        } catch (_: Exception) { context.startService(i) }
-    }
-
-    private fun sendToService(context: Context, action: String) {
-        val i = Intent(context, StopwatchTimerFgService::class.java).setAction(action)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(i)
-            else context.startService(i)
-        } catch (_: Exception) { context.startService(i) }
-    }
-
-    private fun sendToServiceWithMode(context: Context, action: String, mode: String) {
-        val i = Intent(context, StopwatchTimerFgService::class.java).setAction(action)
-            .putExtra(StopwatchTimerFgService.EXTRA_MODE, mode)
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(i)
-            else context.startService(i)
-        } catch (_: Exception) { context.startService(i) }
-    }
-
-    private fun openApp(context: Context) {
-        val i = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
-        i.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        i.putExtra("navigate_to", "stopwatch_timer")
-        context.startActivity(i)
-    }
-
     private fun render(context: Context, mgr: AppWidgetManager, id: Int) {
+        val layoutName = when (layoutResId) {
+            R.layout.widget_stopwatch_style1 -> "style1"
+            R.layout.widget_stopwatch_style3 -> "style3"
+            else -> "unknown($layoutResId)"
+        }
+        println("[SwWidget] render() widgetId=$id layout=$layoutName")
         try {
             val prefs = getPrefs(context)
             val cfgId = layoutIdToCfgId()
+            println("[SwWidget] render: leyendo cfg id='$cfgId'")
             val cfg   = readWidgetCfg(prefs, cfgId)
+            println("[SwWidget] render: cfg bgArgb=0x${cfg.bgArgb.toUInt().toString(16)} timeSizeSp=${cfg.timeSizeSp} iconColorEnabled=${cfg.iconColorEnabled}")
             val state = readState(prefs)
+            println("[SwWidget] render: state mode=${state.mode} state=${state.state} elapsed=${state.elapsed} remaining=${state.remaining}")
             val views = buildRemoteViews(context, cfg, state, layoutResId, this.javaClass)
+            println("[SwWidget] render: RemoteViews listas, aplicando al widgetId=$id")
             mgr.updateAppWidget(id, views)
+            println("[SwWidget] render: ✓ widgetId=$id actualizado OK")
         } catch (e: Exception) {
-            android.util.Log.e("SwWidget", "render error: ${e.message}")
+            println("[SwWidget] render ERROR layout=$layoutName id=$id: ${e.message}")
+            e.printStackTrace()
         }
     }
 
@@ -174,33 +116,24 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        // Acciones propias del widget
-        const val ACTION_START_PAUSE    = "com.example.connect.sw_widget.START_PAUSE"
-        const val ACTION_RESET          = "com.example.connect.sw_widget.RESET"
-        const val ACTION_LAP            = "com.example.connect.sw_widget.LAP"
-        const val ACTION_TOGGLE_MODE    = "com.example.connect.sw_widget.TOGGLE_MODE"
-        const val ACTION_OPEN_APP       = "com.example.connect.sw_widget.OPEN_APP"
-        const val ACTION_TIMER_ADD_STEP = "com.example.connect.sw_widget.TIMER_ADD_STEP"
-        const val ACTION_TIMER_SUB_STEP = "com.example.connect.sw_widget.TIMER_SUB_STEP"
-
         fun getPrefs(context: Context): SharedPreferences =
             context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
 
         // ── Lectura de estado ──────────────────────────────────────────────────────────────
 
         fun readState(prefs: SharedPreferences): SwState {
-            val mode     = prefs.getString(StopwatchTimerFgService.KEY_MODE,  StopwatchTimerFgService.MODE_STOPWATCH) ?: StopwatchTimerFgService.MODE_STOPWATCH
-            val state    = prefs.getString(StopwatchTimerFgService.KEY_STATE, StopwatchTimerFgService.STATE_IDLE)     ?: StopwatchTimerFgService.STATE_IDLE
-            val start    = prefs.getLong(StopwatchTimerFgService.KEY_START, 0L)
-            val accum    = prefs.getLong(StopwatchTimerFgService.KEY_ACCUM, 0L)
-            val tgtMs    = prefs.getLong(StopwatchTimerFgService.KEY_TIMER_TGT, 5 * 60_000L)
-            val remMs    = prefs.getLong(StopwatchTimerFgService.KEY_TIMER_REM, tgtMs)
+            val mode  = prefs.getString(StopwatchTimerFgService.KEY_MODE,  StopwatchTimerFgService.MODE_STOPWATCH) ?: StopwatchTimerFgService.MODE_STOPWATCH
+            val state = prefs.getString(StopwatchTimerFgService.KEY_STATE, StopwatchTimerFgService.STATE_IDLE)     ?: StopwatchTimerFgService.STATE_IDLE
+            val start = prefs.getLong(StopwatchTimerFgService.KEY_START, 0L)
+            val accum = prefs.getLong(StopwatchTimerFgService.KEY_ACCUM, 0L)
+            val tgtMs = prefs.getLong(StopwatchTimerFgService.KEY_TIMER_TGT, 5 * 60_000L)
+            val remMs = prefs.getLong(StopwatchTimerFgService.KEY_TIMER_REM, tgtMs)
+            println("[SwWidget] readState: mode=$mode state=$state start=$start accum=$accum tgtMs=$tgtMs remMs=$remMs")
 
-            val elapsed = if (state == StopwatchTimerFgService.STATE_RUNNING && mode == StopwatchTimerFgService.MODE_STOPWATCH)
-                accum + (System.currentTimeMillis() - start)
-            else
-                accum
+            // El servicio ya escribe el total acumulado en KEY_ACCUM cada 50 ms — no sumar de nuevo
+            val elapsed = accum
 
+            // Para el temporizador calculamos en vivo entre actualizaciones de widget (~1 s)
             val remaining = if (state == StopwatchTimerFgService.STATE_RUNNING && mode == StopwatchTimerFgService.MODE_TIMER) {
                 val e = System.currentTimeMillis() - start
                 (tgtMs - e).coerceAtLeast(0L)
@@ -215,6 +148,7 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
                     laps.add(LapData(obj.optInt("number", i + 1), obj.getLong("elapsed"), obj.optLong("delta", 0L)))
                 }
             } catch (_: Exception) { }
+            println("[SwWidget] readState: elapsed=$elapsed remaining=$remaining laps=${laps.size}")
 
             return SwState(mode, state, elapsed, remaining, tgtMs, laps)
         }
@@ -222,9 +156,9 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
         // ── Lectura de configuración (defaults espejo de StopwatchWidgetConfigService.dart) ──
 
         fun readWidgetCfg(prefs: SharedPreferences, id: String): SwWidgetCfg {
-            fun int(prop: String, def: Int)    = prefs.getInt("flutter.stopwatch_cfg_${id}_${prop}", def)
-            fun bool(prop: String, def: Boolean) = StopwatchTimerFgService.readFlutterBool(prefs, "flutter.stopwatch_cfg_${id}_${prop}", def)
-            fun str(prop: String, def: String)  = (prefs.getString("flutter.stopwatch_cfg_${id}_${prop}", def) ?: def)
+            fun int(prop: String, def: Int)       = prefs.getInt("flutter.stopwatch_cfg_${id}_${prop}", def)
+            fun bool(prop: String, def: Boolean)  = StopwatchTimerFgService.readFlutterBool(prefs, "flutter.stopwatch_cfg_${id}_${prop}", def)
+            fun str(prop: String, def: String)    = (prefs.getString("flutter.stopwatch_cfg_${id}_${prop}", def) ?: def)
 
             return SwWidgetCfg(
                 bgArgb           = int("bgArgb",            0xCC000000.toInt()),
@@ -277,80 +211,117 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
             layoutResId: Int,
             providerClass: Class<*>,
         ): RemoteViews {
+            val layoutName = when (layoutResId) {
+                R.layout.widget_stopwatch_style1 -> "style1"
+                R.layout.widget_stopwatch_style3 -> "style3"
+                else -> "unknown($layoutResId)"
+            }
+            println("[SwWidget] buildRemoteViews: layout=$layoutName pkg=${context.packageName}")
+
             val views = RemoteViews(context.packageName, layoutResId)
 
             views.setInt(R.id.sw_root, "setBackgroundColor", cfg.bgArgb)
+            println("[SwWidget] buildRemoteViews: bg=0x${cfg.bgArgb.toUInt().toString(16)}")
 
             // Texto de tiempo (sin milisegundos — widget actualiza ~1s)
-            val timeText = formatTime(
-                if (state.mode == StopwatchTimerFgService.MODE_TIMER) state.remaining else state.elapsed
-            )
+            val timeMs   = if (state.mode == StopwatchTimerFgService.MODE_TIMER) state.remaining else state.elapsed
+            val timeText = formatTime(timeMs)
             views.setTextViewText(R.id.sw_time, timeText)
             views.setTextColor(R.id.sw_time, cfg.timeColor)
             views.setFloat(R.id.sw_time, "setTextSize", cfg.timeSizeSp.toFloat())
+            println("[SwWidget] buildRemoteViews: sw_time='$timeText' timeMs=$timeMs sizeSp=${cfg.timeSizeSp}")
 
-            // PendingIntents de botones comunes
-            views.setOnClickPendingIntent(R.id.btn_start_pause,
-                makeActionIntent(context, ACTION_START_PAUSE, providerClass, 10))
-            views.setOnClickPendingIntent(R.id.btn_reset,
-                makeActionIntent(context, ACTION_RESET, providerClass, 11))
+            // Botones comunes: play/pause y reset → servicio directamente
+            val piPlay  = makeSvcIntent(context, StopwatchTimerFgService.ACTION_TOGGLE_START_PAUSE, 10)
+            val piReset = makeSvcIntent(context, StopwatchTimerFgService.ACTION_RESET, 11)
+            views.setOnClickPendingIntent(R.id.btn_start_pause, piPlay)
+            views.setOnClickPendingIntent(R.id.btn_reset, piReset)
+            println("[SwWidget] buildRemoteViews: btn_start_pause y btn_reset configurados")
+
+            // Botón de apagar alarma (visible SOLO cuando state == FINISHED)
+            val isFinished = state.state == StopwatchTimerFgService.STATE_FINISHED
+            val piStopAlarm = makeSvcIntent(context, StopwatchTimerFgService.ACTION_STOP_ALARM, 17)
+            views.setOnClickPendingIntent(R.id.btn_stop_alarm, piStopAlarm)
+            views.setViewVisibility(R.id.btn_stop_alarm, if (isFinished) View.VISIBLE else View.GONE)
+            println("[SwWidget] buildRemoteViews: btn_stop_alarm isFinished=$isFinished visibility=${if (isFinished) "VISIBLE" else "GONE"}")
 
             // ── Por estilo ──────────────────────────────────────────────────────────────────
 
+            println("[SwWidget] buildRemoteViews: delegando a build$layoutName")
             when (layoutResId) {
-                R.layout.widget_stopwatch_style1 -> buildStyle1(context, views, cfg, state, providerClass)
-                R.layout.widget_stopwatch_style3 -> buildStyle3(context, views, cfg, state, providerClass)
+                R.layout.widget_stopwatch_style1 -> buildStyle1(context, views, cfg, state)
+                R.layout.widget_stopwatch_style3 -> buildStyle3(context, views, cfg, state)
             }
 
-            // Iconos de play/pause según estado
+            // Iconos estáticos con tinte
+            applyStaticIconColors(views, cfg, layoutResId)
+            println("[SwWidget] buildRemoteViews: applyStaticIconColors OK iconColorEnabled=${cfg.iconColorEnabled}")
+
+            // Icono de play/pause según estado (puede usar b64 override)
+            val isRunning = state.state == StopwatchTimerFgService.STATE_RUNNING
+            println("[SwWidget] buildRemoteViews: applyPlayPauseIcon isRunning=$isRunning")
             applyPlayPauseIcon(views, cfg, state)
 
-            // Tap en el tiempo → abre app
-            views.setOnClickPendingIntent(R.id.sw_time,
-                makeActionIntent(context, ACTION_OPEN_APP, providerClass, 15))
+            // Tap en el tiempo → abre app solo en style1
+            // En style3, sw_time es match_parent sobre el anillo; su listener capturaría todos los taps
+            if (layoutResId == R.layout.widget_stopwatch_style1) {
+                val piOpen = makeOpenAppIntent(context, 15)
+                views.setOnClickPendingIntent(R.id.sw_time, piOpen)
+                println("[SwWidget] buildRemoteViews: style1 — sw_time click → openApp")
+            } else {
+                println("[SwWidget] buildRemoteViews: style3 — sw_time sin click listener")
+            }
 
+            println("[SwWidget] buildRemoteViews: ✓ RemoteViews listas para $layoutName")
             return views
         }
 
         private fun buildStyle1(
             context: Context, views: RemoteViews, cfg: SwWidgetCfg,
-            state: SwState, cls: Class<*>
+            state: SwState,
         ) {
-            val isTimer = state.mode == StopwatchTimerFgService.MODE_TIMER
+            val isTimer    = state.mode == StopwatchTimerFgService.MODE_TIMER
+            val isFinished = state.state == StopwatchTimerFgService.STATE_FINISHED
 
-            // Etiqueta de modo como título
             val modeText = if (isTimer) cfg.labelTimer else cfg.labelStopwatch
             views.setTextViewText(R.id.sw_mode_label, modeText)
             views.setTextColor(R.id.sw_mode_label, cfg.modeLabelColor)
             views.setFloat(R.id.sw_mode_label, "setTextSize", cfg.modeLabelSizeSp.toFloat())
 
-            // Botón de vuelta (solo cronómetro)
+            // Vuelta: solo en cronómetro y cuando no está en alarma
             views.setViewVisibility(R.id.btn_lap,
-                if (!isTimer) View.VISIBLE else View.GONE)
+                if (!isTimer && !isFinished) View.VISIBLE else View.GONE)
             views.setOnClickPendingIntent(R.id.btn_lap,
-                makeActionIntent(context, ACTION_LAP, cls, 12))
+                makeSvcIntent(context, StopwatchTimerFgService.ACTION_LAP, 12))
 
-            // Botón cambiar modo
+            // Cambiar modo
             views.setOnClickPendingIntent(R.id.btn_toggle_mode,
-                makeActionIntent(context, ACTION_TOGGLE_MODE, cls, 13))
+                makeSvcIntent(context, StopwatchTimerFgService.ACTION_TOGGLE_MODE, 13))
 
-            // Botones de paso para temporizador (solo en modo timer)
+            // +/- solo en modo timer y cuando no está en alarma
             views.setViewVisibility(R.id.btn_timer_sub,
-                if (isTimer) View.VISIBLE else View.GONE)
+                if (isTimer && !isFinished) View.VISIBLE else View.GONE)
             views.setViewVisibility(R.id.btn_timer_add,
-                if (isTimer) View.VISIBLE else View.GONE)
+                if (isTimer && !isFinished) View.VISIBLE else View.GONE)
             views.setOnClickPendingIntent(R.id.btn_timer_sub,
-                makeActionIntent(context, ACTION_TIMER_SUB_STEP, cls, 14))
+                makeSvcIntentWithStep(context, StopwatchTimerFgService.ACTION_TIMER_SUB_STEP, cfg.timerStepMinutes * 60_000L, 14))
             views.setOnClickPendingIntent(R.id.btn_timer_add,
-                makeActionIntent(context, ACTION_TIMER_ADD_STEP, cls, 16))
+                makeSvcIntentWithStep(context, StopwatchTimerFgService.ACTION_TIMER_ADD_STEP, cfg.timerStepMinutes * 60_000L, 16))
         }
 
         private fun buildStyle3(
             context: Context, views: RemoteViews, cfg: SwWidgetCfg,
-            state: SwState, cls: Class<*>
+            state: SwState,
         ) {
+            val isFinished = state.state == StopwatchTimerFgService.STATE_FINISHED
+            println("[SwWidget3] buildStyle3: mode=${state.mode} state=${state.state} elapsed=${state.elapsed} remaining=${state.remaining} timerTarget=${state.timerTarget} laps=${state.laps.size} isFinished=$isFinished")
+
+            // Cuando la alarma está sonando: ocultar barra de botones normales
+            views.setViewVisibility(R.id.sw_btn_bar, if (isFinished) View.GONE else View.VISIBLE)
+            println("[SwWidget3] buildStyle3: sw_btn_bar ${if (isFinished) "GONE" else "VISIBLE"}")
+
             // Anillo de progreso como Bitmap
-            val sizePx = dpToPx(context, 90)
+            val sizePx  = dpToPx(context, 220)
             val thickPx = dpToPx(context, cfg.ringThicknessDp)
             val progress: Float = when {
                 state.mode == StopwatchTimerFgService.MODE_TIMER && state.timerTarget > 0 ->
@@ -366,18 +337,22 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
                 }
                 else -> 0f
             }
+            println("[SwWidget3] buildStyle3: ring sizePx=$sizePx thickPx=$thickPx progress=$progress")
             val ring = drawRing(sizePx, cfg.ringTrackArgb, cfg.ringFillArgb, thickPx, progress)
             views.setImageViewBitmap(R.id.sw_ring, ring)
+            println("[SwWidget3] buildStyle3: ring bitmap ${ring.width}x${ring.height}px asignado a sw_ring")
 
             // Etiqueta de modo
             val modeText = if (state.mode == StopwatchTimerFgService.MODE_TIMER) cfg.labelTimer else cfg.labelStopwatch
             views.setTextViewText(R.id.sw_mode_label, modeText)
             views.setTextColor(R.id.sw_mode_label, cfg.modeLabelColor)
+            println("[SwWidget3] buildStyle3: sw_mode_label='$modeText'")
 
             // Vueltas (más reciente primero, hasta 3)
-            val lapIds = listOf(R.id.sw_lap_1, R.id.sw_lap_2, R.id.sw_lap_3)
-            val maxLaps = cfg.lapCount.coerceIn(1, 3)
+            val lapIds    = listOf(R.id.sw_lap_1, R.id.sw_lap_2, R.id.sw_lap_3)
+            val maxLaps   = cfg.lapCount.coerceIn(1, 3)
             val totalLaps = state.laps.size
+            println("[SwWidget3] buildStyle3: laps totalLaps=$totalLaps maxLaps=$maxLaps")
             for (i in lapIds.indices) {
                 val lapViewId = lapIds[i]
                 val lapIndex  = totalLaps - 1 - i
@@ -389,12 +364,22 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(lapViewId, buildLapText(lap, cfg))
                     views.setTextColor(lapViewId, cfg.lapColor)
                     views.setFloat(lapViewId, "setTextSize", cfg.lapSizeSp.toFloat())
+                    println("[SwWidget3] buildStyle3: lap_${i+1} text='${buildLapText(lap, cfg)}'")
                 }
             }
 
-            // Botón toggle modo
-            views.setOnClickPendingIntent(R.id.btn_toggle_mode,
-                makeActionIntent(context, ACTION_TOGGLE_MODE, cls, 13))
+            // Cambiar modo
+            val piToggleMode = makeSvcIntent(context, StopwatchTimerFgService.ACTION_TOGGLE_MODE, 13)
+            views.setOnClickPendingIntent(R.id.btn_toggle_mode, piToggleMode)
+            println("[SwWidget3] buildStyle3: btn_toggle_mode PI configurado reqCode=13")
+            println("[SwWidget3] buildStyle3: ✓ fin")
+        }
+
+        // ── Aplica icono + tinte de color a un ImageButton ────────────────────────────────
+
+        private fun applyIcon(views: RemoteViews, viewId: Int, resId: Int, cfg: SwWidgetCfg) {
+            views.setImageViewResource(viewId, resId)
+            if (cfg.iconColorEnabled) views.setInt(viewId, "setColorFilter", cfg.iconColor)
         }
 
         // ── Play/Pause icon según estado ──────────────────────────────────────────────────
@@ -409,31 +394,74 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
                     return
                 }
             }
-            views.setImageViewResource(R.id.btn_start_pause,
-                if (isRunning) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
-            if (cfg.iconColorEnabled) {
-                views.setInt(R.id.btn_start_pause, "setColorFilter", cfg.iconColor)
+            applyIcon(views, R.id.btn_start_pause,
+                if (isRunning) R.drawable.ic_sw_pause else R.drawable.ic_sw_play, cfg)
+        }
+
+        // ── Aplica tinte a todos los botones estáticos ────────────────────────────────────
+
+        private fun applyStaticIconColors(views: RemoteViews, cfg: SwWidgetCfg, layoutResId: Int) {
+            applyIcon(views, R.id.btn_reset, R.drawable.ic_sw_reset, cfg)
+            applyIcon(views, R.id.btn_toggle_mode, R.drawable.ic_sw_swap, cfg)
+            applyIcon(views, R.id.btn_stop_alarm, R.drawable.ic_sw_alarm_off, cfg)
+            if (layoutResId == R.layout.widget_stopwatch_style1) {
+                val lapB64 = cfg.iconLap
+                if (lapB64.isNotEmpty()) {
+                    val bmp = decodeBase64Bitmap(lapB64, dpToPxStatic(cfg.iconSizeDp))
+                    if (bmp != null) views.setImageViewBitmap(R.id.btn_lap, bmp)
+                    else applyIcon(views, R.id.btn_lap, R.drawable.ic_sw_lap, cfg)
+                } else {
+                    applyIcon(views, R.id.btn_lap, R.drawable.ic_sw_lap, cfg)
+                }
+                applyIcon(views, R.id.btn_timer_sub, R.drawable.ic_sw_minus, cfg)
+                applyIcon(views, R.id.btn_timer_add, R.drawable.ic_sw_plus, cfg)
             }
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────────────────
 
-        fun makeActionIntent(context: Context, action: String, cls: Class<*>, reqCode: Int): PendingIntent {
-            val i = Intent(context, cls).setAction(action)
-            return PendingIntent.getBroadcast(context, reqCode, i,
+        fun makeSvcIntent(context: Context, action: String, reqCode: Int): PendingIntent {
+            val i = Intent(context, StopwatchTimerFgService::class.java).setAction(action)
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            val isFg = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            val pi = if (isFg)
+                PendingIntent.getForegroundService(context, reqCode, i, flags)
+            else
+                PendingIntent.getService(context, reqCode, i, flags)
+            println("[SwWidget] makeSvcIntent: action=$action reqCode=$reqCode isForeground=$isFg")
+            return pi
+        }
+
+        fun makeSvcIntentWithStep(context: Context, action: String, stepMs: Long, reqCode: Int): PendingIntent {
+            val i = Intent(context, StopwatchTimerFgService::class.java)
+                .setAction(action)
+                .putExtra(StopwatchTimerFgService.EXTRA_TIMER_STEP_MS, stepMs)
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                PendingIntent.getForegroundService(context, reqCode, i, flags)
+            else
+                PendingIntent.getService(context, reqCode, i, flags)
+        }
+
+        fun makeOpenAppIntent(context: Context, reqCode: Int): PendingIntent {
+            val i = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                ?: Intent(context, MainActivity::class.java)
+            i.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            i.putExtra("navigate_to", "stopwatch_timer")
+            return PendingIntent.getActivity(context, reqCode, i,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
 
         fun drawRing(sizePx: Int, trackArgb: Int, fillArgb: Int, thickPx: Int, progress: Float): Bitmap {
-            val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+            val bmp    = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmp)
-            val inset = thickPx / 2f
-            val rect = RectF(inset, inset, sizePx - inset, sizePx - inset)
+            val inset  = thickPx / 2f
+            val rect   = RectF(inset, inset, sizePx - inset, sizePx - inset)
 
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                style = Paint.Style.STROKE
+                style       = Paint.Style.STROKE
                 strokeWidth = thickPx.toFloat()
-                strokeCap = Paint.Cap.ROUND
+                strokeCap   = Paint.Cap.ROUND
             }
             paint.color = trackArgb
             canvas.drawOval(rect, paint)
@@ -442,7 +470,6 @@ abstract class BaseStopwatchWidgetProvider : AppWidgetProvider() {
             return bmp
         }
 
-        // Siempre H:M:S — sin milisegundos (widget actualiza ~1s, ms se verían en saltos)
         fun formatTime(ms: Long): String {
             val total = ms.coerceAtLeast(0L)
             val h = total / 3_600_000L
@@ -488,6 +515,7 @@ class StopwatchWidgetProviderStyle1 : BaseStopwatchWidgetProvider() {
         fun updateAll(context: Context) {
             val mgr = AppWidgetManager.getInstance(context)
             val ids = mgr.getAppWidgetIds(ComponentName(context, StopwatchWidgetProviderStyle1::class.java))
+            println("[SwWidget] Style1.updateAll: ${ids.size} widget(s) ids=${ids.toList()}")
             if (ids.isEmpty()) return
             for (id in ids) {
                 try {
@@ -498,7 +526,10 @@ class StopwatchWidgetProviderStyle1 : BaseStopwatchWidgetProvider() {
                         context, cfg, state, R.layout.widget_stopwatch_style1,
                         StopwatchWidgetProviderStyle1::class.java)
                     mgr.updateAppWidget(id, views)
-                } catch (_: Exception) { }
+                    println("[SwWidget] Style1.updateAll: ✓ widgetId=$id OK")
+                } catch (e: Exception) {
+                    println("[SwWidget] Style1.updateAll: ERROR id=$id: ${e.message}")
+                }
             }
         }
     }
@@ -510,17 +541,28 @@ class StopwatchWidgetProviderStyle3 : BaseStopwatchWidgetProvider() {
         fun updateAll(context: Context) {
             val mgr = AppWidgetManager.getInstance(context)
             val ids = mgr.getAppWidgetIds(ComponentName(context, StopwatchWidgetProviderStyle3::class.java))
-            if (ids.isEmpty()) return
+            println("[SwWidget3] Style3.updateAll: ${ids.size} widget(s) ids=${ids.toList()}")
+            if (ids.isEmpty()) {
+                println("[SwWidget3] Style3.updateAll: NO hay widgets style3 en pantalla")
+                return
+            }
             for (id in ids) {
+                println("[SwWidget3] Style3.updateAll: procesando widgetId=$id")
                 try {
                     val prefs = BaseStopwatchWidgetProvider.getPrefs(context)
                     val cfg   = BaseStopwatchWidgetProvider.readWidgetCfg(prefs, "style3")
+                    println("[SwWidget3] Style3.updateAll: cfg bgArgb=0x${cfg.bgArgb.toUInt().toString(16)} ringTrack=0x${cfg.ringTrackArgb.toUInt().toString(16)} ringFill=0x${cfg.ringFillArgb.toUInt().toString(16)}")
                     val state = BaseStopwatchWidgetProvider.readState(prefs)
+                    println("[SwWidget3] Style3.updateAll: state mode=${state.mode} state=${state.state} elapsed=${state.elapsed} remaining=${state.remaining}")
                     val views = BaseStopwatchWidgetProvider.buildRemoteViews(
                         context, cfg, state, R.layout.widget_stopwatch_style3,
                         StopwatchWidgetProviderStyle3::class.java)
                     mgr.updateAppWidget(id, views)
-                } catch (_: Exception) { }
+                    println("[SwWidget3] Style3.updateAll: ✓ widgetId=$id actualizado")
+                } catch (e: Exception) {
+                    println("[SwWidget3] Style3.updateAll: ERROR id=$id: ${e.message}")
+                    e.printStackTrace()
+                }
             }
         }
     }

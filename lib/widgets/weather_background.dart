@@ -21,12 +21,18 @@ class WeatherBackground extends StatefulWidget {
   /// 0-100: mezcla el degradado base hacia negro (personalización del usuario).
   final int darkenPct;
 
+  /// Si se provee, congela la animación en este valor de tiempo (segundos
+  /// virtuales) y detiene el controlador interno. Útil para el modo test del
+  /// editor, que pausa externamente y avanza frame a frame.
+  final double? overrideT;
+
   const WeatherBackground({
     super.key,
     required this.weatherCode,
     required this.isDay,
     this.windSpeed = 0,
     this.darkenPct = 0,
+    this.overrideT,
   });
 
   @override
@@ -57,6 +63,12 @@ class _WeatherBackgroundState extends State<WeatherBackground>
       _particles
         ..clear()
         ..addAll(_buildParticles());
+    }
+    // Detener/reanudar el controller según si hay override externo.
+    if (widget.overrideT != null && oldWidget.overrideT == null) {
+      _controller.stop();
+    } else if (widget.overrideT == null && oldWidget.overrideT != null) {
+      _controller.repeat(min: 0, max: 1000, period: const Duration(seconds: 1000));
     }
   }
 
@@ -105,13 +117,31 @@ class _WeatherBackgroundState extends State<WeatherBackground>
   Widget build(BuildContext context) {
     final colors =
         WeatherCodeInfo.gradientColors(widget.weatherCode, isDay: widget.isDay);
+    final category = WeatherCodeInfo.category(widget.weatherCode);
+
+    // Modo override: frame estático en t dado (modo test del editor).
+    if (widget.overrideT != null) {
+      return CustomPaint(
+        painter: _WeatherPainter(
+          t: widget.overrideT!,
+          category: category,
+          isDay: widget.isDay,
+          windSpeed: widget.windSpeed,
+          colors: colors,
+          particles: _particles,
+          darkenPct: widget.darkenPct,
+        ),
+        size: Size.infinite,
+      );
+    }
+
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
         return CustomPaint(
           painter: _WeatherPainter(
             t: _controller.value,
-            category: WeatherCodeInfo.category(widget.weatherCode),
+            category: category,
             isDay: widget.isDay,
             windSpeed: widget.windSpeed,
             colors: colors,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../services/sensor_service.dart';
 import '../../services/preferences_service.dart';
 
@@ -46,6 +47,8 @@ class _ReceptorHrScreenState extends State<ReceptorHrScreen> {
   }
 
   Future<void> _load() async {
+    await Hive.initFlutter();
+    await Hive.openBox('hr_log');
     final profile = await PreferencesService.getBodyProfile();
     if (!mounted) return;
     final age = profile['age'] ?? 30;
@@ -96,6 +99,17 @@ class _ReceptorHrScreenState extends State<ReceptorHrScreen> {
       _kcalSession = kcal.toDouble();
     });
 
+    // Persistir lectura en Hive (historial del día)
+    final box = Hive.box('hr_log');
+    box.add({
+      'timestamp': now.millisecondsSinceEpoch,
+      'bpm': data.bpm,
+      'zona': zona,
+      'kcal_acum': _kcalSession,
+    });
+    // Limitar a 1440 entradas (≈ 24 h a 1 lectura/min)
+    if (box.length > 1440) box.deleteAt(0);
+
     // Alertas
     if (data.bpm > _hrAlertHigh) {
       SensorService.addDebugLog('hr_monitor',
@@ -130,6 +144,12 @@ class _ReceptorHrScreenState extends State<ReceptorHrScreen> {
         backgroundColor: customColor[700],
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'Historial del día',
+            onPressed: () =>
+                Navigator.pushNamed(context, '/receptor_hr_history'),
+          ),
           IconButton(
             icon: const Icon(Icons.bug_report),
             tooltip: 'Debug',

@@ -27,14 +27,17 @@ import org.json.JSONObject
 class StopwatchTimerFgService : Service() {
 
     companion object {
-        const val ACTION_START           = "com.example.connect.stopwatch.START"
-        const val ACTION_PAUSE           = "com.example.connect.stopwatch.PAUSE"
-        const val ACTION_RESET           = "com.example.connect.stopwatch.RESET"
-        const val ACTION_LAP             = "com.example.connect.stopwatch.LAP"
-        const val ACTION_SET_TIMER       = "com.example.connect.stopwatch.SET_TIMER"
-        const val ACTION_SET_MODE        = "com.example.connect.stopwatch.SET_MODE"
-        const val ACTION_TIMER_ADD_STEP  = "com.example.connect.stopwatch.TIMER_ADD_STEP"
-        const val ACTION_TIMER_SUB_STEP  = "com.example.connect.stopwatch.TIMER_SUB_STEP"
+        const val ACTION_START              = "com.example.connect.stopwatch.START"
+        const val ACTION_PAUSE              = "com.example.connect.stopwatch.PAUSE"
+        const val ACTION_TOGGLE_START_PAUSE = "com.example.connect.stopwatch.TOGGLE_START_PAUSE"
+        const val ACTION_RESET              = "com.example.connect.stopwatch.RESET"
+        const val ACTION_LAP                = "com.example.connect.stopwatch.LAP"
+        const val ACTION_SET_TIMER          = "com.example.connect.stopwatch.SET_TIMER"
+        const val ACTION_SET_MODE           = "com.example.connect.stopwatch.SET_MODE"
+        const val ACTION_TOGGLE_MODE        = "com.example.connect.stopwatch.TOGGLE_MODE"
+        const val ACTION_TIMER_ADD_STEP     = "com.example.connect.stopwatch.TIMER_ADD_STEP"
+        const val ACTION_TIMER_SUB_STEP     = "com.example.connect.stopwatch.TIMER_SUB_STEP"
+        const val ACTION_STOP_ALARM         = "com.example.connect.stopwatch.STOP_ALARM"
         const val ACTION_TICK_BROADCAST  = "com.example.connect.stopwatch.TICK"
         const val EXTRA_TIMER_DURATION   = "timer_duration_ms"
         const val EXTRA_TIMER_STEP_MS    = "timer_step_ms"
@@ -114,10 +117,11 @@ class StopwatchTimerFgService : Service() {
         isRunning = true
         createNotifChannel()
         loadStateFromPrefs()
-        Log.d("StopwatchSvc", "Service created. state=$state mode=$mode")
+        println("[SwSvc] onCreate: state=$state mode=$mode")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        println("[SwSvc] ▶ onStartCommand action=${intent?.action ?: "NULL"}")
         startForeground(NOTIF_ID, buildNotification())
         handleAction(intent)
         return START_STICKY
@@ -131,33 +135,52 @@ class StopwatchTimerFgService : Service() {
         stopTick()
         mediaPlayer?.release()
         mediaPlayer = null
-        Log.d("StopwatchSvc", "Service destroyed")
+        println("[SwSvc] onDestroy")
     }
 
     // ── Manejo de acciones ─────────────────────────────────────────────────────────────────
 
     private fun handleAction(intent: Intent?) {
-        when (intent?.action) {
-            ACTION_START -> doStart()
-            ACTION_PAUSE -> doPause()
-            ACTION_RESET -> doReset()
-            ACTION_LAP   -> doLap()
+        val action = intent?.action
+        println("[SwSvc] handleAction: action=$action  state=$state  mode=$mode")
+        when (action) {
+            ACTION_START -> { println("[SwSvc] → doStart"); doStart() }
+            ACTION_PAUSE -> { println("[SwSvc] → doPause"); doPause() }
+            ACTION_TOGGLE_START_PAUSE -> {
+                println("[SwSvc] → TOGGLE_START_PAUSE  state=$state → ${if (state == STATE_RUNNING) "pause" else "start"}")
+                if (state == STATE_RUNNING) doPause() else doStart()
+            }
+            ACTION_RESET -> { println("[SwSvc] → doReset"); doReset() }
+            ACTION_LAP   -> { println("[SwSvc] → doLap"); doLap() }
+            ACTION_TOGGLE_MODE -> {
+                val current = prefs.getString(KEY_MODE, MODE_STOPWATCH) ?: MODE_STOPWATCH
+                val next = if (current == MODE_STOPWATCH) MODE_TIMER else MODE_STOPWATCH
+                println("[SwSvc] → TOGGLE_MODE  $current → $next")
+                doSetMode(next)
+            }
             ACTION_SET_TIMER -> {
                 val ms = intent.getLongExtra(EXTRA_TIMER_DURATION, 0L)
+                println("[SwSvc] → SET_TIMER ms=$ms")
                 if (ms > 0) doSetTimer(ms)
             }
             ACTION_SET_MODE -> {
                 val m = intent.getStringExtra(EXTRA_MODE) ?: MODE_STOPWATCH
+                println("[SwSvc] → SET_MODE mode=$m")
                 doSetMode(m)
             }
             ACTION_TIMER_ADD_STEP -> {
                 val ms = intent.getLongExtra(EXTRA_TIMER_STEP_MS, 5 * 60_000L)
+                println("[SwSvc] → TIMER_ADD_STEP ms=$ms")
                 doAdjustTimer(ms)
             }
             ACTION_TIMER_SUB_STEP -> {
                 val ms = intent.getLongExtra(EXTRA_TIMER_STEP_MS, 5 * 60_000L)
+                println("[SwSvc] → TIMER_SUB_STEP ms=$ms")
                 doAdjustTimer(-ms)
             }
+            ACTION_STOP_ALARM -> { println("[SwSvc] → doStopAlarm"); doStopAlarm() }
+            null -> println("[SwSvc] handleAction: intent o action es NULL")
+            else -> println("[SwSvc] handleAction: acción desconocida '$action'")
         }
     }
 
@@ -180,7 +203,7 @@ class StopwatchTimerFgService : Service() {
         updateNotification()
         broadcastTick()
         updateWidgets()
-        Log.d("StopwatchSvc", "Started. mode=$mode timerTarget=$timerTarget accum=$accumulated")
+        println("[SwSvc] doStart: mode=$mode timerTarget=$timerTarget accum=$accumulated")
     }
 
     private fun doPause() {
@@ -199,7 +222,7 @@ class StopwatchTimerFgService : Service() {
         updateNotification()
         broadcastTick()
         updateWidgets()
-        Log.d("StopwatchSvc", "Paused. accum=$accumulated")
+        println("[SwSvc] doPause: accum=$accumulated")
     }
 
     private fun doReset() {
@@ -215,7 +238,7 @@ class StopwatchTimerFgService : Service() {
         updateNotification()
         broadcastTick()
         updateWidgets()
-        Log.d("StopwatchSvc", "Reset.")
+        println("[SwSvc] doReset")
     }
 
     private fun doLap() {
@@ -229,7 +252,7 @@ class StopwatchTimerFgService : Service() {
         // Sonido/vibración de vuelta
         if (readFlutterBool(prefs, KEY_LAP_VIB, false)) vibrateShort()
         if (readFlutterBool(prefs, KEY_LAP_SND, false)) playSound(prefs.getString(KEY_LAP_SND_URI, "") ?: "")
-        Log.d("StopwatchSvc", "Lap #${laps.size} elapsed=$elapsed")
+        println("[SwSvc] doLap #${laps.size} elapsed=$elapsed")
     }
 
     private fun doSetTimer(ms: Long) {
@@ -272,6 +295,24 @@ class StopwatchTimerFgService : Service() {
         updateWidgets()
     }
 
+    private fun doStopAlarm() {
+        println("[SwSvc] doStopAlarm: deteniendo sonido y vibración")
+        try { vibrator.cancel() } catch (_: Exception) { }
+        try { mediaPlayer?.stop(); mediaPlayer?.release(); mediaPlayer = null } catch (_: Exception) { }
+        // Vuelve al estado idle para que el widget muestre los botones normales
+        accumulated = 0L
+        startEpoch  = 0L
+        laps.clear()
+        state = STATE_IDLE
+        if (timerTarget == 0L) timerTarget = 5 * 60_000L
+        prefs.edit().putLong(KEY_TIMER_REM, timerTarget).apply()
+        saveState()
+        updateNotification()
+        broadcastTick()
+        updateWidgets()
+        println("[SwSvc] doStopAlarm: alarma detenida, estado → idle")
+    }
+
     private fun doFinish() {
         stopTick()
         state = STATE_FINISHED
@@ -281,7 +322,7 @@ class StopwatchTimerFgService : Service() {
         updateWidgets()
         if (readFlutterBool(prefs, KEY_VIB_ENABLED, true)) vibrateFinish()
         if (readFlutterBool(prefs, KEY_SND_ENABLED, true))  playSound(prefs.getString(KEY_SND_URI, "") ?: "")
-        Log.d("StopwatchSvc", "Timer finished!")
+        println("[SwSvc] doFinish: temporizador llegó a cero")
     }
 
     // ── Tick ──────────────────────────────────────────────────────────────────────────────
@@ -389,10 +430,19 @@ class StopwatchTimerFgService : Service() {
     // ── Widget update ─────────────────────────────────────────────────────────────────────
 
     private fun updateWidgets() {
+        println("[SwSvc] updateWidgets: estado=$state mode=$mode")
         try {
             StopwatchWidgetProviderStyle1.updateAll(applicationContext)
+            println("[SwSvc] updateWidgets: style1 OK")
+        } catch (e: Exception) {
+            println("[SwSvc] updateWidgets: style1 ERROR ${e.message}")
+        }
+        try {
             StopwatchWidgetProviderStyle3.updateAll(applicationContext)
-        } catch (_: Exception) { }
+            println("[SwSvc] updateWidgets: style3 OK")
+        } catch (e: Exception) {
+            println("[SwSvc] updateWidgets: style3 ERROR ${e.message}")
+        }
     }
 
     // ── Notificación ─────────────────────────────────────────────────────────────────────
@@ -495,7 +545,7 @@ class StopwatchTimerFgService : Service() {
             player.setOnPreparedListener { it.start() }
             mediaPlayer = player
         } catch (e: Exception) {
-            Log.e("StopwatchSvc", "Error playing sound: ${e.message}")
+            println("[SwSvc] playSound ERROR: ${e.message}")
         }
     }
 
@@ -518,7 +568,7 @@ class StopwatchTimerFgService : Service() {
                 vibrator.vibrate(longArrayOf(0L, 400L, 200L, 400L, 200L, 600L), -1)
             }
         } catch (e: Exception) {
-            Log.e("StopwatchSvc", "Error vibrating: ${e.message}")
+            println("[SwSvc] vibrateFinish ERROR: ${e.message}")
         }
     }
 

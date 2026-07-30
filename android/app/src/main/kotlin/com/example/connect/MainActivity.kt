@@ -339,10 +339,8 @@ class MainActivity: FlutterActivity() {
                     override fun onCancel(arguments: Any?) = onListen(null)
                 })
         }
-        sensorEventChannel("connect/heart_rate")  { SensorForegroundService.hrSink      = it }
-        sensorEventChannel("connect/steps")       { SensorForegroundService.stepsSink   = it }
-        sensorEventChannel("connect/compass")     { SensorForegroundService.compassSink = it }
-        sensorEventChannel("connect/wrist_state") { SensorForegroundService.wristSink   = it }
+        sensorEventChannel("connect/heart_rate")  { SensorForegroundService.hrSink    = it }
+        sensorEventChannel("connect/steps")       { SensorForegroundService.stepsSink = it }
         sensorEventChannel("connect/sensor_debug") { sink ->
             SensorForegroundService.debugSink = sink   // receptor: logs del servicio de sensores
             sensorDebugEventSink = sink                // emisor: logs BT recibidos de sensor_data

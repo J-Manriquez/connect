@@ -97,25 +97,77 @@ class ImageWidgetPreview extends StatelessWidget {
 
     // Controls overlay (preview always shows them as a hint)
     if (cfg.controlsVisible) {
+      final iconColor = Color(cfg.ctrlIconColor);
+      final bgColor = Color(cfg.ctrlBgColor);
+      final radius = cfg.ctrlCornerRadiusDp.toDouble();
+
+      final prevBtn = _ControlBtn(
+        icon: Icons.chevron_left,
+        iconColor: iconColor,
+        bgColor: bgColor,
+        radius: radius,
+      );
+      final nextBtn = _ControlBtn(
+        icon: Icons.chevron_right,
+        iconColor: iconColor,
+        bgColor: bgColor,
+        radius: radius,
+      );
+
+      Widget controls;
+      if (cfg.ctrlHorizPos == 1) {
+        // Centrado: ambos botones juntos en el centro horizontal
+        controls = Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [prevBtn, const SizedBox(width: 8), nextBtn],
+          ),
+        );
+        if (cfg.ctrlVertPos == 0) controls = Align(alignment: Alignment.topCenter, child: Padding(padding: const EdgeInsets.only(top: 6), child: Row(mainAxisSize: MainAxisSize.min, children: [prevBtn, const SizedBox(width: 8), nextBtn])));
+        if (cfg.ctrlVertPos == 2) controls = Align(alignment: Alignment.bottomCenter, child: Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(mainAxisSize: MainAxisSize.min, children: [prevBtn, const SizedBox(width: 8), nextBtn])));
+      } else {
+        // Expandido: prev a la izquierda, next a la derecha
+        final vertAlignEnum = switch (cfg.ctrlVertPos) {
+          0 => Alignment.topLeft,
+          2 => Alignment.bottomLeft,
+          _ => Alignment.centerLeft,
+        };
+        final vertAlignEnumR = switch (cfg.ctrlVertPos) {
+          0 => Alignment.topRight,
+          2 => Alignment.bottomRight,
+          _ => Alignment.centerRight,
+        };
+        controls = Stack(
+          children: [
+            Align(
+              alignment: vertAlignEnum,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 6,
+                  top: cfg.ctrlVertPos == 0 ? 6 : 0,
+                  bottom: cfg.ctrlVertPos == 2 ? 6 : 0,
+                ),
+                child: prevBtn,
+              ),
+            ),
+            Align(
+              alignment: vertAlignEnumR,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: 6,
+                  top: cfg.ctrlVertPos == 0 ? 6 : 0,
+                  bottom: cfg.ctrlVertPos == 2 ? 6 : 0,
+                ),
+                child: nextBtn,
+              ),
+            ),
+          ],
+        );
+      }
+
       imageContent = Stack(
         fit: StackFit.expand,
-        children: [
-          imageContent,
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: _ControlBtn(Icons.chevron_left),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: _ControlBtn(Icons.chevron_right),
-            ),
-          ),
-        ],
+        children: [imageContent, controls],
       );
     }
 
@@ -153,13 +205,17 @@ class ImageWidgetPreview extends StatelessWidget {
     bool exists = false;
     try { exists = path != null && File(path).existsSync(); } catch (_) {}
     if (!exists) {
-      return Container(
+      print('[img_preview] path nulo o no existe: $path');
+      return ColoredBox(
         color: const Color(0xFF1E1E1E),
         child: const Center(
           child: Icon(Icons.image_outlined, color: Color(0xFF666666), size: 48),
         ),
       );
     }
+
+    const fitNames = ['cover','contain','fill','none','fitWidth'];
+    final fitName = cfg.scaleType < fitNames.length ? fitNames[cfg.scaleType] : '?';
     BoxFit fit;
     switch (cfg.scaleType) {
       case 0: fit = BoxFit.cover; break;
@@ -169,18 +225,39 @@ class ImageWidgetPreview extends StatelessWidget {
       case 4: fit = BoxFit.fitWidth; break;
       default: fit = BoxFit.cover;
     }
-    return Container(
-      color: Color(cfg.bgColor),
-      child: Image.file(
-        File(path!),
-        fit: fit,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder: (_, __, ___) => Container(
-          color: const Color(0xFF1E1E1E),
-          child: const Center(
-            child: Icon(Icons.broken_image_outlined, color: Color(0xFF666666), size: 48),
-          ),
+
+    print('[img_preview] buildImage scaleType=${cfg.scaleType}($fitName) path=$path bgColor=0x${cfg.bgColor.toRadixString(16)}');
+
+    // FittedBox garantiza escala correcta + centrado para TODOS los tamaños/aspect ratios.
+    // Image.file sin width/height → tamaño intrínseco → FittedBox escala para llenar el padre.
+    return SizedBox.expand(
+      child: ColoredBox(
+        color: Color(cfg.bgColor),
+        child: LayoutBuilder(
+          builder: (ctx, constraints) {
+            print('[img_preview] LayoutBuilder constraints=${constraints.maxWidth.toInt()}x${constraints.maxHeight.toInt()} fit=$fitName');
+            return FittedBox(
+              fit: fit,
+              alignment: Alignment.center,
+              child: Image.file(
+                File(path!),
+                frameBuilder: (ctx, child, frame, _) {
+                  if (frame != null) {
+                    // Imagen cargada: intentar obtener dimensiones desde el widget tree
+                    print('[img_preview] imagen cargada frame=$frame fit=$fitName');
+                  }
+                  return child;
+                },
+                errorBuilder: (_, err, __) {
+                  print('[img_preview] ERROR cargando imagen: $err');
+                  return const SizedBox(
+                    width: 48, height: 48,
+                    child: Icon(Icons.broken_image_outlined, color: Color(0xFF666666), size: 48),
+                  );
+                },
+              ),
+            );
+          },
         ),
       ),
     );
@@ -243,7 +320,16 @@ class _DotsRow extends StatelessWidget {
 
 class _ControlBtn extends StatelessWidget {
   final IconData icon;
-  const _ControlBtn(this.icon);
+  final Color iconColor;
+  final Color bgColor;
+  final double radius;
+
+  const _ControlBtn({
+    required this.icon,
+    required this.iconColor,
+    required this.bgColor,
+    required this.radius,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -251,10 +337,10 @@ class _ControlBtn extends StatelessWidget {
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: const Color(0x66000000),
-        borderRadius: BorderRadius.circular(4),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(radius),
       ),
-      child: Icon(icon, color: Colors.white, size: 20),
+      child: Icon(icon, color: iconColor, size: 20),
     );
   }
 }

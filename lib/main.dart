@@ -46,7 +46,8 @@ import 'package:connect/screens/shared/user_body_profile_screen.dart';
 import 'package:connect/screens/receptor/receptor_salud_screen.dart';
 import 'package:connect/screens/receptor/receptor_hr_screen.dart';
 import 'package:connect/screens/receptor/receptor_pasos_screen.dart';
-import 'package:connect/screens/receptor/brujula_screen.dart';
+import 'package:connect/screens/receptor/receptor_hr_history_screen.dart';
+import 'package:connect/screens/receptor/receptor_ejercicios_screen.dart';
 import 'package:connect/screens/emisor/emisor_salud_screen.dart';
 import 'package:connect/screens/emisor/emisor_hr_screen.dart';
 import 'package:connect/screens/emisor/emisor_pasos_screen.dart';
@@ -1070,7 +1071,8 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
         '/receptor_salud':       (context) => const ReceptorSaludScreen(),
         '/receptor_salud_hr':    (context) => const ReceptorHrScreen(),
         '/receptor_salud_pasos': (context) => const ReceptorPasosScreen(),
-        '/receptor_brujula':     (context) => const BrujulaScreen(),
+        '/receptor_hr_history':  (context) => const ReceptorHrHistoryScreen(),
+        '/receptor_ejercicios':  (context) => const ReceptorEjerciciosScreen(),
         '/receptor_salud_debug': (context) => const SaludDebugScreen(side: 'receptor'),
         // Salud — emisor
         '/emisor_salud':         (context) => const EmisorSaludScreen(),

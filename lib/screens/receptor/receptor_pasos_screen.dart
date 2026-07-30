@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:connect/theme_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../../services/sensor_service.dart';
 import '../../services/preferences_service.dart';
 
@@ -17,6 +18,7 @@ class _ReceptorPasosScreenState extends State<ReceptorPasosScreen> {
   int _distanciaM = 0;
   int _stepsGoal = 10000;
   double _heightCm = 170;
+  double _pesoKg = 70;
 
   StreamSubscription<StepsData>? _sub;
 
@@ -27,11 +29,14 @@ class _ReceptorPasosScreenState extends State<ReceptorPasosScreen> {
   }
 
   Future<void> _load() async {
+    await Hive.initFlutter();
+    await Hive.openBox('steps_log');
     final profile = await PreferencesService.getBodyProfile();
     if (!mounted) return;
     setState(() {
       _stepsGoal = profile['steps_goal'] ?? 10000;
       _heightCm = (profile['height_cm'] as num?)?.toDouble() ?? 170.0;
+      _pesoKg = (profile['weight_kg'] as num?)?.toDouble() ?? 70.0;
       _isLoading = false;
     });
     _sub = SensorService.stepsStream.listen((data) {
@@ -40,7 +45,23 @@ class _ReceptorPasosScreenState extends State<ReceptorPasosScreen> {
         _steps = data.steps;
         _distanciaM = data.distanciaM;
       });
+      _persistir(data);
     });
+  }
+
+  /// Guarda una muestra en Hive como máximo una vez por minuto.
+  void _persistir(StepsData data) {
+    final box = Hive.box('steps_log');
+    final ultima = box.isNotEmpty ? box.getAt(box.length - 1) as Map : null;
+    final ahora = DateTime.now().millisecondsSinceEpoch;
+    if (ultima == null || ahora - (ultima['timestamp'] as int) > 60000) {
+      box.add({
+        'timestamp': ahora,
+        'steps': data.steps,
+        'distancia_m': data.distanciaM,
+      });
+      if (box.length > 1440) box.deleteAt(0);
+    }
   }
 
   @override
@@ -52,6 +73,7 @@ class _ReceptorPasosScreenState extends State<ReceptorPasosScreen> {
   double get _progress => (_stepsGoal > 0 ? _steps / _stepsGoal : 0.0).clamp(0.0, 1.0);
   double get _distanciaKm => _distanciaM / 1000.0;
   double get _zancadaCm => _heightCm * 0.415;
+  double get _kcalSteps => _steps * 0.0005 * _pesoKg;
 
   @override
   Widget build(BuildContext context) {
@@ -190,6 +212,34 @@ class _ReceptorPasosScreenState extends State<ReceptorPasosScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                // Calorías estimadas por pasos
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.local_fire_department,
+                            color: Colors.orange, size: 28),
+                        const SizedBox(height: 4),
+                        const Text('Calorías estimadas',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.black54)),
+                        Text(
+                          '${_kcalSteps.toStringAsFixed(1)} kcal',
+                          style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange),
+                        ),
+                        const Text('(basado en pasos y peso)',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.black45)),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 // Info de configuración

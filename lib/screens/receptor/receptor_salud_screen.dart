@@ -22,13 +22,8 @@ class _ReceptorSaludScreenState extends State<ReceptorSaludScreen> {
   int _lastBpm = 0;
   int _lastSteps = 0;
   int _stepsGoal = 10000;
-  double _lastAzimuth = 0;
-  String _wristState = 'desconocido';
-
   StreamSubscription<HrData>? _hrSub;
   StreamSubscription<StepsData>? _stepsSub;
-  StreamSubscription<double>? _compassSub;
-  StreamSubscription<String>? _wristSub;
 
   @override
   void initState() {
@@ -56,22 +51,12 @@ class _ReceptorSaludScreenState extends State<ReceptorSaludScreen> {
       if (!mounted) return;
       setState(() => _lastSteps = data.steps);
     });
-    _compassSub = SensorService.compassStream.listen((az) {
-      if (!mounted) return;
-      setState(() => _lastAzimuth = az);
-    });
-    _wristSub = SensorService.wristStream.listen((state) {
-      if (!mounted) return;
-      setState(() => _wristState = state == 'on_wrist' ? 'puesta' : 'quitada');
-    });
   }
 
   @override
   void dispose() {
     _hrSub?.cancel();
     _stepsSub?.cancel();
-    _compassSub?.cancel();
-    _wristSub?.cancel();
     super.dispose();
   }
 
@@ -170,7 +155,7 @@ class _ReceptorSaludScreenState extends State<ReceptorSaludScreen> {
                 ? 'Servicio de sensores activo'
                 : 'Servicio de sensores inactivo'),
             subtitle: Text(_serviceRunning
-                ? 'Monitoreando HR, pasos, brújula y muñeca'
+                ? 'Monitoreando HR y pasos'
                 : 'Toca para iniciar el monitoreo en segundo plano'),
             value: _serviceRunning,
             onChanged: (_) => _toggleService(),
@@ -190,9 +175,6 @@ class _ReceptorSaludScreenState extends State<ReceptorSaludScreen> {
                 const SizedBox(height: 8),
                 _stateRow(Icons.favorite, 'HR', _lastBpm > 0 ? '$_lastBpm bpm' : '—'),
                 _stateRow(Icons.directions_walk, 'Pasos hoy', '$_lastSteps'),
-                _stateRow(Icons.explore, 'Brújula',
-                    '${_lastAzimuth.toStringAsFixed(1)}°'),
-                _stateRow(Icons.watch, 'Muñeca', _wristState),
               ],
             ),
           ),
@@ -202,6 +184,12 @@ class _ReceptorSaludScreenState extends State<ReceptorSaludScreen> {
           icon: const Icon(Icons.person),
           label: const Text('Perfil corporal'),
           onPressed: () => Navigator.pushNamed(context, '/user_body_profile'),
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.fitness_center),
+          label: const Text('Ejercicios'),
+          onPressed: () => Navigator.pushNamed(context, '/receptor_ejercicios'),
         ),
       ]);
 
@@ -245,25 +233,13 @@ class _ReceptorSaludScreenState extends State<ReceptorSaludScreen> {
         ),
       ]);
 
-  Widget _buildBrujulaTab() => _tabPage([
-        _tabHeader('Brújula',
-            'Orientación cardinal usando el sensor GeoMag Rotation Vector.'),
-        _navCard(
-          icon: Icons.explore,
-          title: 'Brújula',
-          subtitle: 'Azimuth y cardinal en tiempo real',
-          value: '${_lastAzimuth.toStringAsFixed(1)}°',
-          color: Colors.blue[700],
-          onTap: () => Navigator.pushNamed(context, '/receptor_brujula'),
-        ),
-      ]);
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Salud — Receptor'),
@@ -289,7 +265,6 @@ class _ReceptorSaludScreenState extends State<ReceptorSaludScreen> {
                     Tab(text: 'Sensores', icon: Icon(Icons.sensors)),
                     Tab(text: 'Corazón', icon: Icon(Icons.favorite)),
                     Tab(text: 'Pasos', icon: Icon(Icons.directions_walk)),
-                    Tab(text: 'Brújula', icon: Icon(Icons.explore)),
                   ],
                 ),
         ),
@@ -300,7 +275,6 @@ class _ReceptorSaludScreenState extends State<ReceptorSaludScreen> {
                   _buildSensoresTab(),
                   _buildCorazonTab(),
                   _buildPasosTab(),
-                  _buildBrujulaTab(),
                 ],
               ),
         bottomNavigationBar: Column(

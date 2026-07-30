@@ -27,7 +27,9 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
   bool _autoPickChecked = false;
   bool _shouldAutoPick = false;
 
-  static const _tabLabels = ['Fuente', 'Transición', 'Marco', 'Imagen', 'Texto', 'Indicador'];
+  static const _tabLabels = ['Fuente', 'Transición', 'Marco', 'Imagen', 'Texto', 'Indicador', 'Controles'];
+  static const _ctrlHorizLabels = ['Expandido', 'Centrado'];
+  static const _ctrlVertLabels = ['Arriba', 'Centro', 'Abajo'];
   static const _fxLabels = ['Ninguno', 'Ken Burns', 'Fundido negro', 'Fundido blanco'];
   static const _scaleLabels = ['Rellenar', 'Contener', 'Estirar', 'Centro', 'Ancho'];
   static const _captionSrcLabels = ['Nombre del archivo', 'Fecha de modificación'];
@@ -67,7 +69,7 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
   }
 
   Future<void> _load() async {
-    final cfg = await ImageWidgetService.load();
+    final cfg = await ImageWidgetService.loadWithLog();
     if (!mounted) return;
     setState(() { _cfg = cfg; _loading = false; });
   }
@@ -190,6 +192,7 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
                     3 => _buildTabImage(cfg),
                     4 => _buildTabCaption(cfg),
                     5 => _buildTabDots(cfg),
+                    6 => _buildTabControls(cfg),
                     _ => const SizedBox.shrink(),
                   },
                 );
@@ -325,21 +328,6 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
           display: _formatSeconds(cfg.intervalSec),
           onChanged: (v) => _set((c) => c.intervalSec = v.round()),
           onChangeEnd: (v) => _persist('interval_sec', v.round()),
-        ),
-        _sliderTile(
-          label: 'Ocultar controles tras (s)',
-          value: cfg.controlsHideDelaySec.toDouble(),
-          min: 2, max: 30, divisions: 28,
-          display: '${cfg.controlsHideDelaySec}s',
-          onChanged: (v) => _set((c) => c.controlsHideDelaySec = v.round()),
-          onChangeEnd: (v) => _persist('controls_hide_delay_sec', v.round()),
-        ),
-        const SizedBox(height: 8),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Previsualizar con controles visibles'),
-          value: cfg.controlsVisible,
-          onChanged: (v) => _setAndPersist((c) => c.controlsVisible = v, 'controls_visible', v),
         ),
       ],
     );
@@ -628,6 +616,74 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
             onChangeEnd: (v) => _persist('dots_spacing_dp', v.round()),
           ),
         ],
+      ],
+    );
+  }
+
+  // ── Tab 6: Controles ─────────────────────────────────────────────────────
+
+  Widget _buildTabControls(ImageWidgetCfg cfg) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader('Visibilidad'),
+        _sliderTile(
+          label: 'Ocultar controles tras (s)',
+          value: cfg.controlsHideDelaySec.toDouble(),
+          min: 2, max: 30, divisions: 28,
+          display: '${cfg.controlsHideDelaySec}s',
+          onChanged: (v) => _set((c) => c.controlsHideDelaySec = v.round()),
+          onChangeEnd: (v) => _persist('controls_hide_delay_sec', v.round()),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Previsualizar con controles visibles'),
+          value: cfg.controlsVisible,
+          onChanged: (v) => _setAndPersist((c) => c.controlsVisible = v, 'controls_visible', v),
+        ),
+        const SizedBox(height: 16),
+        _sectionHeader('Icono'),
+        _colorTile(
+          label: 'Color del icono',
+          argb: cfg.ctrlIconColor,
+          withAlpha: true,
+          onPicked: (c) => _setAndPersist((cfg) => cfg.ctrlIconColor = c, 'ctrl_icon_color', c),
+        ),
+        const SizedBox(height: 16),
+        _sectionHeader('Fondo del botón'),
+        _colorTile(
+          label: 'Color de fondo',
+          argb: cfg.ctrlBgColor,
+          withAlpha: true,
+          onPicked: (c) => _setAndPersist((cfg) => cfg.ctrlBgColor = c, 'ctrl_bg_color', c),
+        ),
+        _sliderTile(
+          label: 'Radio de esquinas (dp)',
+          value: cfg.ctrlCornerRadiusDp.toDouble(),
+          min: 0, max: 40, divisions: 40,
+          display: '${cfg.ctrlCornerRadiusDp}dp',
+          onChanged: (v) => _set((c) => c.ctrlCornerRadiusDp = v.round()),
+          onChangeEnd: (v) => _persist('ctrl_corner_radius_dp', v.round()),
+        ),
+        const SizedBox(height: 16),
+        _sectionHeader('Posición horizontal'),
+        ...List.generate(_ctrlHorizLabels.length, (i) => RadioListTile<int>(
+          contentPadding: EdgeInsets.zero,
+          title: Text(_ctrlHorizLabels[i]),
+          subtitle: Text(i == 0 ? 'Anterior a la izquierda, siguiente a la derecha' : 'Ambos botones juntos en el centro', style: const TextStyle(fontSize: 12)),
+          value: i,
+          groupValue: cfg.ctrlHorizPos,
+          onChanged: (v) => _setAndPersist((c) => c.ctrlHorizPos = v ?? 0, 'ctrl_horiz_pos', v ?? 0),
+        )),
+        const SizedBox(height: 16),
+        _sectionHeader('Posición vertical'),
+        ...List.generate(_ctrlVertLabels.length, (i) => RadioListTile<int>(
+          contentPadding: EdgeInsets.zero,
+          title: Text(_ctrlVertLabels[i]),
+          value: i,
+          groupValue: cfg.ctrlVertPos,
+          onChanged: (v) => _setAndPersist((c) => c.ctrlVertPos = v ?? 1, 'ctrl_vert_pos', v ?? 1),
+        )),
       ],
     );
   }

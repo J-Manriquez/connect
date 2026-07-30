@@ -58,24 +58,96 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         val id = intent.getIntExtra(EXTRA_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         val mgr = AppWidgetManager.getInstance(context)
         when (intent.action) {
-            ACTION_PREV_VIEW   -> { changeView(context, id, -1); render(context, mgr, id) }
-            ACTION_NEXT_VIEW   -> { changeView(context, id, 1);  render(context, mgr, id) }
-            ACTION_SCROLL_UP   -> { scroll(context, id, -1);     render(context, mgr, id) }
-            ACTION_SCROLL_DOWN -> { scroll(context, id, 1);      render(context, mgr, id) }
-            ACTION_CYCLE_CITY  -> { cycleCity(context, id);      render(context, mgr, id) }
+            // Acciones de navegación: cancelar animación en curso, renderizar limpio,
+            // luego iniciar animación nueva si el trigger de toque está activo.
+            ACTION_PREV_VIEW   -> {
+                cancelAnimation(id)
+                changeView(context, id, -1); render(context, mgr, id)
+                maybeAnimateTap(context, mgr, id)
+            }
+            ACTION_NEXT_VIEW   -> {
+                cancelAnimation(id)
+                changeView(context, id, 1);  render(context, mgr, id)
+                maybeAnimateTap(context, mgr, id)
+            }
+            ACTION_SCROLL_UP   -> {
+                cancelAnimation(id)
+                scroll(context, id, -1);     render(context, mgr, id)
+                maybeAnimateTap(context, mgr, id)
+            }
+            ACTION_SCROLL_DOWN -> {
+                cancelAnimation(id)
+                scroll(context, id, 1);      render(context, mgr, id)
+                maybeAnimateTap(context, mgr, id)
+            }
+            ACTION_CYCLE_CITY  -> {
+                cancelAnimation(id)
+                cycleCity(context, id);      render(context, mgr, id)
+                maybeAnimateTap(context, mgr, id)
+            }
+            // Toque directo sobre el fondo del widget → animar (si no hay animación activa).
             ACTION_ANIMATE     -> {
                 if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    val pending = goAsync()
-                    Thread {
-                        try { animateFrames(context, mgr, id) }
-                        finally { pending.finish() }
-                    }.start()
+                    val cfg = readWeatherWidgetCfg(context)
+                    startAnimateAsync(context, mgr, id, cfg)
+                }
+            }
+            // Trigger de encendido de pantalla: animar todos los widgets activos.
+            Intent.ACTION_SCREEN_ON,
+            Intent.ACTION_USER_PRESENT -> {
+                val cfg = readWeatherWidgetCfg(context)
+                if (cfg.animTrigger == 1 || cfg.animTrigger == 2) {
+                    val ids = mgr.getAppWidgetIds(
+                        ComponentName(context, WeatherWidgetProvider::class.java)
+                    )
+                    for (wid in ids) startAnimateAsync(context, mgr, wid, cfg)
                 }
             }
         }
     }
 
-    private fun animateFrames(context: Context, mgr: AppWidgetManager, widgetId: Int) {
+    private fun maybeAnimateTap(context: Context, mgr: AppWidgetManager, id: Int) {
+        if (id == AppWidgetManager.INVALID_APPWIDGET_ID) return
+        val cfg = readWeatherWidgetCfg(context)
+        if (cfg.animTrigger == 0 || cfg.animTrigger == 2) {
+            startAnimateAsync(context, mgr, id, cfg)
+        }
+    }
+
+    /**
+     * Interrumpe el thread de animación de [widgetId] (si existe) y espera hasta
+     * 300 ms a que se detenga antes de permitir que [render] y una nueva animación
+     * corran sin conflictos con [partiallyUpdateAppWidget].
+     */
+    private fun cancelAnimation(widgetId: Int) {
+        animThreads.remove(widgetId)?.let {
+            it.interrupt()
+            it.join(300)
+        }
+    }
+
+    /**
+     * Inicia la animación para [widgetId] en un thread nuevo.
+     * Si ya hay una animación activa para ese widget, no lanza otra (evita
+     * que múltiples threads llamen a [partiallyUpdateAppWidget] en paralelo).
+     */
+    private fun startAnimateAsync(context: Context, mgr: AppWidgetManager, widgetId: Int, cfg: WeatherCfg) {
+        // Si ya hay un thread activo para este widget, no iniciamos otro.
+        if (animThreads.containsKey(widgetId)) return
+        val pending = goAsync()
+        val t = Thread {
+            try { animateFrames(context, mgr, widgetId, cfg.animLoopMode) }
+            catch (_: InterruptedException) { /* animación cancelada por acción de navegación */ }
+            finally {
+                animThreads.remove(widgetId)
+                pending.finish()
+            }
+        }
+        animThreads[widgetId] = t
+        t.start()
+    }
+
+    private fun animateFrames(context: Context, mgr: AppWidgetManager, widgetId: Int, loopMode: Int) {
         // partiallyUpdateAppWidget requiere API 27+.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return
 
@@ -85,22 +157,30 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             ?.sortedBy { it.name.removePrefix("frame_").removeSuffix(".png").toIntOrNull() ?: 0 }
             ?: return
         val n = files.size
-        if (n <= 1) return  // nada que animar con un solo frame
+        if (n <= 1) return
 
-        // Secuencia ping-pong: 0,1,...,n-1, n-2,...,1
-        val sequence = (0 until n) + (n - 2 downTo 1)
+        // loopMode 0 = ping-pong (0,1,...,n-1,n-2,...,1), 1 = loop (0,1,...,n-1)
+        val sequence: List<Int> = if (loopMode == 1) {
+            (0 until n).toList()
+        } else {
+            (0 until n).toList() + (n - 2 downTo 1).toList()
+        }
 
         for (idx in sequence) {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException()
+            val bmp = try {
+                BitmapFactory.decodeFile(files[idx].absolutePath) ?: continue
+            } catch (_: Exception) { continue }
             try {
-                val bmp = BitmapFactory.decodeFile(files[idx].absolutePath) ?: continue
                 val partial = RemoteViews(context.packageName, R.layout.widget_weather)
                 partial.setImageViewBitmap(R.id.weather_bg_image, bmp)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                     mgr.partiallyUpdateAppWidget(widgetId, partial)
                 }
+            } finally {
                 bmp.recycle()
-                Thread.sleep(80)
-            } catch (_: Exception) { break }
+            }
+            Thread.sleep(80) // lanza InterruptedException si el thread fue interrumpido
         }
     }
 
@@ -151,9 +231,14 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         val bgMode: Int, val bgSolidColor: Int, val bgGradientTop: Int, val bgGradientBottom: Int,
         val bgDarkenPct: Int, val cornerRadiusDp: Int,
         val animFrameCount: Int,
+        val animLoopMode: Int,
+        val animTrigger: Int,
     )
 
     companion object {
+        // Threads de animación activos por widget ID. Acceso sincronizado.
+        private val animThreads = java.util.concurrent.ConcurrentHashMap<Int, Thread>()
+
         private const val PREFS_FLUTTER = "FlutterSharedPreferences"
         private const val PREFS_UI = "weather_widget_ui"
         private const val KEY_SNAPSHOT = "flutter.weather_widget_json"
@@ -285,7 +370,9 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                 bgGradientBottom = gc("bg_gradient_bottom_argb", 0xFF2C3E73.toInt()),
                 bgDarkenPct = gi("bg_darken_pct", 0).coerceIn(0, 80),
                 cornerRadiusDp = gi("corner_radius_dp", 20).coerceIn(0, 40),
-                animFrameCount = gi("anim_frame_count", 1).coerceIn(1, 12),
+                animFrameCount = gi("anim_frame_count", 1).coerceIn(1, 36),
+                animLoopMode = gi("anim_loop_mode", 0).coerceIn(0, 1),
+                animTrigger = gi("anim_trigger", 0).coerceIn(0, 2),
             )
         }
 

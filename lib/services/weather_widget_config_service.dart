@@ -75,8 +75,12 @@ class WeatherWidgetConfig {
   bool animatedBgEnabled; // solo afecta a la app (el widget nativo es estático)
 
   // Animación de frames en el widget nativo (solo modo dinámico).
-  // 1 = solo el frame t=0 (sin animación); >1 = N frames ping-pong al tocar.
+  // 1 = solo el frame t=0 (sin animación); >1 = N frames animados.
   int animFrameCount;
+  // 0 = ping-pong (1-2-3-2-1), 1 = loop (1-2-3-1-2-3).
+  int animLoopMode;
+  // 0 = toque en el widget, 1 = foco de pantalla (desbloqueo), 2 = ambos.
+  int animTrigger;
 
   WeatherWidgetConfig({
     required this.cityLabelSizeSp,
@@ -129,6 +133,8 @@ class WeatherWidgetConfig {
     required this.cornerRadiusDp,
     required this.animatedBgEnabled,
     required this.animFrameCount,
+    required this.animLoopMode,
+    required this.animTrigger,
   });
 }
 
@@ -189,6 +195,8 @@ class WeatherWidgetConfigService {
   static const int defCornerRadiusDp = 20;
   static const bool defAnimatedBgEnabled = true;
   static const int defAnimFrameCount = 1;
+  static const int defAnimLoopMode = 0;
+  static const int defAnimTrigger = 0;
 
   static String _k(String prop) => '$_prefix$prop';
 
@@ -252,7 +260,9 @@ class WeatherWidgetConfigService {
       bgDarkenPct: gi('bg_darken_pct', defBgDarkenPct).clamp(0, 80),
       cornerRadiusDp: gi('corner_radius_dp', defCornerRadiusDp),
       animatedBgEnabled: gb('animated_bg_enabled', defAnimatedBgEnabled),
-      animFrameCount: gi('anim_frame_count', defAnimFrameCount).clamp(1, 12),
+      animFrameCount: gi('anim_frame_count', defAnimFrameCount).clamp(1, 36),
+      animLoopMode: gi('anim_loop_mode', defAnimLoopMode).clamp(0, 1),
+      animTrigger: gi('anim_trigger', defAnimTrigger).clamp(0, 2),
     );
   }
 

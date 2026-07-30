@@ -56,6 +56,13 @@ class ImageWidgetCfg {
   int dotsSpacingDp;
   int dotsPosition;
 
+  // Estilo de controles
+  int ctrlIconColor;
+  int ctrlBgColor;
+  int ctrlCornerRadiusDp;
+  int ctrlHorizPos;   // 0=expandido (izq/der), 1=centrado
+  int ctrlVertPos;    // 0=arriba, 1=centro, 2=abajo
+
   ImageWidgetCfg({
     this.folderPath = '',
     this.imageList = const [],
@@ -92,6 +99,11 @@ class ImageWidgetCfg {
     this.dotsSizeDp = ImageWidgetService.defDotsSizeDp,
     this.dotsSpacingDp = ImageWidgetService.defDotsSpacingDp,
     this.dotsPosition = ImageWidgetService.defDotsPosition,
+    this.ctrlIconColor = ImageWidgetService.defCtrlIconColor,
+    this.ctrlBgColor = ImageWidgetService.defCtrlBgColor,
+    this.ctrlCornerRadiusDp = ImageWidgetService.defCtrlCornerRadiusDp,
+    this.ctrlHorizPos = ImageWidgetService.defCtrlHorizPos,
+    this.ctrlVertPos = ImageWidgetService.defCtrlVertPos,
   });
 }
 
@@ -122,6 +134,11 @@ class ImageWidgetService {
   static const defDotsSizeDp         = 8;
   static const defDotsSpacingDp      = 6;
   static const defDotsPosition       = 1;
+  static const defCtrlIconColor      = 0xFFFFFFFF;
+  static const defCtrlBgColor        = 0x66000000;
+  static const defCtrlCornerRadiusDp = 4;
+  static const defCtrlHorizPos       = 0;
+  static const defCtrlVertPos        = 1;
 
   static String _k(String prop) => 'widget_cfg_img_$prop';
 
@@ -171,25 +188,73 @@ class ImageWidgetService {
       dotsSizeDp           : (p.getInt(_k('dots_size_dp')) ?? defDotsSizeDp).clamp(4, 16),
       dotsSpacingDp        : (p.getInt(_k('dots_spacing_dp')) ?? defDotsSpacingDp).clamp(2, 16),
       dotsPosition         : (p.getInt(_k('dots_position')) ?? defDotsPosition).clamp(0, 1),
+      ctrlIconColor        : p.getInt(_k('ctrl_icon_color')) ?? defCtrlIconColor,
+      ctrlBgColor          : p.getInt(_k('ctrl_bg_color')) ?? defCtrlBgColor,
+      ctrlCornerRadiusDp   : (p.getInt(_k('ctrl_corner_radius_dp')) ?? defCtrlCornerRadiusDp).clamp(0, 40),
+      ctrlHorizPos         : (p.getInt(_k('ctrl_horiz_pos')) ?? defCtrlHorizPos).clamp(0, 1),
+      ctrlVertPos          : (p.getInt(_k('ctrl_vert_pos')) ?? defCtrlVertPos).clamp(0, 2),
     );
   }
 
+  static Future<ImageWidgetCfg> loadWithLog() async {
+    final t0 = DateTime.now().millisecondsSinceEpoch;
+    final cfg = await load();
+    final dt = DateTime.now().millisecondsSinceEpoch - t0;
+    _log('load() completado en ${dt}ms'
+        ' | imgs=${cfg.imageList.length}'
+        ' | idx=${cfg.currentIndex}'
+        ' | scaleType=${cfg.scaleType}'
+        ' | ctrlVisible=${cfg.controlsVisible}'
+        ' | ctrlHideDelay=${cfg.controlsHideDelaySec}s'
+        ' | ctrlHorizPos=${cfg.ctrlHorizPos}'
+        ' | ctrlVertPos=${cfg.ctrlVertPos}'
+        ' | ctrlIconColor=0x${cfg.ctrlIconColor.toRadixString(16)}'
+        ' | ctrlBgColor=0x${cfg.ctrlBgColor.toRadixString(16)}'
+        ' | ctrlCornerR=${cfg.ctrlCornerRadiusDp}dp'
+        ' | bgColor=0x${cfg.bgColor.toRadixString(16)}'
+        ' | folder=${cfg.folderPath}');
+    return cfg;
+  }
+
   static Future<void> setInt(String prop, int v) async {
+    _log('setInt prop=$prop valor=$v');
     final p = await SharedPreferences.getInstance();
     await p.setInt(_k(prop), v);
     await _notify();
   }
 
   static Future<void> setBool(String prop, bool v) async {
+    _log('setBool prop=$prop valor=$v');
     final p = await SharedPreferences.getInstance();
     await p.setBool(_k(prop), v);
     await _notify();
   }
 
   static Future<void> setString(String prop, String v) async {
+    final preview = v.length > 40 ? '${v.substring(0, 40)}...' : v;
+    _log('setString prop=$prop valor=$preview');
     final p = await SharedPreferences.getInstance();
     await p.setString(_k(prop), v);
     await _notify();
+  }
+
+  /// Lee y elimina los logs nativos que el widget Kotlin escribió en SharedPreferences.
+  /// Llamar periódicamente mientras el editor está abierto para verlos en flutter run.
+  static Future<void> pollNativeLogs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.reload(); // fuerza relecture desde disco
+      final raw = p.getString('img_widget_log') ?? '';
+      if (raw.isEmpty) return;
+      await p.remove('img_widget_log');
+      for (final line in raw.split('\n')) {
+        if (line.trim().isEmpty) continue;
+        // Formato: "<timestamp_ms>|<mensaje>"
+        final sep = line.indexOf('|');
+        final msg = sep >= 0 ? line.substring(sep + 1) : line;
+        print('[img_widget_native] $msg');
+      }
+    } catch (_) {}
   }
 
   static Future<void> resetAll() async {
@@ -200,12 +265,13 @@ class ImageWidgetService {
   }
 
   static Future<void> _notify() async {
-    _log('notify → updateImageWidget');
+    final t0 = DateTime.now().millisecondsSinceEpoch;
+    _log('notify → updateImageWidget t=$t0');
     try {
       await _channel.invokeMethod('updateImageWidget');
-      _log('notify OK');
+      _log('notify OK dt=${DateTime.now().millisecondsSinceEpoch - t0}ms');
     } catch (e) {
-      _log('notify ERROR: $e');
+      _log('notify ERROR dt=${DateTime.now().millisecondsSinceEpoch - t0}ms: $e');
     }
   }
 

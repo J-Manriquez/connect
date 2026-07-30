@@ -35,6 +35,22 @@ class WeatherWidgetState extends State<WeatherWidget> {
   final PageController _pageController = PageController();
   int _page = 0;
 
+  // Estado del modo test del editor: cuando no es null, el fondo usa estos
+  // valores en lugar del clima real, permitiendo previsualizar la animación.
+  int? _testWeatherCode;
+  bool _testIsDay = true;
+  double? _testOverrideT;
+
+  /// Actualiza el fondo del preview para el modo test del editor.
+  /// Pasar [weatherCode] = null desactiva el modo test.
+  void setTestBackground(int? weatherCode, bool isDay, double? t) {
+    setState(() {
+      _testWeatherCode = weatherCode;
+      _testIsDay = isDay;
+      _testOverrideT = t;
+    });
+  }
+
   bool _loading = true;
   bool _refreshing = false;
   String? _error;
@@ -263,6 +279,17 @@ class WeatherWidgetState extends State<WeatherWidget> {
             colors: [_darken(colors[0], darken), _darken(colors[1], darken)],
           ),
         ),
+      );
+    }
+
+    // Modo test del editor: usar weather y t overrides si están activos.
+    final testCode = _testWeatherCode;
+    if (testCode != null) {
+      return WeatherBackground(
+        weatherCode: testCode,
+        isDay: _testIsDay,
+        darkenPct: darken,
+        overrideT: _testOverrideT,
       );
     }
 

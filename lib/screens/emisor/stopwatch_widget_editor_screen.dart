@@ -198,21 +198,6 @@ class _StopwatchWidgetEditorScreenState extends State<StopwatchWidgetEditorScree
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionHeader('Formato'),
-        _dropdownTile(
-          label: 'Formato del tiempo',
-          value: cfg.timeFormat,
-          items: const {'hms': 'HH:MM:SS.ms', 'ms': 'MM:SS', 's_ms': 'SS.ms'},
-          onChanged: (v) {
-            setState(() => cfg.timeFormat = v);
-            _setString('timeFormat', v);
-          },
-        ),
-        _switchTile(
-          label: 'Mostrar milisegundos',
-          value: cfg.showMs,
-          onChanged: (v) { setState(() => cfg.showMs = v); _setBool('showMs', v); },
-        ),
         if (spec.hasLaps) ...[
           _sectionHeader('Vueltas'),
           _sliderTile(
@@ -561,9 +546,11 @@ class _StopwatchWidgetEditorScreenState extends State<StopwatchWidgetEditorScree
     final hex = '#${value.toRadixString(16).padLeft(8, '0').toUpperCase()}';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: Text(label)),
+          Text(label, style: const TextStyle(color: Colors.black87)),
+          const SizedBox(height: 4),
           ColorInputWidget(
             initialColor: hex,
             onColorChanged: (hexStr) {

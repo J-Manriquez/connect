@@ -52,16 +52,21 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 ACTION_ADVANCE, ACTION_PREV, ACTION_NEXT,
                 ACTION_TOGGLE_CONTROLS, ACTION_HIDE_CONTROLS)) return
 
-        log(context, "onReceive action=$action")
+        val tReceive = System.currentTimeMillis()
+        log(context, "onReceive action=$action t=$tReceive threadId=${Thread.currentThread().id}")
 
         // goAsync() evita ANR mientras se decodifican bitmaps (el BR tiene 10-30s)
         val pending = goAsync()
         Thread {
+            val tThread = System.currentTimeMillis()
+            log(context, "onReceive thread started action=$action delay=${tThread-tReceive}ms")
             try {
                 handleAction(context, action)
             } catch (e: Throwable) {
                 log(context, "handleAction CRASH action=$action error=${e.message}")
             } finally {
+                val tDone = System.currentTimeMillis()
+                log(context, "onReceive thread done action=$action totalFromReceive=${tDone-tReceive}ms")
                 pending.finish()
             }
         }.start()
@@ -102,24 +107,46 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
 
         private const val MAX_BITMAP_PX = 800
 
+        // Caché del último bitmap renderizado para toggle rápido de controles.
+        // Se invalida cuando cambia el índice o la configuración visual.
+        @Volatile private var cachedBitmap: Bitmap? = null
+        @Volatile private var cachedBitmapIndex: Int = -1
+
         // Defaults — deben ser idénticos a ImageWidgetService.dart
-        private const val DEF_INTERVAL_SEC        = 10
-        private const val DEF_CONTROLS_HIDE_DELAY = 5
-        private const val DEF_FX_ZOOM_PCT         = 115
-        private const val DEF_CORNER_RADIUS_DP    = 16
-        private const val DEF_BORDER_THICKNESS_DP = 2
-        private const val DEF_SCRIM_OPACITY       = 50
-        private const val DEF_CAPTION_SIZE_SP     = 14
-        private const val DEF_CAPTION_POSITION    = 1
-        private const val DEF_CAPTION_PAD_DP      = 8
-        private const val DEF_DOTS_SIZE_DP        = 8
-        private const val DEF_DOTS_SPACING_DP     = 6
-        private const val DEF_DOTS_POSITION       = 1
+        private const val DEF_INTERVAL_SEC          = 10
+        private const val DEF_CONTROLS_HIDE_DELAY   = 5
+        private const val DEF_FX_ZOOM_PCT           = 115
+        private const val DEF_CORNER_RADIUS_DP      = 16
+        private const val DEF_BORDER_THICKNESS_DP   = 2
+        private const val DEF_SCRIM_OPACITY         = 50
+        private const val DEF_CAPTION_SIZE_SP       = 14
+        private const val DEF_CAPTION_POSITION      = 1
+        private const val DEF_CAPTION_PAD_DP        = 8
+        private const val DEF_DOTS_SIZE_DP          = 8
+        private const val DEF_DOTS_SPACING_DP       = 6
+        private const val DEF_DOTS_POSITION         = 1
+        private const val DEF_CTRL_CORNER_RADIUS_DP = 4
+        private const val DEF_CTRL_HORIZ_POS        = 0
+        private const val DEF_CTRL_VERT_POS         = 1
 
         // ── Logging BT ────────────────────────────────────────────────────────
 
         fun log(context: Context?, msg: String) {
             println("[$TAG] $msg")
+            // Escribir en buffer de SharedPreferences para que Dart lo lea en flutter run
+            if (context != null) {
+                try {
+                    val p = context.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
+                    val key = "flutter.img_widget_log"
+                    val ts = System.currentTimeMillis()
+                    val entry = "$ts|$msg"
+                    val existing = try { p.getString(key, "") ?: "" } catch (_: Throwable) { "" }
+                    val newBuf = if (existing.isEmpty()) entry else "$existing\n$entry"
+                    // Mantener últimos 6000 chars para evitar saturar prefs
+                    val trimmed = if (newBuf.length > 6000) newBuf.takeLast(6000) else newBuf
+                    p.edit().putString(key, trimmed).apply()
+                } catch (_: Throwable) {}
+            }
             try {
                 BtClassicServerService.sendDebugLogToPeers(TAG, msg)
             } catch (_: Throwable) {}
@@ -160,14 +187,23 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             val dotsInactiveColor: Int,
             val dotsSizeDp: Int,
             val dotsSpacingDp: Int,
-            val dotsPosition: Int
+            val dotsPosition: Int,
+            val ctrlIconColor: Int,
+            val ctrlBgColor: Int,
+            val ctrlCornerRadiusDp: Int,
+            val ctrlHorizPos: Int,
+            val ctrlVertPos: Int
         )
 
         // ── Lógica principal ───────────────────────────────────────────────────
 
+        private fun ts() = System.currentTimeMillis()
+
         private fun handleAction(context: Context, action: String) {
+            val t0 = ts()
             val cfg = readCfg(context)
-            log(context, "handleAction=$action imgCount=${cfg.imageList.size} idx=${cfg.currentIndex} ctrlVisible=${cfg.controlsVisible}")
+            val t1 = ts()
+            log(context, "▶ handleAction=$action t=${t0} readCfg=${t1-t0}ms imgCount=${cfg.imageList.size} idx=${cfg.currentIndex} ctrlVisible=${cfg.controlsVisible} ctrlHideDelay=${cfg.controlsHideDelaySec}s")
 
             when (action) {
                 ACTION_ADVANCE -> {
@@ -211,16 +247,29 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 }
                 ACTION_TOGGLE_CONTROLS -> {
                     val newVisible = !cfg.controlsVisible
-                    log(context, "TOGGLE_CONTROLS: $newVisible")
+                    val tA = ts()
+                    log(context, "TOGGLE_CONTROLS t=$tA → newVisible=$newVisible cachedIdx=$cachedBitmapIndex currentIdx=${cfg.currentIndex} cacheValid=${cachedBitmap?.isRecycled == false && cachedBitmapIndex == cfg.currentIndex}")
                     writeCfgBool(context, PROP_CONTROLS_VISIBLE, newVisible)
-                    if (newVisible) scheduleHideControls(context, cfg.controlsHideDelaySec)
-                    else cancelHideControls(context)
-                    updateAll(context, cfg.copy(controlsVisible = newVisible))
+                    val tB = ts()
+                    log(context, "TOGGLE_CONTROLS writeCfgBool=${tB-tA}ms")
+                    if (newVisible) {
+                        scheduleHideControls(context, cfg.controlsHideDelaySec)
+                        log(context, "TOGGLE_CONTROLS scheduleHideControls delaySec=${cfg.controlsHideDelaySec}")
+                    } else {
+                        cancelHideControls(context)
+                        log(context, "TOGGLE_CONTROLS cancelHideControls")
+                    }
+                    val tC = ts()
+                    quickUpdateControlVisibility(context, cfg.copy(controlsVisible = newVisible))
+                    val tD = ts()
+                    log(context, "TOGGLE_CONTROLS quickUpdate total=${tD-tA}ms (writeCfg=${tB-tA}ms schedule=${tC-tB}ms update=${tD-tC}ms)")
                 }
                 ACTION_HIDE_CONTROLS -> {
-                    log(context, "HIDE_CONTROLS")
+                    val tA = ts()
+                    log(context, "HIDE_CONTROLS t=$tA cachedIdx=$cachedBitmapIndex currentIdx=${cfg.currentIndex}")
                     writeCfgBool(context, PROP_CONTROLS_VISIBLE, false)
-                    updateAll(context, cfg.copy(controlsVisible = false))
+                    quickUpdateControlVisibility(context, cfg.copy(controlsVisible = false))
+                    log(context, "HIDE_CONTROLS done=${ts()-tA}ms")
                 }
             }
         }
@@ -268,7 +317,12 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 dotsInactiveColor    = fColor(p, PF + "dots_inactive_color", 0x80FFFFFFL),
                 dotsSizeDp           = fInt(p, PF + "dots_size_dp", DEF_DOTS_SIZE_DP).coerceIn(4, 16),
                 dotsSpacingDp        = fInt(p, PF + "dots_spacing_dp", DEF_DOTS_SPACING_DP).coerceIn(2, 16),
-                dotsPosition         = fInt(p, PF + "dots_position", DEF_DOTS_POSITION).coerceIn(0, 1)
+                dotsPosition         = fInt(p, PF + "dots_position", DEF_DOTS_POSITION).coerceIn(0, 1),
+                ctrlIconColor        = fColor(p, PF + "ctrl_icon_color", 0xFFFFFFFFL),
+                ctrlBgColor          = fColor(p, PF + "ctrl_bg_color", 0x66000000L),
+                ctrlCornerRadiusDp   = fInt(p, PF + "ctrl_corner_radius_dp", DEF_CTRL_CORNER_RADIUS_DP).coerceIn(0, 40),
+                ctrlHorizPos         = fInt(p, PF + "ctrl_horiz_pos", DEF_CTRL_HORIZ_POS).coerceIn(0, 1),
+                ctrlVertPos          = fInt(p, PF + "ctrl_vert_pos", DEF_CTRL_VERT_POS).coerceIn(0, 2)
             )
         }
 
@@ -292,6 +346,80 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             }
         }
 
+        // ── Layout y toggle rápido de controles ────────────────────────────────
+
+        private fun layoutForPos(horizPos: Int, vertPos: Int): Int = when {
+            horizPos == 0 && vertPos == 0 -> R.layout.widget_image_slideshow_exp_top
+            horizPos == 0 && vertPos == 2 -> R.layout.widget_image_slideshow_exp_bot
+            horizPos == 1 && vertPos == 0 -> R.layout.widget_image_slideshow_ctr_top
+            horizPos == 1 && vertPos == 1 -> R.layout.widget_image_slideshow_ctr_ctr
+            horizPos == 1 && vertPos == 2 -> R.layout.widget_image_slideshow_ctr_bot
+            else                          -> R.layout.widget_image_slideshow // expanded+center (default)
+        }
+
+        /**
+         * Actualiza la visibilidad de los controles reutilizando el bitmap cacheado.
+         * Evita re-decodificar la imagen desde disco. Si no hay caché, hace render completo.
+         */
+        private fun quickUpdateControlVisibility(context: Context, cfg: ImageWidgetCfg) {
+            val t0 = ts()
+            if (cfg.imageList.isEmpty()) { log(context, "quickToggle: imageList vacía, skip"); return }
+
+            val mgr = AppWidgetManager.getInstance(context)
+            val ids = mgr.getAppWidgetIds(ComponentName(context, ImageSlideShowWidgetProvider::class.java))
+            if (ids.isEmpty()) { log(context, "quickToggle: sin widget IDs, skip"); return }
+
+            val vis = if (cfg.controlsVisible) View.VISIBLE else View.GONE
+            val layout = layoutForPos(cfg.ctrlHorizPos, cfg.ctrlVertPos)
+
+            // Intentar reusar bitmap cacheado del índice actual
+            val cached = cachedBitmap
+            val cacheHit = cached != null && !cached.isRecycled && cachedBitmapIndex == cfg.currentIndex
+            log(context, "quickToggle: visible=${cfg.controlsVisible} vis=$vis layout=$layout cacheHit=$cacheHit cachedIdx=$cachedBitmapIndex currentIdx=${cfg.currentIndex} cachedIsNull=${cached==null} cachedRecycled=${cached?.isRecycled}")
+
+            if (cacheHit) {
+                val bmp = cached!!
+                log(context, "quickToggle: usando caché ${bmp.width}x${bmp.height}px ids=${ids.toList()}")
+                for (id in ids) {
+                    val tId = ts()
+                    try {
+                        val rv = RemoteViews(context.packageName, layout)
+                        rv.setOnClickPendingIntent(R.id.widget_image_root,
+                            makePi(context, ACTION_TOGGLE_CONTROLS, 200 + id))
+                        rv.setOnClickPendingIntent(R.id.widget_image_prev_btn,
+                            makePi(context, ACTION_PREV, 300 + id))
+                        rv.setOnClickPendingIntent(R.id.widget_image_next_btn,
+                            makePi(context, ACTION_NEXT, 400 + id))
+                        rv.setViewVisibility(R.id.widget_image_prev_btn, vis)
+                        rv.setViewVisibility(R.id.widget_image_next_btn, vis)
+                        rv.setInt(R.id.widget_image_prev_btn, "setColorFilter", cfg.ctrlIconColor)
+                        rv.setInt(R.id.widget_image_next_btn, "setColorFilter", cfg.ctrlIconColor)
+                        rv.setInt(R.id.widget_image_prev_btn, "setBackgroundColor", cfg.ctrlBgColor)
+                        rv.setInt(R.id.widget_image_next_btn, "setBackgroundColor", cfg.ctrlBgColor)
+                        rv.setImageViewBitmap(R.id.widget_image_main, bmp)
+                        mgr.updateAppWidget(id, rv)
+                        log(context, "quickToggle id=$id updateAppWidget cached OK ${ts()-tId}ms")
+                    } catch (e: Throwable) {
+                        log(context, "quickToggle id=$id ERROR: ${e.message}")
+                    }
+                }
+                log(context, "quickToggle total (cached) ${ts()-t0}ms")
+            } else {
+                // Sin caché: render completo (primera vez o caché invalidada)
+                log(context, "quickToggle: SIN CACHÉ → render completo (esto es lento) idx=${cfg.currentIndex}")
+                for (id in ids) {
+                    val tId = ts()
+                    try {
+                        mgr.updateAppWidget(id, buildRemoteViews(context, mgr, cfg, id))
+                        log(context, "quickToggle fullRender id=$id OK ${ts()-tId}ms")
+                    } catch (e: Throwable) {
+                        log(context, "quickToggle fullRender id=$id ERROR: ${e.message}")
+                    }
+                }
+                log(context, "quickToggle total (fullRender) ${ts()-t0}ms")
+            }
+        }
+
         // ── RemoteViews ────────────────────────────────────────────────────────
 
         private fun buildRemoteViews(
@@ -300,7 +428,8 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             cfg: ImageWidgetCfg,
             appWidgetId: Int
         ): RemoteViews {
-            val rv = RemoteViews(context.packageName, R.layout.widget_image_slideshow)
+            val layout = layoutForPos(cfg.ctrlHorizPos, cfg.ctrlVertPos)
+            val rv = RemoteViews(context.packageName, layout)
 
             // El click en la RAÍZ alterna controles.
             // Los botones prev/next son hijos con mayor z-order → capturan sus propios taps.
@@ -314,6 +443,11 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             val vis = if (cfg.controlsVisible) View.VISIBLE else View.GONE
             rv.setViewVisibility(R.id.widget_image_prev_btn, vis)
             rv.setViewVisibility(R.id.widget_image_next_btn, vis)
+            // Aplicar estilo de controles (se aplica aunque estén GONE para que al mostrarse tengan el estilo correcto)
+            rv.setInt(R.id.widget_image_prev_btn, "setColorFilter", cfg.ctrlIconColor)
+            rv.setInt(R.id.widget_image_next_btn, "setColorFilter", cfg.ctrlIconColor)
+            rv.setInt(R.id.widget_image_prev_btn, "setBackgroundColor", cfg.ctrlBgColor)
+            rv.setInt(R.id.widget_image_next_btn, "setBackgroundColor", cfg.ctrlBgColor)
 
             if (cfg.imageList.isEmpty()) {
                 // Sin imágenes: toque lleva a la app para configurar
@@ -334,14 +468,23 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             val targetW = (widthDp * density).toInt().coerceAtMost(MAX_BITMAP_PX).coerceAtLeast(100)
             val targetH = (heightDp * density).toInt().coerceAtMost(MAX_BITMAP_PX).coerceAtLeast(100)
 
-            log(context, "buildRemoteViews id=$appWidgetId size=${widthDp}x${heightDp}dp => bitmap=${targetW}x${targetH}px idx=${cfg.currentIndex}")
+            log(context, "buildRemoteViews id=$appWidgetId size=${widthDp}x${heightDp}dp => bitmap=${targetW}x${targetH}px idx=${cfg.currentIndex} scaleType=${cfg.scaleType} ctrlH=${cfg.ctrlHorizPos} ctrlV=${cfg.ctrlVertPos}")
 
+            val tRender = ts()
             val bmp = renderFrame(context, cfg, cfg.currentIndex, targetW, targetH, widthDp, heightDp)
+            val renderMs = ts() - tRender
             if (bmp != null) {
+                // Cachear el bitmap para toggle rápido de controles
+                cachedBitmap = bmp
+                cachedBitmapIndex = cfg.currentIndex
+                log(context, "buildRemoteViews id=$appWidgetId renderFrame OK ${bmp.width}x${bmp.height}px en ${renderMs}ms → cacheado idx=${cfg.currentIndex}")
                 rv.setImageViewBitmap(R.id.widget_image_main, bmp)
             } else {
+                // Invalidar caché si el render falla
+                cachedBitmap = null
+                cachedBitmapIndex = -1
                 rv.setImageViewResource(R.id.widget_image_main, android.R.drawable.ic_menu_gallery)
-                log(context, "buildRemoteViews id=$appWidgetId renderFrame devolvió null")
+                log(context, "buildRemoteViews id=$appWidgetId renderFrame devolvió null en ${renderMs}ms")
             }
             return rv
         }
@@ -390,9 +533,10 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                         out
                     } else baseBmp
 
+                    val fadeLayout = layoutForPos(cfg.ctrlHorizPos, cfg.ctrlVertPos)
                     for (id in ids) {
                         try {
-                            val rv = RemoteViews(context.packageName, R.layout.widget_image_slideshow)
+                            val rv = RemoteViews(context.packageName, fadeLayout)
                             rv.setOnClickPendingIntent(R.id.widget_image_root,
                                 makePi(context, ACTION_TOGGLE_CONTROLS, 200 + id))
                             rv.setOnClickPendingIntent(R.id.widget_image_prev_btn,
@@ -402,6 +546,10 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                             val vis = if (cfg.controlsVisible) View.VISIBLE else View.GONE
                             rv.setViewVisibility(R.id.widget_image_prev_btn, vis)
                             rv.setViewVisibility(R.id.widget_image_next_btn, vis)
+                            rv.setInt(R.id.widget_image_prev_btn, "setColorFilter", cfg.ctrlIconColor)
+                            rv.setInt(R.id.widget_image_next_btn, "setColorFilter", cfg.ctrlIconColor)
+                            rv.setInt(R.id.widget_image_prev_btn, "setBackgroundColor", cfg.ctrlBgColor)
+                            rv.setInt(R.id.widget_image_next_btn, "setBackgroundColor", cfg.ctrlBgColor)
                             rv.setImageViewBitmap(R.id.widget_image_main, frameBmp)
                             mgr.updateAppWidget(id, rv)
                         } catch (_: Throwable) {}
@@ -441,15 +589,18 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                     log(context, "renderFrame file NOT found: $path")
                     return null
                 }
-                log(context, "renderFrame idx=$index path=$path target=${targetW}x${targetH}px")
+                log(context, "renderFrame idx=$index path=$path target=${targetW}x${targetH}px scaleType=${cfg.scaleType}")
 
                 val density = context.resources.displayMetrics.density
+                val tDecode = ts()
                 var bmp = decodeSampled(context, path, targetW, targetH) ?: run {
-                    log(context, "renderFrame decodeSampled null")
+                    log(context, "renderFrame decodeSampled null en ${ts()-tDecode}ms")
                     return null
                 }
-                log(context, "renderFrame decoded ${bmp.width}x${bmp.height}")
+                log(context, "renderFrame decoded ${bmp.width}x${bmp.height}px en ${ts()-tDecode}ms")
+                val tScale = ts()
                 bmp = applyScaleType(bmp, targetW, targetH, cfg.scaleType, cfg.bgColor)
+                log(context, "renderFrame applyScaleType=${ts()-tScale}ms resultado=${bmp.width}x${bmp.height}px")
                 if (cfg.fxType == 1) bmp = applyKenBurns(bmp, index, cfg.fxZoomPct)
                 if (cfg.scrimShow) bmp = applyScrim(bmp, cfg.scrimColor, cfg.scrimOpacity)
                 if (cfg.captionShow) {
@@ -523,6 +674,9 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 4 -> { val s = dw/sw; RectF(0f, (dh - sh*s)/2, dw, (dh + sh*s)/2) }
                 else -> RectF(0f, 0f, dw, dh)
             }
+            // LOG: dimensiones de escalado para diagnosticar centrado
+            val scaleName = arrayOf("COVER","CONTAIN","FILL","NONE","FIT_WIDTH").getOrElse(scaleType) { "?" }
+            log(null, "applyScaleType[$scaleName] src=${sw.toInt()}x${sh.toInt()} target=${tw}x${th} dst=[${dst.left.toInt()},${dst.top.toInt()},${dst.right.toInt()},${dst.bottom.toInt()}] dstSize=${(dst.right-dst.left).toInt()}x${(dst.bottom-dst.top).toInt()}")
             canvas.drawBitmap(src, null, dst, paint)
             if (src !== out) try { src.recycle() } catch (_: Exception) {}
             return out

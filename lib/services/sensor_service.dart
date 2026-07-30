@@ -65,13 +65,11 @@ class StepsData {
 class SensorService {
   SensorService._();
 
-  static const _chHr      = EventChannel('connect/heart_rate');
-  static const _chSteps   = EventChannel('connect/steps');
-  static const _chCompass = EventChannel('connect/compass');
-  static const _chWrist   = EventChannel('connect/wrist_state');
-  static const _chDebug   = EventChannel('connect/sensor_debug');
-  static const _chRotary  = MethodChannel('connect/rotary');
-  static const _chSvc     = MethodChannel('connect/sensor_service');
+  static const _chHr     = EventChannel('connect/heart_rate');
+  static const _chSteps  = EventChannel('connect/steps');
+  static const _chDebug  = EventChannel('connect/sensor_debug');
+  static const _chRotary = MethodChannel('connect/rotary');
+  static const _chSvc    = MethodChannel('connect/sensor_service');
 
   // ── Streams públicos ──────────────────────────────────────────────────────
 
@@ -80,12 +78,6 @@ class SensorService {
 
   static Stream<StepsData> get stepsStream =>
       _chSteps.receiveBroadcastStream().map((e) => StepsData.fromMap(e as Map));
-
-  static Stream<double> get compassStream =>
-      _chCompass.receiveBroadcastStream().map((e) => (e as num).toDouble());
-
-  static Stream<String> get wristStream =>
-      _chWrist.receiveBroadcastStream().map((e) => e.toString());
 
   // ── Debug logs ────────────────────────────────────────────────────────────
 

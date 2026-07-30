@@ -360,6 +360,8 @@
                 <action android:name="com.example.connect.widget.WEATHER.SCROLL_DOWN" />
                 <action android:name="com.example.connect.widget.WEATHER.CYCLE_CITY" />
                 <action android:name="com.example.connect.widget.WEATHER.ANIMATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.SCREEN_ON" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

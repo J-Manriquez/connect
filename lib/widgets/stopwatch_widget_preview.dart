@@ -82,7 +82,9 @@ Widget _iconBtn(IconData icon, StopwatchWidgetCfg cfg, {double? size}) {
   );
 }
 
-// ── Style 1: Compacto ─────────────────────────────────────────────────────────────────
+// ── Style 1: Compacto — fila única ───────────────────────────────────────────────────
+//  Cronómetro: [flag][reset][play][swap] | tiempo+etiqueta
+//  Temporizador: [reset][play][swap] | [−] tiempo+etiqueta [+]
 
 class _Style1Preview extends StatelessWidget {
   final StopwatchWidgetCfg cfg;
@@ -98,40 +100,44 @@ class _Style1Preview extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Título
-          _modeLabel(modeText, cfg),
-          const SizedBox(height: 1),
-          // Tiempo
-          _timeText(time, cfg, sizeSp: 22),
-          const SizedBox(height: 2),
-          // Botones
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Timer: restar paso
-              if (isTimer)
-                _iconBtn(Icons.remove, cfg, size: 20),
-              // Cronómetro: vuelta
-              if (!isTimer)
-                _iconBtn(Icons.flag, cfg, size: 20),
-              const SizedBox(width: 4),
-              _iconBtn(Icons.replay, cfg, size: 22),
-              const SizedBox(width: 2),
-              _iconBtn(
-                state.state == StopwatchStateEnum.running ? Icons.pause : Icons.play_arrow,
-                cfg, size: 28,
-              ),
-              const SizedBox(width: 2),
-              _iconBtn(Icons.swap_horiz, cfg, size: 20),
-              const SizedBox(width: 4),
-              // Timer: sumar paso
-              if (isTimer)
-                _iconBtn(Icons.add, cfg, size: 20),
-            ],
+          // Botones izquierdos
+          if (!isTimer) _iconBtn(Icons.flag, cfg, size: 20),
+          _iconBtn(Icons.replay, cfg, size: 22),
+          _iconBtn(
+            state.state == StopwatchStateEnum.running ? Icons.pause : Icons.play_arrow,
+            cfg, size: 26,
           ),
+          _iconBtn(Icons.swap_horiz, cfg, size: 20),
+          // Sección derecha con weight=1: [−] pegado al tiempo + etiqueta, todo alineado a la derecha
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // − solo en timer, inmediatamente a la izquierda del tiempo
+                if (isTimer) ...[
+                  _iconBtn(Icons.remove, cfg, size: 20),
+                  const SizedBox(width: 4),
+                ],
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _timeText(time, cfg, sizeSp: 22, align: TextAlign.right),
+                    _modeLabel(modeText, cfg),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // + (solo timer, fuera del contenedor)
+          if (isTimer) ...[
+            const SizedBox(width: 4),
+            _iconBtn(Icons.add, cfg, size: 20),
+          ],
         ],
       ),
     );

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -23,10 +24,32 @@ class _WeatherWidgetEditorScreenState extends State<WeatherWidgetEditorScreen> {
       GlobalKey<WeatherWidgetState>();
   WeatherWidgetConfig? _cfg;
 
+  // ── Estado del modo test ──
+  bool _testRunning = false;
+  int _testWeatherIdx = 0;
+  int _testSeqIdx = 0;
+  Timer? _testTimer;
+
+  static const _testWeathers = [
+    (emoji: '☀️', label: 'Despejado', code: 0, isDay: true),
+    (emoji: '🌙', label: 'Noche', code: 0, isDay: false),
+    (emoji: '☁️', label: 'Nubes', code: 3, isDay: true),
+    (emoji: '🌫️', label: 'Niebla', code: 45, isDay: true),
+    (emoji: '🌧️', label: 'Lluvia', code: 61, isDay: true),
+    (emoji: '❄️', label: 'Nieve', code: 71, isDay: true),
+    (emoji: '⛈️', label: 'Tormenta', code: 95, isDay: true),
+  ];
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _testTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -42,6 +65,96 @@ class _WeatherWidgetEditorScreenState extends State<WeatherWidgetEditorScreen> {
 
   /// Tras persistir, recarga la preview (lee la config recién guardada).
   void _refreshPreview() => _previewKey.currentState?.reload();
+
+  // ── Modo test ──
+
+  static double _testCycleDuration(String cat, bool isDay) {
+    switch (cat) {
+      case 'rain': case 'thunder': return 2.0;
+      case 'snow': return 5.0;
+      case 'fog': return 6.0;
+      case 'clouds': return 8.0;
+      default: return isDay ? 4.0 : 3.0;
+    }
+  }
+
+  static String _testCategory(int code) {
+    if (code <= 2) return 'clear';
+    if (code == 3) return 'clouds';
+    if (code == 45 || code == 48) return 'fog';
+    if (code >= 51 && code <= 67) return 'rain';
+    if (code >= 71 && code <= 77) return 'snow';
+    if (code >= 80 && code <= 82) return 'rain';
+    if (code >= 85 && code <= 86) return 'snow';
+    if (code >= 95) return 'thunder';
+    return 'clear';
+  }
+
+  static List<int> _testBuildSequence(int n, int loopMode) {
+    if (n <= 1) return [0];
+    if (loopMode == 1) return List.generate(n, (i) => i);
+    return [
+      ...List.generate(n, (i) => i),
+      ...List.generate(n - 2, (i) => n - 2 - i),
+    ];
+  }
+
+  double _testTForSeqIdx(int seqIdx, WeatherWidgetConfig cfg) {
+    final w = _testWeathers[_testWeatherIdx];
+    final n = cfg.animFrameCount;
+    final seq = _testBuildSequence(n, cfg.animLoopMode);
+    final frameIdx = seq[seqIdx % seq.length];
+    final cycle = _testCycleDuration(_testCategory(w.code), w.isDay);
+    return n <= 1 ? 0 : (frameIdx / n) * cycle;
+  }
+
+  void _testToggle(WeatherWidgetConfig cfg) {
+    if (_testRunning) {
+      _testStop();
+    } else {
+      _testStart(cfg);
+    }
+  }
+
+  void _testStart(WeatherWidgetConfig cfg) {
+    _testTimer?.cancel();
+    setState(() {
+      _testRunning = true;
+      _testSeqIdx = 0;
+    });
+    final w = _testWeathers[_testWeatherIdx];
+    _previewKey.currentState?.setTestBackground(
+        w.code, w.isDay, _testTForSeqIdx(0, cfg));
+    _testTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
+      if (!mounted) return;
+      setState(() => _testSeqIdx++);
+      final t = _testTForSeqIdx(_testSeqIdx, cfg);
+      _previewKey.currentState?.setTestBackground(w.code, w.isDay, t);
+    });
+  }
+
+  void _testStop() {
+    _testTimer?.cancel();
+    _testTimer = null;
+    setState(() {
+      _testRunning = false;
+      _testSeqIdx = 0;
+    });
+    _previewKey.currentState?.setTestBackground(null, true, null);
+  }
+
+  void _testSelectWeather(int idx, WeatherWidgetConfig cfg) {
+    setState(() => _testWeatherIdx = idx);
+    if (_testRunning) {
+      _testStop();
+      _testStart(cfg);
+    } else {
+      // Actualiza el fondo del preview sin animar (frame 0 del clima elegido).
+      final w = _testWeathers[idx];
+      _previewKey.currentState?.setTestBackground(
+          w.code, w.isDay, _testTForSeqIdx(0, cfg));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -842,9 +955,8 @@ class _WeatherWidgetEditorScreenState extends State<WeatherWidgetEditorScreen> {
   Widget _animSection(WeatherWidgetConfig cfg) {
     return _card('Animación del widget de inicio', [
       const Text(
-        'Solo aplica en modo fondo dinámico. Con 1 frame el fondo es estático '
-        'con el diseño climático. Al añadir más frames, tocar el widget en la '
-        'pantalla de inicio reproduce una animación ping-pong entre ellos.',
+        'Solo aplica en modo fondo dinámico. Con 1 frame el fondo es estático. '
+        'Los frames se generan automáticamente al actualizar el clima.',
         style: TextStyle(color: Colors.grey, fontSize: 12),
       ),
       const SizedBox(height: 8),
@@ -852,8 +964,8 @@ class _WeatherWidgetEditorScreenState extends State<WeatherWidgetEditorScreen> {
         label: 'Frames de animación',
         value: cfg.animFrameCount.toDouble(),
         min: 1,
-        max: 12,
-        divisions: 11,
+        max: 36,
+        divisions: 35,
         display: cfg.animFrameCount == 1
             ? '1 (estático)'
             : '${cfg.animFrameCount} frames',
@@ -863,13 +975,191 @@ class _WeatherWidgetEditorScreenState extends State<WeatherWidgetEditorScreen> {
           _refreshPreview();
         },
       ),
-      const SizedBox(height: 4),
-      const Text(
-        'Toca el widget en la pantalla de inicio para iniciar la animación. '
-        'Los frames se generan automáticamente al actualizar el clima.',
-        style: TextStyle(color: Colors.grey, fontSize: 11),
+      const SizedBox(height: 12),
+      // Modo de secuencia
+      const Text('Modo de secuencia', style: TextStyle(fontSize: 13)),
+      const SizedBox(height: 6),
+      SegmentedButton<int>(
+        segments: const [
+          ButtonSegment(value: 0, label: Text('Ping-pong'), icon: Icon(Icons.swap_horiz, size: 16)),
+          ButtonSegment(value: 1, label: Text('Loop'), icon: Icon(Icons.loop, size: 16)),
+        ],
+        selected: {cfg.animLoopMode},
+        onSelectionChanged: (s) async {
+          final v = s.first;
+          setState(() => cfg.animLoopMode = v);
+          await _setInt('anim_loop_mode', v);
+          _refreshPreview();
+        },
       ),
+      const SizedBox(height: 4),
+      Text(
+        cfg.animLoopMode == 0
+            ? 'Ping-pong: reproduce hacia adelante y luego hacia atrás (1-2-3-2-1).'
+            : 'Loop: reproduce siempre hacia adelante en ciclo (1-2-3-1-2-3).',
+        style: const TextStyle(color: Colors.grey, fontSize: 11),
+      ),
+      const SizedBox(height: 12),
+      // Trigger de animación
+      const Text('Disparador de animación', style: TextStyle(fontSize: 13)),
+      const SizedBox(height: 6),
+      SegmentedButton<int>(
+        segments: const [
+          ButtonSegment(value: 0, label: Text('Toque'), icon: Icon(Icons.touch_app, size: 16)),
+          ButtonSegment(value: 1, label: Text('Al encender'), icon: Icon(Icons.brightness_high, size: 16)),
+          ButtonSegment(value: 2, label: Text('Ambos'), icon: Icon(Icons.all_inclusive, size: 16)),
+        ],
+        selected: {cfg.animTrigger},
+        onSelectionChanged: (s) async {
+          final v = s.first;
+          setState(() => cfg.animTrigger = v);
+          await _setInt('anim_trigger', v);
+          _refreshPreview();
+        },
+      ),
+      const SizedBox(height: 4),
+      Text(
+        cfg.animTrigger == 0
+            ? 'La animación se inicia al tocar el widget o sus flechas de navegación.'
+            : cfg.animTrigger == 1
+                ? 'La animación se inicia cuando se enciende la pantalla o se desbloquea el dispositivo. '
+                  'Android no permite detectar cambios de página del launcher.'
+                : 'La animación se inicia al tocar el widget Y al encender la pantalla.',
+        style: const TextStyle(color: Colors.grey, fontSize: 11),
+      ),
+      // ── Modo test ──
+      const SizedBox(height: 4),
+      _testCard(cfg),
     ]);
+  }
+
+  Widget _testCard(WeatherWidgetConfig cfg) {
+    final n = cfg.animFrameCount;
+    final seq = _testBuildSequence(n, cfg.animLoopMode);
+    final frameIdx = seq.isEmpty ? 0 : seq[_testSeqIdx % seq.length];
+
+    return Card(
+      margin: const EdgeInsets.only(top: 6),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest
+          .withValues(alpha: 0.5),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.play_circle_outline, size: 18),
+                const SizedBox(width: 6),
+                const Text('Modo test',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+                const Spacer(),
+                if (_testRunning)
+                  Text(
+                    'Frame ${frameIdx + 1} / $n',
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'La animación se reproduce en el widget de previsualización de arriba.',
+              style: TextStyle(color: Colors.grey, fontSize: 11),
+            ),
+            const SizedBox(height: 10),
+            const Text('Clima a visualizar:',
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: List.generate(_testWeathers.length, (i) {
+                final w = _testWeathers[i];
+                final selected = i == _testWeatherIdx;
+                return GestureDetector(
+                  onTap: () => _testSelectWeather(i, cfg),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? Theme.of(context).colorScheme.primaryContainer
+                          : Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: selected
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey.shade300,
+                        width: selected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Text(
+                      '${w.emoji} ${w.label}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        color: selected
+                            ? Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer
+                            : null,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+            if (_testRunning) ...[
+              const SizedBox(height: 10),
+              LinearProgressIndicator(
+                value: seq.isEmpty
+                    ? 0
+                    : (_testSeqIdx % seq.length) / seq.length,
+                minHeight: 4,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: n <= 1 ? null : () => _testToggle(cfg),
+                icon: Icon(_testRunning
+                    ? Icons.stop_rounded
+                    : Icons.play_arrow_rounded),
+                label: Text(_testRunning
+                    ? 'Detener test'
+                    : 'Iniciar test en el widget'),
+                style: _testRunning
+                    ? FilledButton.styleFrom(
+                        backgroundColor:
+                            Theme.of(context).colorScheme.error,
+                        foregroundColor:
+                            Theme.of(context).colorScheme.onError,
+                      )
+                    : null,
+              ),
+            ),
+            if (n <= 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Aumenta el número de frames para activar el modo test.',
+                  style: TextStyle(
+                      color: Colors.grey.shade500, fontSize: 11),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ===== Controles reutilizables =====
@@ -968,6 +1258,7 @@ class _WeatherWidgetEditorScreenState extends State<WeatherWidgetEditorScreen> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 /// Mantiene el [TabBar] fijo bajo la vista previa mientras el resto se desplaza.
 class _SliverTabBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar tabBar;
