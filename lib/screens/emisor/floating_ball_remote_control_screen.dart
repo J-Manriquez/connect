@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/floating_ball_service.dart';
 import '../../services/remote_control_service.dart';
 import 'remote_apps_screen.dart';
-// ignore: unused_import — RemoteDebugScreen disponible para diagnóstico. No eliminar.
 import 'remote_debug_screen.dart';
 
 /// Control remoto BT accesible desde el menú de la bola flotante.
@@ -367,12 +366,12 @@ class _FloatingBallRemoteControlScreenState
               onPressed: _connected ? _openAppsScreen : null,
             ),
             // DEBUG: No eliminar — diagnóstico de errores del receptor.
-            // IconButton(
-            //   tooltip: 'Debug receptor',
-            //   icon: Icon(Icons.bug_report_outlined, color: _contentColor),
-            //   onPressed: () => Navigator.push(context,
-            //       MaterialPageRoute(builder: (_) => const RemoteDebugScreen())),
-            // ),
+            IconButton(
+              tooltip: 'Debug receptor',
+              icon: Icon(Icons.bug_report_outlined, color: _contentColor),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const RemoteDebugScreen())),
+            ),
           ],
         ),
         body: Column(

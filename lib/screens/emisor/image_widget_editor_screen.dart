@@ -31,10 +31,17 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
   static const _ctrlHorizLabels = ['Expandido', 'Centrado'];
   static const _ctrlVertLabels = ['Arriba', 'Centro', 'Abajo'];
   static const _fxLabels = ['Ninguno', 'Ken Burns', 'Fundido negro', 'Fundido blanco'];
-  static const _scaleLabels = ['Rellenar', 'Contener', 'Estirar', 'Centro', 'Ancho'];
+  // value → (label, subtitle). 'Contener' (1) eliminado por centrado incorrecto.
+  static const _scaleModes = [
+    (0, 'Rellenar',  'Sin bordes, puede recortar bordes'),
+    (2, 'Estirar',   'Ocupa todo, puede distorsionar'),
+    (3, 'Centro',    'Tamaño real, recorta si es grande'),
+    (4, 'Ancho',     'Ajusta al ancho del widget'),
+  ];
   static const _captionSrcLabels = ['Nombre del archivo', 'Fecha de modificación'];
   static const _captionPosLabels = ['Arriba', 'Abajo'];
   static const _dotsPosLabels = ['Arriba', 'Abajo'];
+  static const _arrowPosLabels = ['Arriba', 'Centro', 'Abajo'];
 
   @override
   void didChangeDependencies() {
@@ -260,10 +267,34 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
           ),
           if (cfg.imageList.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                '${_previewIdx + 1} / ${cfg.imageList.length} imágenes',
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${_previewIdx + 1} / ${cfg.imageList.length} imágenes',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+                  // Toggle para previsualizar controles (flechas)
+                  GestureDetector(
+                    onTap: () => setState(() => cfg.controlsVisible = !cfg.controlsVisible),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          cfg.controlsVisible ? Icons.visibility : Icons.visibility_off,
+                          size: 14,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          cfg.controlsVisible ? 'Ocultar flechas' : 'Ver flechas',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
@@ -440,15 +471,15 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionHeader('Modo de ajuste'),
-        ...List.generate(_scaleLabels.length, (i) => RadioListTile<int>(
+        ..._scaleModes.map((m) => RadioListTile<int>(
           contentPadding: EdgeInsets.zero,
-          title: Text(_scaleLabels[i]),
-          subtitle: Text(_scaleSubtitle(i), style: const TextStyle(fontSize: 12)),
-          value: i,
+          title: Text(m.$2),
+          subtitle: Text(m.$3, style: const TextStyle(fontSize: 12)),
+          value: m.$1,
           groupValue: cfg.scaleType,
           onChanged: (v) => _setAndPersist((c) => c.scaleType = v ?? 0, 'scale_type', v ?? 0),
         )),
-        if (cfg.scaleType == 1 || cfg.scaleType == 3) ...[
+        if (cfg.scaleType == 3) ...[
           const SizedBox(height: 8),
           _colorTile(
             label: 'Color de bandas de fondo',
@@ -616,6 +647,61 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
             onChangeEnd: (v) => _persist('dots_spacing_dp', v.round()),
           ),
         ],
+
+        const Divider(height: 32),
+
+        // ── Flechas de navegación ──────────────────────────────────────────
+        _sectionHeader('Flechas de navegación'),
+        const Text(
+          'Las flechas aparecen al tocar el widget. Úsalas para cambiar imagen manualmente.',
+          style: TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+        const SizedBox(height: 8),
+        _sectionHeader('Posición vertical'),
+        ...List.generate(_arrowPosLabels.length, (i) => RadioListTile<int>(
+          contentPadding: EdgeInsets.zero,
+          title: Text(_arrowPosLabels[i]),
+          value: i,
+          groupValue: cfg.arrowPosition,
+          onChanged: (v) => _setAndPersist((c) => c.arrowPosition = v ?? 1, 'arrow_position', v ?? 1),
+        )),
+        const SizedBox(height: 8),
+        _sectionHeader('Colores'),
+        _colorTile(
+          label: 'Color del ícono',
+          argb: cfg.arrowColor,
+          withAlpha: true,
+          onPicked: (c) => _setAndPersist((cfg) => cfg.arrowColor = c, 'arrow_color', c),
+        ),
+        _colorTile(
+          label: 'Color del fondo',
+          argb: cfg.arrowBgColor,
+          withAlpha: true,
+          onPicked: (c) => _setAndPersist((cfg) => cfg.arrowBgColor = c, 'arrow_bg_color', c),
+        ),
+        const SizedBox(height: 8),
+        _sectionHeader('Tamaño y forma'),
+        _sliderTile(
+          label: 'Tamaño del ícono (dp)',
+          value: cfg.arrowSizeDp.toDouble(),
+          min: 12, max: 44, divisions: 32,
+          display: '${cfg.arrowSizeDp}dp',
+          onChanged: (v) => _set((c) => c.arrowSizeDp = v.round()),
+          onChangeEnd: (v) => _persist('arrow_size_dp', v.round()),
+        ),
+        _sliderTile(
+          label: 'Radio del fondo (dp)',
+          value: cfg.arrowBgRoundDp.toDouble(),
+          min: 0, max: 24, divisions: 24,
+          display: '${cfg.arrowBgRoundDp}dp',
+          onChanged: (v) => _set((c) => c.arrowBgRoundDp = v.round()),
+          onChangeEnd: (v) => _persist('arrow_bg_round_dp', v.round()),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Activa "Controles visibles" en la vista previa para ver las flechas.',
+          style: TextStyle(fontSize: 11, color: Colors.grey),
+        ),
       ],
     );
   }
@@ -764,16 +850,6 @@ class _ImageWidgetEditorScreenState extends State<ImageWidgetEditorScreen>
     return r == 0 ? '${m}m' : '${m}m ${r}s';
   }
 
-  String _scaleSubtitle(int i) {
-    const subtitles = [
-      'Sin bordes, puede recortar bordes',
-      'Imagen completa visible, con bandas',
-      'Ocupa todo, puede distorsionar',
-      'Tamaño real, recorta si es grande',
-      'Ajusta al ancho del widget',
-    ];
-    return subtitles[i];
-  }
 }
 
 // ── Delegate para la TabBar sticky ────────────────────────────────────────────

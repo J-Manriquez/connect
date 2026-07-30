@@ -54,6 +54,9 @@ class WeatherWidgetState extends State<WeatherWidget> {
   bool _loading = true;
   bool _refreshing = false;
   String? _error;
+  // Categoría debug activa ('clear','clouds',etc.) o '' si usa clima real.
+  String _debugCategory = '';
+  bool _debugIsDay = true;
   WeatherData? _data;
   WeatherCity? _selected;
   List<WeatherCity> _cities = const [];
@@ -86,6 +89,8 @@ class WeatherWidgetState extends State<WeatherWidget> {
     final cfg = await WeatherWidgetConfigService.load();
     final cities = await WeatherStore.getSavedCities();
     final selected = await WeatherStore.getSelectedCity();
+    final debugCat = cfg.animDebugCategory;
+    final debugDay = cfg.animDebugIsDay;
 
     if (selected == null) {
       if (!mounted) return;
@@ -94,6 +99,8 @@ class WeatherWidgetState extends State<WeatherWidget> {
         _cities = cities;
         _selected = null;
         _data = null;
+        _debugCategory = debugCat;
+        _debugIsDay = debugDay;
         _loading = false;
       });
       return;
@@ -107,6 +114,8 @@ class WeatherWidgetState extends State<WeatherWidget> {
         _cities = cities;
         _selected = selected;
         _data = cached;
+        _debugCategory = debugCat;
+        _debugIsDay = debugDay;
         _loading = false;
       });
       // Refresca silenciosamente en segundo plano para mantener el widget
@@ -124,6 +133,8 @@ class WeatherWidgetState extends State<WeatherWidget> {
         _cities = cities;
         _selected = selected;
         _data = data;
+        _debugCategory = debugCat;
+        _debugIsDay = debugDay;
         _loading = false;
       });
     } on WeatherException catch (e) {
@@ -133,6 +144,8 @@ class WeatherWidgetState extends State<WeatherWidget> {
         _cities = cities;
         _selected = selected;
         _error = e.message;
+        _debugCategory = debugCat;
+        _debugIsDay = debugDay;
         _loading = false;
       });
     } catch (_) {
@@ -142,6 +155,8 @@ class WeatherWidgetState extends State<WeatherWidget> {
         _cities = cities;
         _selected = selected;
         _error = 'Ocurrió un error al cargar el clima.';
+        _debugCategory = debugCat;
+        _debugIsDay = debugDay;
         _loading = false;
       });
     }
@@ -159,9 +174,14 @@ class WeatherWidgetState extends State<WeatherWidget> {
   }
 
   /// Refresca desde la red la ciudad seleccionada (borra y reescribe el caché).
+  /// Si hay debug activo lo limpia primero para volver al clima real.
   Future<void> _refresh() async {
     final selected = _selected;
     if (selected == null || _refreshing) return;
+    if (_debugCategory.isNotEmpty) {
+      await WeatherWidgetConfigService.clearDebugCategory();
+      setState(() => _debugCategory = '');
+    }
     setState(() {
       _refreshing = true;
       _error = null;
@@ -251,8 +271,16 @@ class WeatherWidgetState extends State<WeatherWidget> {
       );
     }
 
-    // Modo dinámico (por defecto): según el clima real, animado o estático.
-    if (data == null) {
+    // Modo dinámico (por defecto): según el clima real (o debug), animado o estático.
+    // Si hay categoría de debug activa, la usamos en lugar del clima real.
+    final debugCode = _debugCategory.isNotEmpty
+        ? _categoryToCode(_debugCategory)
+        : null;
+    final effectiveCode = debugCode ?? data?.current.weatherCode;
+    final effectiveIsDay = debugCode != null ? _debugIsDay : (data?.current.isDay ?? true);
+    final effectiveWind = debugCode != null ? 0.0 : (data?.current.windSpeed ?? 0.0);
+
+    if (effectiveCode == null) {
       return const DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -268,8 +296,8 @@ class WeatherWidgetState extends State<WeatherWidget> {
         WeatherWidgetConfigService.defAnimatedBgEnabled;
     if (!animated) {
       final colors = WeatherCodeInfo.gradientColors(
-        data.current.weatherCode,
-        isDay: data.current.isDay,
+        effectiveCode,
+        isDay: effectiveIsDay,
       );
       return DecoratedBox(
         decoration: BoxDecoration(
@@ -294,12 +322,23 @@ class WeatherWidgetState extends State<WeatherWidget> {
     }
 
     return WeatherBackground(
-      weatherCode: data.current.weatherCode,
-      isDay: data.current.isDay,
-      windSpeed: data.current.windSpeed,
+      weatherCode: effectiveCode,
+      isDay: effectiveIsDay,
+      windSpeed: effectiveWind,
       darkenPct: darken,
     );
   }
+
+  /// Devuelve un código de clima representativo para cada categoría de debug.
+  static int _categoryToCode(String category) => switch (category) {
+    'clear'   => 0,
+    'clouds'  => 3,
+    'fog'     => 45,
+    'rain'    => 61,
+    'snow'    => 71,
+    'thunder' => 95,
+    _         => 0,
+  };
 
   Widget _buildContent(WeatherWidgetConfig? cfg) {
     if (_loading || cfg == null) {
@@ -367,6 +406,10 @@ class WeatherWidgetState extends State<WeatherWidget> {
   }
 
   Widget _buildPages(WeatherData data, WeatherWidgetConfig cfg) {
+    final debugCode = _debugCategory.isNotEmpty
+        ? _categoryToCode(_debugCategory)
+        : null;
+    final debugIsDay = _debugCategory.isNotEmpty ? _debugIsDay : null;
     return Column(
       children: [
         _buildHeader(data, cfg),
@@ -384,7 +427,8 @@ class WeatherWidgetState extends State<WeatherWidget> {
             controller: _pageController,
             onPageChanged: (i) => setState(() => _page = i),
             children: [
-              _CurrentPage(data: data, cfg: cfg),
+              _CurrentPage(data: data, cfg: cfg,
+                  debugCode: debugCode, debugIsDay: debugIsDay),
               _HourlyPage(data: data, cfg: cfg),
               _DailyPage(data: data, cfg: cfg),
             ],
@@ -558,12 +602,23 @@ class WeatherWidgetState extends State<WeatherWidget> {
 class _CurrentPage extends StatelessWidget {
   final WeatherData data;
   final WeatherWidgetConfig cfg;
-  const _CurrentPage({required this.data, required this.cfg});
+  /// Si hay categoría debug activa, sobreescribe el icono (pero no los datos).
+  final int? debugCode;
+  final bool? debugIsDay;
+  const _CurrentPage({
+    required this.data,
+    required this.cfg,
+    this.debugCode,
+    this.debugIsDay,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = data.current;
     final info = WeatherCodeInfo.from(c.weatherCode, isDay: c.isDay);
+    // El icono usa la categoría debug si está activa; los datos reales siempre.
+    final iconCode = debugCode ?? c.weatherCode;
+    final iconIsDay = debugIsDay ?? c.isDay;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       child: Row(
@@ -603,7 +658,7 @@ class _CurrentPage extends StatelessWidget {
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _weatherIconWidget(cfg, c.weatherCode, c.isDay, cfg.emojiSizeSp.toDouble()),
+              _weatherIconWidget(cfg, iconCode, iconIsDay, cfg.emojiSizeSp.toDouble()),
               const SizedBox(height: 12),
               _MiniStat(
                 icon: Icons.water_drop,

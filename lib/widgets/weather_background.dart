@@ -251,8 +251,28 @@ class _WeatherPainter extends CustomPainter {
   double get _windTilt => (windSpeed.clamp(0, 60) / 60.0) * 0.6;
 
   void _paintSun(Canvas canvas, Size size) {
-    final center = Offset(size.width * 0.80, size.height * 0.28);
+    final center = Offset(size.width * 0.20, size.height * 0.28); // sol a la izquierda
     final pulse = 0.5 + 0.5 * math.sin(t * 1.2);
+    // Rayos de barrido horizontal (de izquierda a derecha).
+    final sweep = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 18
+      ..strokeCap = StrokeCap.butt
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24);
+    for (var i = 0; i < 4; i++) {
+      final angle = -0.30 + i * 0.20;
+      final phase = i * 0.28;
+      final travel = (t * 0.10 + phase) % 1.0;
+      final alpha = (0.10 * math.sin(travel * math.pi)).clamp(0.0, 1.0);
+      if (alpha < 0.01) continue;
+      sweep.color = const Color(0xFFFFE08A).withValues(alpha: alpha);
+      final len = size.width * 1.3;
+      canvas.drawLine(
+        center + Offset(28, 0),
+        center + Offset(28 + len * math.cos(angle), len * math.sin(angle)),
+        sweep,
+      );
+    }
     // Halo.
     canvas.drawCircle(
       center,
@@ -327,8 +347,10 @@ class _WeatherPainter extends CustomPainter {
   }
 
   void _drawCloud(Canvas canvas, Offset c, double w, double alpha) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: alpha);
     final h = w * 0.42;
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: alpha)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, (h * 0.38).clamp(4, 60));
     canvas.drawCircle(c, h * 0.6, paint);
     canvas.drawCircle(c + Offset(w * 0.28, h * 0.08), h * 0.5, paint);
     canvas.drawCircle(c + Offset(-w * 0.28, h * 0.1), h * 0.45, paint);
@@ -345,19 +367,35 @@ class _WeatherPainter extends CustomPainter {
   void _paintFog(Canvas canvas, Size size) {
     for (var i = 0; i < particles.length; i++) {
       final p = particles[i];
-      final y = size.height * (0.2 + i / particles.length * 0.7);
-      final travel = (t * 0.03 * p.speed + p.phase) % 1.4 - 0.2;
-      final x = travel * size.width;
-      final band = Rect.fromCenter(
-        center: Offset(x + size.width * 0.3, y),
-        width: size.width * 1.2,
-        height: 26 + p.size * 18,
-      );
+      final y = size.height * (0.15 + i / particles.length * 0.75);
+      final bandH = 32 + p.size * 24;
+      // Capa primaria.
+      final trav1 = (t * 0.025 * p.speed + p.phase) % 1.5 - 0.25;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(band, const Radius.circular(40)),
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(
+            trav1 * size.width - size.width * 0.25, y - bandH / 2,
+            trav1 * size.width + size.width * 0.95, y + bandH / 2,
+          ),
+          const Radius.circular(50),
+        ),
         Paint()
-          ..color = Colors.white.withValues(alpha: 0.10 + p.size * 0.06)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
+          ..color = Colors.white.withValues(alpha: 0.12 + p.size * 0.07)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+      );
+      // Capa secundaria (fase opuesta, más lenta).
+      final trav2 = (t * 0.018 * p.speed + p.phase + 0.65) % 1.5 - 0.25;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(
+            trav2 * size.width - size.width * 0.25, y - bandH * 0.55,
+            trav2 * size.width + size.width * 0.95, y + bandH * 0.55,
+          ),
+          const Radius.circular(50),
+        ),
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.07 + p.size * 0.04)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
       );
     }
   }

@@ -97,47 +97,33 @@ class _Style1Preview extends StatelessWidget {
     final duration = isTimer ? state.remaining : state.elapsed;
     final time     = _fmtTime(duration);
     final modeText = isTimer ? cfg.labelTimer : cfg.labelStopwatch;
+    final isRunning = state.state == StopwatchStateEnum.running;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Botones izquierdos
-          if (!isTimer) _iconBtn(Icons.flag, cfg, size: 20),
-          _iconBtn(Icons.replay, cfg, size: 22),
-          _iconBtn(
-            state.state == StopwatchStateEnum.running ? Icons.pause : Icons.play_arrow,
-            cfg, size: 26,
+          // Título centrado
+          _modeLabel(modeText, cfg),
+          const SizedBox(height: 2),
+          // Fila: botones izquierda | [−]contador[+] derecha
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // ── Botones izquierda ──
+              if (!isTimer) _iconBtn(Icons.flag,       cfg, size: 20),
+              _iconBtn(Icons.replay,                   cfg, size: 22),
+              _iconBtn(isRunning ? Icons.pause : Icons.play_arrow, cfg, size: 28),
+              _iconBtn(Icons.swap_horiz,               cfg, size: 20),
+              const Spacer(),
+              // ── [−] contador [+] derecha ──
+              if (isTimer) _iconBtn(Icons.remove, cfg, size: 18),
+              _timeText(time, cfg, sizeSp: 22, align: TextAlign.end),
+              if (isTimer) _iconBtn(Icons.add,    cfg, size: 18),
+            ],
           ),
-          _iconBtn(Icons.swap_horiz, cfg, size: 20),
-          // Sección derecha con weight=1: [−] pegado al tiempo + etiqueta, todo alineado a la derecha
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // − solo en timer, inmediatamente a la izquierda del tiempo
-                if (isTimer) ...[
-                  _iconBtn(Icons.remove, cfg, size: 20),
-                  const SizedBox(width: 4),
-                ],
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _timeText(time, cfg, sizeSp: 22, align: TextAlign.right),
-                    _modeLabel(modeText, cfg),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // + (solo timer, fuera del contenedor)
-          if (isTimer) ...[
-            const SizedBox(width: 4),
-            _iconBtn(Icons.add, cfg, size: 20),
-          ],
         ],
       ),
     );
@@ -167,25 +153,46 @@ class _Style3Preview extends StatelessWidget {
       (i) => state.laps[lapCount - 1 - i],
     );
 
+    final isRunning = state.state == StopwatchStateEnum.running;
+
     return Padding(
       padding: const EdgeInsets.all(8),
       child: Column(
         children: [
+          // Fila: [−] anillo+tiempo [+]
           Expanded(
-            child: Stack(
-              alignment: Alignment.center,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _RingPainter(
-                      progress: progress,
-                      trackColor: Color(cfg.ringTrackArgb),
-                      fillColor: Color(cfg.ringFillArgb),
-                      thickness: cfg.ringThicknessDp.toDouble(),
-                    ),
+                // Botón − (solo temporizador)
+                if (isTimer)
+                  Center(child: _iconBtn(Icons.remove, cfg, size: 22))
+                else
+                  const SizedBox(width: 22),
+                // Anillo con tiempo centrado
+                Expanded(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _RingPainter(
+                            progress: progress,
+                            trackColor: Color(cfg.ringTrackArgb),
+                            fillColor: Color(cfg.ringFillArgb),
+                            thickness: cfg.ringThicknessDp.toDouble(),
+                          ),
+                        ),
+                      ),
+                      _timeText(time, cfg, sizeSp: cfg.timeSizeSp * 0.7),
+                    ],
                   ),
                 ),
-                _timeText(time, cfg, sizeSp: cfg.timeSizeSp * 0.7),
+                // Botón + (solo temporizador)
+                if (isTimer)
+                  Center(child: _iconBtn(Icons.add, cfg, size: 22))
+                else
+                  const SizedBox(width: 22),
               ],
             ),
           ),
@@ -206,12 +213,14 @@ class _Style3Preview extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Vuelta/flag (solo cronómetro)
+              if (!isTimer) ...[
+                _iconBtn(Icons.flag, cfg, size: 24),
+                const SizedBox(width: 4),
+              ],
               _iconBtn(Icons.replay, cfg, size: 26),
               const SizedBox(width: 8),
-              _iconBtn(
-                state.state == StopwatchStateEnum.running ? Icons.pause : Icons.play_arrow,
-                cfg, size: 32,
-              ),
+              _iconBtn(isRunning ? Icons.pause : Icons.play_arrow, cfg, size: 32),
               const SizedBox(width: 8),
               _iconBtn(Icons.swap_horiz, cfg, size: 26),
             ],

@@ -56,12 +56,12 @@ class ImageWidgetCfg {
   int dotsSpacingDp;
   int dotsPosition;
 
-  // Estilo de controles
-  int ctrlIconColor;
-  int ctrlBgColor;
-  int ctrlCornerRadiusDp;
-  int ctrlHorizPos;   // 0=expandido (izq/der), 1=centrado
-  int ctrlVertPos;    // 0=arriba, 1=centro, 2=abajo
+  // Flechas (prev/next) — dibujadas en el bitmap para control total
+  int arrowColor;
+  int arrowBgColor;
+  int arrowSizeDp;
+  int arrowPosition;   // 0=top  1=center  2=bottom
+  int arrowBgRoundDp;
 
   ImageWidgetCfg({
     this.folderPath = '',
@@ -99,11 +99,11 @@ class ImageWidgetCfg {
     this.dotsSizeDp = ImageWidgetService.defDotsSizeDp,
     this.dotsSpacingDp = ImageWidgetService.defDotsSpacingDp,
     this.dotsPosition = ImageWidgetService.defDotsPosition,
-    this.ctrlIconColor = ImageWidgetService.defCtrlIconColor,
-    this.ctrlBgColor = ImageWidgetService.defCtrlBgColor,
-    this.ctrlCornerRadiusDp = ImageWidgetService.defCtrlCornerRadiusDp,
-    this.ctrlHorizPos = ImageWidgetService.defCtrlHorizPos,
-    this.ctrlVertPos = ImageWidgetService.defCtrlVertPos,
+    this.arrowColor = 0xFFFFFFFF,
+    this.arrowBgColor = 0x66000000,
+    this.arrowSizeDp = ImageWidgetService.defArrowSizeDp,
+    this.arrowPosition = ImageWidgetService.defArrowPosition,
+    this.arrowBgRoundDp = ImageWidgetService.defArrowBgRoundDp,
   });
 }
 
@@ -134,11 +134,9 @@ class ImageWidgetService {
   static const defDotsSizeDp         = 8;
   static const defDotsSpacingDp      = 6;
   static const defDotsPosition       = 1;
-  static const defCtrlIconColor      = 0xFFFFFFFF;
-  static const defCtrlBgColor        = 0x66000000;
-  static const defCtrlCornerRadiusDp = 4;
-  static const defCtrlHorizPos       = 0;
-  static const defCtrlVertPos        = 1;
+  static const defArrowSizeDp        = 24;
+  static const defArrowPosition      = 1;
+  static const defArrowBgRoundDp     = 6;
 
   static String _k(String prop) => 'widget_cfg_img_$prop';
 
@@ -188,11 +186,11 @@ class ImageWidgetService {
       dotsSizeDp           : (p.getInt(_k('dots_size_dp')) ?? defDotsSizeDp).clamp(4, 16),
       dotsSpacingDp        : (p.getInt(_k('dots_spacing_dp')) ?? defDotsSpacingDp).clamp(2, 16),
       dotsPosition         : (p.getInt(_k('dots_position')) ?? defDotsPosition).clamp(0, 1),
-      ctrlIconColor        : p.getInt(_k('ctrl_icon_color')) ?? defCtrlIconColor,
-      ctrlBgColor          : p.getInt(_k('ctrl_bg_color')) ?? defCtrlBgColor,
-      ctrlCornerRadiusDp   : (p.getInt(_k('ctrl_corner_radius_dp')) ?? defCtrlCornerRadiusDp).clamp(0, 40),
-      ctrlHorizPos         : (p.getInt(_k('ctrl_horiz_pos')) ?? defCtrlHorizPos).clamp(0, 1),
-      ctrlVertPos          : (p.getInt(_k('ctrl_vert_pos')) ?? defCtrlVertPos).clamp(0, 2),
+      arrowColor           : p.getInt(_k('arrow_color')) ?? 0xFFFFFFFF,
+      arrowBgColor         : p.getInt(_k('arrow_bg_color')) ?? 0x66000000,
+      arrowSizeDp          : (p.getInt(_k('arrow_size_dp')) ?? defArrowSizeDp).clamp(12, 44),
+      arrowPosition        : (p.getInt(_k('arrow_position')) ?? defArrowPosition).clamp(0, 2),
+      arrowBgRoundDp       : (p.getInt(_k('arrow_bg_round_dp')) ?? defArrowBgRoundDp).clamp(0, 24),
     );
   }
 
@@ -206,11 +204,10 @@ class ImageWidgetService {
         ' | scaleType=${cfg.scaleType}'
         ' | ctrlVisible=${cfg.controlsVisible}'
         ' | ctrlHideDelay=${cfg.controlsHideDelaySec}s'
-        ' | ctrlHorizPos=${cfg.ctrlHorizPos}'
-        ' | ctrlVertPos=${cfg.ctrlVertPos}'
-        ' | ctrlIconColor=0x${cfg.ctrlIconColor.toRadixString(16)}'
-        ' | ctrlBgColor=0x${cfg.ctrlBgColor.toRadixString(16)}'
-        ' | ctrlCornerR=${cfg.ctrlCornerRadiusDp}dp'
+        ' | arrowPosition=${cfg.arrowPosition}'
+        ' | arrowColor=0x${cfg.arrowColor.toRadixString(16)}'
+        ' | arrowBgColor=0x${cfg.arrowBgColor.toRadixString(16)}'
+        ' | arrowSizeDp=${cfg.arrowSizeDp}dp'
         ' | bgColor=0x${cfg.bgColor.toRadixString(16)}'
         ' | folder=${cfg.folderPath}');
     return cfg;

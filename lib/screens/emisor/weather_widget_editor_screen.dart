@@ -953,84 +953,180 @@ class _WeatherWidgetEditorScreenState extends State<WeatherWidgetEditorScreen> {
   // --- Animación (widget nativo) ---
 
   Widget _animSection(WeatherWidgetConfig cfg) {
-    return _card('Animación del widget de inicio', [
-      const Text(
-        'Solo aplica en modo fondo dinámico. Con 1 frame el fondo es estático. '
-        'Los frames se generan automáticamente al actualizar el clima.',
-        style: TextStyle(color: Colors.grey, fontSize: 12),
-      ),
-      const SizedBox(height: 8),
-      _sliderTile(
-        label: 'Frames de animación',
-        value: cfg.animFrameCount.toDouble(),
-        min: 1,
-        max: 36,
-        divisions: 35,
-        display: cfg.animFrameCount == 1
-            ? '1 (estático)'
-            : '${cfg.animFrameCount} frames',
-        onChanged: (v) => setState(() => cfg.animFrameCount = v.round()),
-        onChangeEnd: (v) async {
-          await _setInt('anim_frame_count', v.round());
-          _refreshPreview();
-        },
-      ),
-      const SizedBox(height: 12),
-      // Modo de secuencia
-      const Text('Modo de secuencia', style: TextStyle(fontSize: 13)),
-      const SizedBox(height: 6),
-      SegmentedButton<int>(
-        segments: const [
-          ButtonSegment(value: 0, label: Text('Ping-pong'), icon: Icon(Icons.swap_horiz, size: 16)),
-          ButtonSegment(value: 1, label: Text('Loop'), icon: Icon(Icons.loop, size: 16)),
-        ],
-        selected: {cfg.animLoopMode},
-        onSelectionChanged: (s) async {
-          final v = s.first;
-          setState(() => cfg.animLoopMode = v);
-          await _setInt('anim_loop_mode', v);
-          _refreshPreview();
-        },
-      ),
-      const SizedBox(height: 4),
-      Text(
-        cfg.animLoopMode == 0
-            ? 'Ping-pong: reproduce hacia adelante y luego hacia atrás (1-2-3-2-1).'
-            : 'Loop: reproduce siempre hacia adelante en ciclo (1-2-3-1-2-3).',
-        style: const TextStyle(color: Colors.grey, fontSize: 11),
-      ),
-      const SizedBox(height: 12),
-      // Trigger de animación
-      const Text('Disparador de animación', style: TextStyle(fontSize: 13)),
-      const SizedBox(height: 6),
-      SegmentedButton<int>(
-        segments: const [
-          ButtonSegment(value: 0, label: Text('Toque'), icon: Icon(Icons.touch_app, size: 16)),
-          ButtonSegment(value: 1, label: Text('Al encender'), icon: Icon(Icons.brightness_high, size: 16)),
-          ButtonSegment(value: 2, label: Text('Ambos'), icon: Icon(Icons.all_inclusive, size: 16)),
-        ],
-        selected: {cfg.animTrigger},
-        onSelectionChanged: (s) async {
-          final v = s.first;
-          setState(() => cfg.animTrigger = v);
-          await _setInt('anim_trigger', v);
-          _refreshPreview();
-        },
-      ),
-      const SizedBox(height: 4),
-      Text(
-        cfg.animTrigger == 0
-            ? 'La animación se inicia al tocar el widget o sus flechas de navegación.'
-            : cfg.animTrigger == 1
-                ? 'La animación se inicia cuando se enciende la pantalla o se desbloquea el dispositivo. '
-                  'Android no permite detectar cambios de página del launcher.'
-                : 'La animación se inicia al tocar el widget Y al encender la pantalla.',
-        style: const TextStyle(color: Colors.grey, fontSize: 11),
-      ),
-      // ── Modo test ──
-      const SizedBox(height: 4),
-      _testCard(cfg),
-    ]);
+    // Categorías disponibles con su etiqueta y emoji.
+    const categories = [
+      ('', 'Real', '🌡️'),
+      ('clear', 'Despejado', '☀️'),
+      ('clouds', 'Nublado', '☁️'),
+      ('fog', 'Niebla', '🌫️'),
+      ('rain', 'Lluvia', '🌧️'),
+      ('snow', 'Nieve', '❄️'),
+      ('thunder', 'Tormenta', '⛈️'),
+    ];
+
+    return Column(
+      children: [
+        _card('Animación del widget de inicio', [
+          const Text(
+            'Solo aplica en modo fondo dinámico. Con 1 frame el fondo es estático. '
+            'Los frames se generan automáticamente al actualizar el clima.',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          _sliderTile(
+            label: 'Frames de animación',
+            value: cfg.animFrameCount.toDouble(),
+            min: 1,
+            max: 36,
+            divisions: 35,
+            display: cfg.animFrameCount == 1
+                ? '1 (estático)'
+                : '${cfg.animFrameCount} frames',
+            onChanged: (v) => setState(() => cfg.animFrameCount = v.round()),
+            onChangeEnd: (v) async {
+              await _setInt('anim_frame_count', v.round());
+              _refreshPreview();
+            },
+          ),
+          const SizedBox(height: 12),
+          // Modo de secuencia
+          const Text('Modo de secuencia', style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 6),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 0, label: Text('Ping-pong'), icon: Icon(Icons.swap_horiz, size: 16)),
+              ButtonSegment(value: 1, label: Text('Loop'), icon: Icon(Icons.loop, size: 16)),
+            ],
+            selected: {cfg.animLoopMode},
+            onSelectionChanged: (s) async {
+              final v = s.first;
+              setState(() => cfg.animLoopMode = v);
+              await _setInt('anim_loop_mode', v);
+              _refreshPreview();
+            },
+          ),
+          const SizedBox(height: 4),
+          Text(
+            cfg.animLoopMode == 0
+                ? 'Ping-pong: reproduce hacia adelante y luego hacia atrás (1-2-3-2-1).'
+                : 'Loop: reproduce siempre hacia adelante en ciclo (1-2-3-1-2-3).',
+            style: const TextStyle(color: Colors.grey, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          // Trigger de animación
+          const Text('Disparador de animación', style: TextStyle(fontSize: 13)),
+          const SizedBox(height: 6),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 0, label: Text('Toque'), icon: Icon(Icons.touch_app, size: 16)),
+              ButtonSegment(value: 1, label: Text('Al encender'), icon: Icon(Icons.brightness_high, size: 16)),
+              ButtonSegment(value: 2, label: Text('Ambos'), icon: Icon(Icons.all_inclusive, size: 16)),
+            ],
+            selected: {cfg.animTrigger},
+            onSelectionChanged: (s) async {
+              final v = s.first;
+              setState(() => cfg.animTrigger = v);
+              await _setInt('anim_trigger', v);
+              _refreshPreview();
+            },
+          ),
+          const SizedBox(height: 4),
+          Text(
+            cfg.animTrigger == 0
+                ? 'La animación se inicia al tocar el widget o sus flechas de navegación.'
+                : cfg.animTrigger == 1
+                    ? 'La animación se inicia cuando se enciende la pantalla o se desbloquea el dispositivo. '
+                      'Android no permite detectar cambios de página del launcher.'
+                    : 'La animación se inicia al tocar el widget Y al encender la pantalla.',
+            style: const TextStyle(color: Colors.grey, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Animación cíclica'),
+            subtitle: Text(
+              'Repite la secuencia hasta 9 veces por activación '
+              '(~${_estimatedDuration(cfg.animFrameCount, cyclic: true)}).',
+              style: const TextStyle(fontSize: 11),
+            ),
+            value: cfg.animCyclic,
+            onChanged: (v) async {
+              setState(() => cfg.animCyclic = v);
+              await _setBool('anim_cyclic', v);
+            },
+          ),
+          Text(
+            'Duración aproximada por activación: '
+            '${_estimatedDuration(cfg.animFrameCount, cyclic: cfg.animCyclic)}.',
+            style: const TextStyle(color: Colors.grey, fontSize: 11),
+          ),
+          // ── Modo test ──
+          const SizedBox(height: 4),
+          _testCard(cfg),
+        ]),
+        _card('Debug de animación', [
+          const Text(
+            'Fuerza una categoría climática en la preview y en el widget de '
+            'inicio. Selecciona "Real" o pulsa refrescar (↺) para volver al '
+            'clima actual.',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: categories.map((entry) {
+              final (key, label, emoji) = entry;
+              final selected = cfg.animDebugCategory == key;
+              return ChoiceChip(
+                label: Text('$emoji $label'),
+                selected: selected,
+                onSelected: (_) async {
+                  setState(() => cfg.animDebugCategory = key);
+                  if (key.isEmpty) {
+                    await WeatherWidgetConfigService.clearDebugCategory();
+                  } else {
+                    await WeatherWidgetConfigService.setDebugCategory(
+                      key,
+                      isDay: cfg.animDebugIsDay,
+                    );
+                  }
+                  _refreshPreview();
+                },
+              );
+            }).toList(),
+          ),
+          if (cfg.animDebugCategory.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Es de día'),
+              value: cfg.animDebugIsDay,
+              onChanged: (v) async {
+                setState(() => cfg.animDebugIsDay = v);
+                await WeatherWidgetConfigService.setDebugCategory(
+                  cfg.animDebugCategory,
+                  isDay: v,
+                );
+                _refreshPreview();
+              },
+            ),
+          ],
+        ]),
+      ],
+    );
+  }
+
+  // ===== Helpers de animación =====
+
+  /// Duración estimada de la animación por activación según frames y modo cíclico.
+  String _estimatedDuration(int frames, {bool cyclic = false}) {
+    if (frames <= 1) return 'sin animación';
+    final framesPerCycle = frames * 2 - 2;
+    final msPerCycle = framesPerCycle * 80;
+    if (!cyclic) return '~${(msPerCycle / 1000.0).toStringAsFixed(1)} s';
+    final totalMs = (msPerCycle * 9).clamp(0, 9000);
+    return '~${(totalMs / 1000.0).toStringAsFixed(1)} s';
   }
 
   Widget _testCard(WeatherWidgetConfig cfg) {

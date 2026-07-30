@@ -103,6 +103,23 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                     for (wid in ids) startAnimateAsync(context, mgr, wid, cfg)
                 }
             }
+            // Refresco manual: cancela animaciones activas y regenera frames desde cero.
+            ACTION_REFRESH -> {
+                val ids = mgr.getAppWidgetIds(ComponentName(context, WeatherWidgetProvider::class.java))
+                for (wid in ids) cancelAnimation(wid)
+                val pending = goAsync()
+                Thread {
+                    try {
+                        // Limpia categoría debug y regenera frames con el clima real.
+                        context.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE).edit()
+                            .remove(CFG_PREFIX + "debug_category")
+                            .remove(CFG_PREFIX + "debug_is_day")
+                            .apply()
+                        generateAndSaveFrames(context)
+                        for (wid in ids) render(context, mgr, wid)
+                    } finally { pending.finish() }
+                }.start()
+            }
         }
     }
 
@@ -136,7 +153,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         if (animThreads.containsKey(widgetId)) return
         val pending = goAsync()
         val t = Thread {
-            try { animateFrames(context, mgr, widgetId, cfg.animLoopMode) }
+            try { animateFrames(context, mgr, widgetId, cfg) }
             catch (_: InterruptedException) { /* animación cancelada por acción de navegación */ }
             finally {
                 animThreads.remove(widgetId)
@@ -147,7 +164,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         t.start()
     }
 
-    private fun animateFrames(context: Context, mgr: AppWidgetManager, widgetId: Int, loopMode: Int) {
+    private fun animateFrames(context: Context, mgr: AppWidgetManager, widgetId: Int, cfg: WeatherCfg) {
         // partiallyUpdateAppWidget requiere API 27+.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return
 
@@ -160,17 +177,17 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         if (n <= 1) return
 
         // loopMode 0 = ping-pong (0,1,...,n-1,n-2,...,1), 1 = loop (0,1,...,n-1)
-        val sequence: List<Int> = if (loopMode == 1) {
+        val sequence: List<Int> = if (cfg.animLoopMode == 1) {
             (0 until n).toList()
         } else {
             (0 until n).toList() + (n - 2 downTo 1).toList()
         }
 
-        for (idx in sequence) {
+        fun showFrame(idx: Int) {
             if (Thread.currentThread().isInterrupted) throw InterruptedException()
             val bmp = try {
-                BitmapFactory.decodeFile(files[idx].absolutePath) ?: continue
-            } catch (_: Exception) { continue }
+                BitmapFactory.decodeFile(files[idx].absolutePath) ?: return
+            } catch (_: Exception) { return }
             try {
                 val partial = RemoteViews(context.packageName, R.layout.widget_weather)
                 partial.setImageViewBitmap(R.id.weather_bg_image, bmp)
@@ -181,6 +198,21 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                 bmp.recycle()
             }
             Thread.sleep(80) // lanza InterruptedException si el thread fue interrumpido
+        }
+
+        if (cfg.animCyclic) {
+            // 9 ciclos con tope de 9 s (cabe dentro del límite de goAsync).
+            val deadline = System.currentTimeMillis() + 9_000L
+            var cycles = 0
+            outer@ while (cycles < 9) {
+                for (idx in sequence) {
+                    if (System.currentTimeMillis() >= deadline) break@outer
+                    showFrame(idx)
+                }
+                cycles++
+            }
+        } else {
+            for (idx in sequence) showFrame(idx)
         }
     }
 
@@ -233,6 +265,9 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         val animFrameCount: Int,
         val animLoopMode: Int,
         val animTrigger: Int,
+        val animCyclic: Boolean,
+        val animDebugCategory: String,
+        val animDebugIsDay: Boolean,
     )
 
     companion object {
@@ -244,6 +279,9 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         private const val KEY_SNAPSHOT = "flutter.weather_widget_json"
         private const val CFG_PREFIX = "flutter.weather_widget_cfg_"
 
+        // Caché en memoria de bitmaps de iconos (evita re-renderizar en cada update).
+        private val iconCache = mutableMapOf<String, Bitmap>()
+
         private const val ACTION_PREFIX = "com.example.connect.widget.WEATHER"
         const val ACTION_PREV_VIEW   = "$ACTION_PREFIX.PREV_VIEW"
         const val ACTION_NEXT_VIEW   = "$ACTION_PREFIX.NEXT_VIEW"
@@ -251,6 +289,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         const val ACTION_SCROLL_DOWN = "$ACTION_PREFIX.SCROLL_DOWN"
         const val ACTION_CYCLE_CITY  = "$ACTION_PREFIX.CYCLE_CITY"
         const val ACTION_ANIMATE     = "$ACTION_PREFIX.ANIMATE"
+        const val ACTION_REFRESH     = "$ACTION_PREFIX.REFRESH"
         private const val EXTRA_WIDGET_ID = "appWidgetId"
 
         private const val VISIBLE_ROWS = 4
@@ -373,6 +412,9 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                 animFrameCount = gi("anim_frame_count", 1).coerceIn(1, 36),
                 animLoopMode = gi("anim_loop_mode", 0).coerceIn(0, 1),
                 animTrigger = gi("anim_trigger", 0).coerceIn(0, 2),
+                animCyclic = gb("anim_cyclic", false),
+                animDebugCategory = p.getString(CFG_PREFIX + "debug_category", "") ?: "",
+                animDebugIsDay = gb("debug_is_day", true),
             )
         }
 
@@ -439,9 +481,9 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.weather_view_daily, if (view == 2) View.VISIBLE else View.GONE)
 
             when (view) {
-                0 -> bindCurrent(views, city, cfg)
-                1 -> bindHourly(views, city, ui.getInt("hoff_$appWidgetId", 0), cfg)
-                2 -> bindDaily(views, city, ui.getInt("doff_$appWidgetId", 0), cfg)
+                0 -> bindCurrent(context, views, city, cfg)
+                1 -> bindHourly(context, views, city, ui.getInt("hoff_$appWidgetId", 0), cfg)
+                2 -> bindDaily(context, views, city, ui.getInt("doff_$appWidgetId", 0), cfg)
             }
 
             // Indicadores de página
@@ -485,6 +527,15 @@ class WeatherWidgetProvider : AppWidgetProvider() {
 
         private fun dp(context: Context, v: Float): Float = v * context.resources.displayMetrics.density
 
+        /** Obtiene (o genera) el bitmap de icono para la categoría dada. Usa caché en memoria. */
+        private fun iconBitmap(context: Context, category: String, isDay: Boolean, sizeDp: Int): Bitmap {
+            val sizePx = dp(context, sizeDp.toFloat()).toInt().coerceAtLeast(8)
+            val key = "${category}_${if (isDay) "d" else "n"}_$sizePx"
+            return iconCache.getOrPut(key) {
+                WeatherFrameRenderer.renderIconBitmap(category, isDay, sizePx)
+            }
+        }
+
         /// Directorio donde se guardan los frames de animación.
         private fun framesDir(context: Context) = File(context.filesDir, "weather_frames")
 
@@ -505,9 +556,11 @@ class WeatherWidgetProvider : AppWidgetProvider() {
                 val selIdx   = snapshot.optInt("selectedIndex", 0).coerceIn(0, cities.length() - 1)
                 val city     = cities.optJSONObject(selIdx) ?: return
 
-                val category   = city.optString("bg", "clear")
-                val isDay      = city.optInt("isDay", 1) == 1
-                val windSpeed  = city.optDouble("wind", 0.0).toFloat()
+                // Si hay categoría debug activa, la usamos en lugar del clima real.
+                val debugCat   = cfg.animDebugCategory
+                val category   = if (debugCat.isNotEmpty()) debugCat else city.optString("bg", "clear")
+                val isDay      = if (debugCat.isNotEmpty()) cfg.animDebugIsDay else city.optInt("isDay", 1) == 1
+                val windSpeed  = if (debugCat.isNotEmpty()) 0f else city.optDouble("wind", 0.0).toFloat()
                 val gradColors = dynamicGradientFor(category, isDay)
                 val radiusPx   = dp(context, cfg.cornerRadiusDp.toFloat())
 
@@ -589,7 +642,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             for (d in DOTS) views.setTextColor(d, cfg.dotInactiveColor)
         }
 
-        private fun bindCurrent(views: RemoteViews, city: JSONObject, cfg: WeatherCfg) {
+        private fun bindCurrent(context: Context, views: RemoteViews, city: JSONObject, cfg: WeatherCfg) {
             views.setTextViewText(R.id.weather_temp, styled("${city.optInt("temp", 0)}°", cfg.tempBold))
             setSize(views, R.id.weather_temp, cfg.tempSizeSp)
             views.setTextColor(R.id.weather_temp, cfg.tempColor)
@@ -602,8 +655,10 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             setSize(views, R.id.weather_apparent, cfg.apparentSizeSp)
             views.setTextColor(R.id.weather_apparent, cfg.apparentColor)
 
-            views.setTextViewText(R.id.weather_emoji, city.optString("emoji", "🌡️"))
-            setSize(views, R.id.weather_emoji, cfg.emojiSizeSp)
+            // Icono de clima como bitmap (mismo estilo Material Design que la preview).
+            val cat = city.optString("bg", "clear")
+            val day = city.optInt("isDay", 1) == 1
+            views.setImageViewBitmap(R.id.weather_emoji, iconBitmap(context, cat, day, 72))
 
             views.setTextViewText(R.id.weather_humidity, "💧 ${city.optInt("humidity", 0)}%")
             setSize(views, R.id.weather_humidity, cfg.statSizeSp)
@@ -614,20 +669,22 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.weather_wind, cfg.statColor)
         }
 
-        private fun bindHourly(views: RemoteViews, city: JSONObject, rawOffset: Int, cfg: WeatherCfg) {
+        private fun bindHourly(context: Context, views: RemoteViews, city: JSONObject, rawOffset: Int, cfg: WeatherCfg) {
             val list = city.optJSONArray("hourly") ?: JSONArray()
             val maxOffset = (list.length() - VISIBLE_ROWS).coerceAtLeast(0)
             val offset = rawOffset.coerceIn(0, maxOffset)
             for (i in 0 until VISIBLE_ROWS) {
                 val idx = offset + i
                 val item = if (idx < list.length()) list.optJSONObject(idx) else null
-                applyRowStyle(views, HR_TIME[i], HR_EMOJI[i], HR_PP[i], HR_TEMP[i], cfg)
+                applyRowStyle(views, HR_TIME[i], HR_PP[i], HR_TEMP[i], cfg)
                 if (item == null) {
                     views.setViewVisibility(HR_ROW[i], View.INVISIBLE)
                 } else {
                     views.setViewVisibility(HR_ROW[i], View.VISIBLE)
                     views.setTextViewText(HR_TIME[i], item.optString("label", ""))
-                    views.setTextViewText(HR_EMOJI[i], item.optString("emoji", ""))
+                    val cat = item.optString("bg", "clear")
+                    val day = item.optInt("isDay", 1) == 1
+                    views.setImageViewBitmap(HR_EMOJI[i], iconBitmap(context, cat, day, 20))
                     val pp = item.optInt("pp", 0)
                     views.setTextViewText(HR_PP[i], if (pp > 0) "💧$pp%" else "")
                     views.setTextViewText(HR_TEMP[i], styled("${item.optInt("temp", 0)}°", cfg.rowValueBold))
@@ -639,20 +696,21 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             setSize(views, R.id.hr_down, cfg.scrollArrowSizeSp)
         }
 
-        private fun bindDaily(views: RemoteViews, city: JSONObject, rawOffset: Int, cfg: WeatherCfg) {
+        private fun bindDaily(context: Context, views: RemoteViews, city: JSONObject, rawOffset: Int, cfg: WeatherCfg) {
             val list = city.optJSONArray("daily") ?: JSONArray()
             val maxOffset = (list.length() - VISIBLE_ROWS).coerceAtLeast(0)
             val offset = rawOffset.coerceIn(0, maxOffset)
             for (i in 0 until VISIBLE_ROWS) {
                 val idx = offset + i
                 val item = if (idx < list.length()) list.optJSONObject(idx) else null
-                applyRowStyle(views, DY_DAY[i], DY_EMOJI[i], DY_PP[i], DY_TEMP[i], cfg)
+                applyRowStyle(views, DY_DAY[i], DY_PP[i], DY_TEMP[i], cfg)
                 if (item == null) {
                     views.setViewVisibility(DY_ROW[i], View.INVISIBLE)
                 } else {
                     views.setViewVisibility(DY_ROW[i], View.VISIBLE)
                     views.setTextViewText(DY_DAY[i], item.optString("day", ""))
-                    views.setTextViewText(DY_EMOJI[i], item.optString("emoji", ""))
+                    val cat = item.optString("bg", "clear")
+                    views.setImageViewBitmap(DY_EMOJI[i], iconBitmap(context, cat, true, 20))
                     val pp = item.optInt("pp", 0)
                     views.setTextViewText(DY_PP[i], if (pp > 0) "💧$pp%" else "")
                     views.setTextViewText(
@@ -672,14 +730,12 @@ class WeatherWidgetProvider : AppWidgetProvider() {
         private fun applyRowStyle(
             views: RemoteViews,
             labelId: Int,
-            emojiId: Int,
             ppId: Int,
             valueId: Int,
             cfg: WeatherCfg
         ) {
             setSize(views, labelId, cfg.rowLabelSizeSp)
             views.setTextColor(labelId, cfg.rowLabelColor)
-            setSize(views, emojiId, cfg.rowEmojiSizeSp)
             setSize(views, ppId, cfg.rowPpSizeSp)
             views.setTextColor(ppId, cfg.rowPpColor)
             setSize(views, valueId, cfg.rowValueSizeSp)
@@ -696,6 +752,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.dy_up, pi(context, ACTION_SCROLL_UP, appWidgetId, 5))
             views.setOnClickPendingIntent(R.id.dy_down, pi(context, ACTION_SCROLL_DOWN, appWidgetId, 6))
             views.setOnClickPendingIntent(R.id.weather_city_btn, pi(context, ACTION_CYCLE_CITY, appWidgetId, 7))
+            views.setOnClickPendingIntent(R.id.weather_refresh, pi(context, ACTION_REFRESH, appWidgetId, 9))
             views.setTextColor(R.id.weather_prev, cfg.arrowColor)
             views.setTextColor(R.id.weather_next, cfg.arrowColor)
             setSize(views, R.id.weather_prev, cfg.arrowSizeSp)

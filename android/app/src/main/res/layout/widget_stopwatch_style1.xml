@@ -1,146 +1,141 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Style 1: Compacto — fila única
-     Cronómetro: [flag][reset][play][swap] | tiempo+etiqueta (derecha)
-     Temporizador: [reset][play][swap] | [−] tiempo+etiqueta [+]
-     El [−] está dentro del contenedor derecho (weight=1) para quedar pegado al tiempo.
--->
+<!-- Style 1: Compacto — título | botones izquierda + contador derecha -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/sw_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:gravity="center_vertical"
     android:paddingStart="8dp"
     android:paddingEnd="8dp"
     android:paddingTop="4dp"
     android:paddingBottom="4dp">
 
-    <!-- Botones izquierdos (siempre visibles según modo) -->
+    <!-- Título: CRONÓMETRO / TEMPORIZADOR -->
+    <TextView
+        android:id="@+id/sw_mode_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="CRONÓMETRO"
+        android:textSize="7sp"
+        android:textColor="#FF88AAFF"
+        android:gravity="center"
+        android:letterSpacing="0.15" />
+
+    <!-- Fila: [botones izquierda]  [−tiempo+] derecha -->
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:gravity="center_vertical"
+        android:layout_marginTop="2dp">
 
-        <!-- Cronómetro: vuelta (oculto en temporizador) -->
-        <ImageButton
-            android:id="@+id/btn_lap"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:src="@drawable/ic_sw_lap"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:visibility="gone"
-            android:contentDescription="Vuelta" />
+        <!-- ── Botones izquierda ── -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical|start">
 
-        <!-- Reset -->
-        <ImageButton
-            android:id="@+id/btn_reset"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:src="@drawable/ic_sw_reset"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:contentDescription="Reset" />
+            <!-- Vuelta (solo cronómetro) -->
+            <ImageButton
+                android:id="@+id/btn_lap"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_widget_flag"
+                android:background="@android:color/transparent"
+                android:scaleType="fitCenter"
+                android:visibility="gone"
+                android:contentDescription="Vuelta" />
 
-        <!-- Play/Pause -->
-        <ImageButton
-            android:id="@+id/btn_start_pause"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:src="@drawable/ic_sw_play"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:contentDescription="Play/Pause" />
+            <!-- Reset -->
+            <ImageButton
+                android:id="@+id/btn_reset"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@drawable/ic_widget_replay"
+                android:background="@android:color/transparent"
+                android:scaleType="fitCenter"
+                android:contentDescription="Reset" />
 
-        <!-- Cambiar modo -->
-        <ImageButton
-            android:id="@+id/btn_toggle_mode"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:src="@drawable/ic_sw_swap"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:contentDescription="Cambiar modo" />
+            <!-- Play/Pause -->
+            <ImageButton
+                android:id="@+id/btn_start_pause"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:src="@drawable/ic_widget_play"
+                android:background="@android:color/transparent"
+                android:scaleType="fitCenter"
+                android:contentDescription="Play/Pause" />
 
-    </LinearLayout>
+            <!-- Cambiar modo -->
+            <ImageButton
+                android:id="@+id/btn_toggle_mode"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:src="@drawable/ic_widget_swap_horiz"
+                android:background="@android:color/transparent"
+                android:scaleType="fitCenter"
+                android:contentDescription="Cambiar modo" />
 
-    <!-- Sección derecha con weight=1: agrupa [−] + tiempo + etiqueta alineados a la derecha.
-         En temporizador: [−] queda pegado al tiempo (ambos dentro del mismo contenedor).
-         En cronómetro: btn_timer_sub está gone, solo queda el tiempo alineado a la derecha. -->
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
-        android:orientation="horizontal"
-        android:gravity="center_vertical|end">
+            <!-- Apagar alarma (solo visible cuando el temporizador llega a cero) -->
+            <ImageButton
+                android:id="@+id/btn_stop_alarm"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginStart="4dp"
+                android:src="@drawable/ic_sw_alarm_off"
+                android:background="@android:color/transparent"
+                android:scaleType="fitCenter"
+                android:visibility="gone"
+                android:contentDescription="Apagar alarma" />
 
-        <!-- Botón − (solo en timer, inmediatamente a la izquierda del tiempo) -->
-        <ImageButton
-            android:id="@+id/btn_timer_sub"
-            android:layout_width="26dp"
-            android:layout_height="26dp"
-            android:layout_marginEnd="4dp"
-            android:src="@drawable/ic_sw_minus"
-            android:background="@android:color/transparent"
-            android:scaleType="fitCenter"
-            android:visibility="gone"
-            android:contentDescription="-min" />
+        </LinearLayout>
 
-        <!-- Tiempo + etiqueta (agrupados verticalmente) -->
+        <!-- ── Contador derecha: [−] tiempo [+] ── -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="end">
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
+            <!-- Restar paso (solo temporizador) -->
+            <ImageButton
+                android:id="@+id/btn_timer_sub"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_widget_remove"
+                android:background="@android:color/transparent"
+                android:scaleType="fitCenter"
+                android:visibility="gone"
+                android:contentDescription="-min" />
+
+            <!-- Tiempo -->
             <TextView
                 android:id="@+id/sw_time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:gravity="center"
                 android:text="00:00"
                 android:textSize="22sp"
                 android:textColor="#FFFFFFFF"
                 android:textStyle="bold"
-                android:singleLine="true"
-                android:fontFeatureSettings="tnum"
-                android:gravity="end" />
+                android:singleLine="true" />
 
-            <TextView
-                android:id="@+id/sw_mode_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="CRONÓMETRO"
-                android:textSize="7sp"
-                android:textColor="#FF88AAFF"
-                android:letterSpacing="0.15"
-                android:gravity="end" />
+            <!-- Sumar paso (solo temporizador) -->
+            <ImageButton
+                android:id="@+id/btn_timer_add"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:src="@drawable/ic_widget_add"
+                android:background="@android:color/transparent"
+                android:scaleType="fitCenter"
+                android:visibility="gone"
+                android:contentDescription="+min" />
 
         </LinearLayout>
+
     </LinearLayout>
-
-    <!-- Botón + (solo en timer, a la derecha del contenedor del tiempo) -->
-    <ImageButton
-        android:id="@+id/btn_timer_add"
-        android:layout_width="26dp"
-        android:layout_height="26dp"
-        android:layout_marginStart="4dp"
-        android:src="@drawable/ic_sw_plus"
-        android:background="@android:color/transparent"
-        android:scaleType="fitCenter"
-        android:visibility="gone"
-        android:contentDescription="+min" />
-
-    <!-- Botón apagar alarma: solo visible cuando el temporizador llega a cero -->
-    <ImageButton
-        android:id="@+id/btn_stop_alarm"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
-        android:layout_marginStart="6dp"
-        android:src="@drawable/ic_sw_alarm_off"
-        android:background="@android:color/transparent"
-        android:scaleType="fitCenter"
-        android:visibility="gone"
-        android:contentDescription="Apagar alarma" />
 
 </LinearLayout>

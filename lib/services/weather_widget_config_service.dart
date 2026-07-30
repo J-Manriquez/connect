@@ -81,6 +81,11 @@ class WeatherWidgetConfig {
   int animLoopMode;
   // 0 = toque en el widget, 1 = foco de pantalla (desbloqueo), 2 = ambos.
   int animTrigger;
+  // true = la animación hace loop continuo (~9 s); false = un solo paso.
+  bool animCyclic;
+  // Categoría de clima para previsualizar en debug. '' = usar clima real.
+  String animDebugCategory; // 'clear' | 'clouds' | 'fog' | 'rain' | 'snow' | 'thunder' | ''
+  bool animDebugIsDay;      // solo relevante cuando animDebugCategory != ''
 
   WeatherWidgetConfig({
     required this.cityLabelSizeSp,
@@ -135,6 +140,9 @@ class WeatherWidgetConfig {
     required this.animFrameCount,
     required this.animLoopMode,
     required this.animTrigger,
+    required this.animCyclic,
+    required this.animDebugCategory,
+    required this.animDebugIsDay,
   });
 }
 
@@ -197,6 +205,9 @@ class WeatherWidgetConfigService {
   static const int defAnimFrameCount = 1;
   static const int defAnimLoopMode = 0;
   static const int defAnimTrigger = 0;
+  static const bool defAnimCyclic = false;
+  static const String defAnimDebugCategory = '';
+  static const bool defAnimDebugIsDay = true;
 
   static String _k(String prop) => '$_prefix$prop';
 
@@ -263,6 +274,9 @@ class WeatherWidgetConfigService {
       animFrameCount: gi('anim_frame_count', defAnimFrameCount).clamp(1, 36),
       animLoopMode: gi('anim_loop_mode', defAnimLoopMode).clamp(0, 1),
       animTrigger: gi('anim_trigger', defAnimTrigger).clamp(0, 2),
+      animCyclic: gb('anim_cyclic', defAnimCyclic),
+      animDebugCategory: p.getString(_k('debug_category')) ?? defAnimDebugCategory,
+      animDebugIsDay: gb('debug_is_day', defAnimDebugIsDay),
     );
   }
 
@@ -305,6 +319,22 @@ class WeatherWidgetConfigService {
   static Future<void> clearIcon(String categoryKey) async {
     final p = await SharedPreferences.getInstance();
     await p.remove(_k('icon_${categoryKey}_png'));
+    await _notify();
+  }
+
+  /// Activa el modo debug de animación con una categoría climática específica.
+  static Future<void> setDebugCategory(String category, {bool isDay = true}) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_k('debug_category'), category);
+    await p.setBool(_k('debug_is_day'), isDay);
+    await _notify();
+  }
+
+  /// Desactiva el modo debug y vuelve al clima real.
+  static Future<void> clearDebugCategory() async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove(_k('debug_category'));
+    await p.remove(_k('debug_is_day'));
     await _notify();
   }
 

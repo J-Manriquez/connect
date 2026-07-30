@@ -215,6 +215,8 @@ class WeatherStore {
                 : '${h.time.hour.toString().padLeft(2, '0')}:00',
             'emoji': WeatherCodeInfo.emojiFor(h.weatherCode,
                 isDay: h.time.hour >= 7 && h.time.hour < 20),
+            'bg': WeatherCodeInfo.category(h.weatherCode),
+            'isDay': (h.time.hour >= 7 && h.time.hour < 20) ? 1 : 0,
             'temp': h.temperature.round(),
             'pp': h.precipitationProbability,
           }
@@ -226,6 +228,7 @@ class WeatherStore {
                 ? 'Hoy'
                 : _dayNames[(daily[i].date.weekday - 1) % 7],
             'emoji': WeatherCodeInfo.emojiFor(daily[i].weatherCode),
+            'bg': WeatherCodeInfo.category(daily[i].weatherCode),
             'max': daily[i].tempMax.round(),
             'min': daily[i].tempMin.round(),
             'pp': daily[i].precipitationProbability,

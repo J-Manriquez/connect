@@ -29,65 +29,44 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         log(context, "onUpdate ids=${appWidgetIds.toList()}")
+        // Controles siempre ocultos al iniciar/refrescar el widget
+        writeCfgBool(context, PROP_CONTROLS_VISIBLE, false)
+        cancelHideControls(context)
         val cfg = readCfg(context)
         if (cfg.imageList.isNotEmpty()) {
             scheduleAdvance(context, cfg.intervalSec)
             log(context, "onUpdate scheduleAdvance intervalSec=${cfg.intervalSec}")
-        } else {
-            log(context, "onUpdate imageList vacía — mostrando placeholder con tap para configurar")
         }
         for (id in appWidgetIds) {
-            try {
-                appWidgetManager.updateAppWidget(id, buildRemoteViews(context, appWidgetManager, cfg, id))
-            } catch (e: Throwable) {
-                log(context, "onUpdate error id=$id: ${e.message}")
-            }
+            try { appWidgetManager.updateAppWidget(id, buildRemoteViews(context, appWidgetManager, cfg, id)) }
+            catch (e: Throwable) { log(context, "onUpdate error id=$id: ${e.message}") }
         }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         val action = intent.action ?: return
-        if (action !in listOf(
-                ACTION_ADVANCE, ACTION_PREV, ACTION_NEXT,
+        if (action !in listOf(ACTION_ADVANCE, ACTION_PREV, ACTION_NEXT,
                 ACTION_TOGGLE_CONTROLS, ACTION_HIDE_CONTROLS)) return
-
-        val tReceive = System.currentTimeMillis()
-        log(context, "onReceive action=$action t=$tReceive threadId=${Thread.currentThread().id}")
-
-        // goAsync() evita ANR mientras se decodifican bitmaps (el BR tiene 10-30s)
+        log(context, "onReceive action=$action")
         val pending = goAsync()
         Thread {
-            val tThread = System.currentTimeMillis()
-            log(context, "onReceive thread started action=$action delay=${tThread-tReceive}ms")
-            try {
-                handleAction(context, action)
-            } catch (e: Throwable) {
-                log(context, "handleAction CRASH action=$action error=${e.message}")
-            } finally {
-                val tDone = System.currentTimeMillis()
-                log(context, "onReceive thread done action=$action totalFromReceive=${tDone-tReceive}ms")
-                pending.finish()
-            }
+            try { handleAction(context, action) }
+            catch (e: Throwable) { log(context, "handleAction CRASH $action: ${e.message}") }
+            finally { pending.finish() }
         }.start()
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
-        val mgr = AppWidgetManager.getInstance(context)
-        val remaining = mgr.getAppWidgetIds(ComponentName(context, ImageSlideShowWidgetProvider::class.java))
-        log(context, "onDeleted ids=${appWidgetIds.toList()} remaining=${remaining.size}")
-        if (remaining.isEmpty()) {
-            cancelAdvance(context)
-            cancelHideControls(context)
-        }
+        val remaining = AppWidgetManager.getInstance(context)
+            .getAppWidgetIds(ComponentName(context, ImageSlideShowWidgetProvider::class.java))
+        if (remaining.isEmpty()) { cancelAdvance(context); cancelHideControls(context) }
     }
 
     override fun onDisabled(context: Context) {
         super.onDisabled(context)
-        log(context, "onDisabled — cancelando alarmas")
-        cancelAdvance(context)
-        cancelHideControls(context)
+        cancelAdvance(context); cancelHideControls(context)
     }
 
     companion object {
@@ -104,56 +83,15 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
         private const val PF = "flutter.widget_cfg_img_"
         private const val PROP_CURRENT_INDEX    = "current_index"
         private const val PROP_CONTROLS_VISIBLE = "controls_visible"
-
         private const val MAX_BITMAP_PX = 800
 
-        // Caché del último bitmap renderizado para toggle rápido de controles.
-        // Se invalida cuando cambia el índice o la configuración visual.
-        @Volatile private var cachedBitmap: Bitmap? = null
-        @Volatile private var cachedBitmapIndex: Int = -1
-
-        // Defaults — deben ser idénticos a ImageWidgetService.dart
-        private const val DEF_INTERVAL_SEC          = 10
-        private const val DEF_CONTROLS_HIDE_DELAY   = 5
-        private const val DEF_FX_ZOOM_PCT           = 115
-        private const val DEF_CORNER_RADIUS_DP      = 16
-        private const val DEF_BORDER_THICKNESS_DP   = 2
-        private const val DEF_SCRIM_OPACITY         = 50
-        private const val DEF_CAPTION_SIZE_SP       = 14
-        private const val DEF_CAPTION_POSITION      = 1
-        private const val DEF_CAPTION_PAD_DP        = 8
-        private const val DEF_DOTS_SIZE_DP          = 8
-        private const val DEF_DOTS_SPACING_DP       = 6
-        private const val DEF_DOTS_POSITION         = 1
-        private const val DEF_CTRL_CORNER_RADIUS_DP = 4
-        private const val DEF_CTRL_HORIZ_POS        = 0
-        private const val DEF_CTRL_VERT_POS         = 1
-
-        // ── Logging BT ────────────────────────────────────────────────────────
-
+        // ── Logging ──────────────────────────────────────────────────────────
         fun log(context: Context?, msg: String) {
             println("[$TAG] $msg")
-            // Escribir en buffer de SharedPreferences para que Dart lo lea en flutter run
-            if (context != null) {
-                try {
-                    val p = context.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
-                    val key = "flutter.img_widget_log"
-                    val ts = System.currentTimeMillis()
-                    val entry = "$ts|$msg"
-                    val existing = try { p.getString(key, "") ?: "" } catch (_: Throwable) { "" }
-                    val newBuf = if (existing.isEmpty()) entry else "$existing\n$entry"
-                    // Mantener últimos 6000 chars para evitar saturar prefs
-                    val trimmed = if (newBuf.length > 6000) newBuf.takeLast(6000) else newBuf
-                    p.edit().putString(key, trimmed).apply()
-                } catch (_: Throwable) {}
-            }
-            try {
-                BtClassicServerService.sendDebugLogToPeers(TAG, msg)
-            } catch (_: Throwable) {}
+            try { BtClassicServerService.sendDebugLogToPeers(TAG, msg) } catch (_: Throwable) {}
         }
 
         // ── Modelo ────────────────────────────────────────────────────────────
-
         data class ImageWidgetCfg(
             val imageList: List<String>,
             val currentIndex: Int,
@@ -188,58 +126,47 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             val dotsSizeDp: Int,
             val dotsSpacingDp: Int,
             val dotsPosition: Int,
-            val ctrlIconColor: Int,
-            val ctrlBgColor: Int,
-            val ctrlCornerRadiusDp: Int,
-            val ctrlHorizPos: Int,
-            val ctrlVertPos: Int
+            // Flechas
+            val arrowColor: Int,
+            val arrowBgColor: Int,
+            val arrowSizeDp: Int,
+            val arrowPosition: Int,   // 0=top  1=center  2=bottom
+            val arrowBgRoundDp: Int
         )
 
-        // ── Lógica principal ───────────────────────────────────────────────────
+        // ── Lógica principal ──────────────────────────────────────────────────
 
         private fun ts() = System.currentTimeMillis()
 
         private fun handleAction(context: Context, action: String) {
             val t0 = ts()
             val cfg = readCfg(context)
-            val t1 = ts()
-            log(context, "▶ handleAction=$action t=${t0} readCfg=${t1-t0}ms imgCount=${cfg.imageList.size} idx=${cfg.currentIndex} ctrlVisible=${cfg.controlsVisible} ctrlHideDelay=${cfg.controlsHideDelaySec}s")
-
+            log(context, "handleAction=$action imgCount=${cfg.imageList.size} idx=${cfg.currentIndex} ctrl=${cfg.controlsVisible}")
             when (action) {
                 ACTION_ADVANCE -> {
-                    if (cfg.imageList.isEmpty()) {
-                        log(context, "ADVANCE: lista vacía, reprogramando")
-                        scheduleAdvance(context, cfg.intervalSec)
-                        return
-                    }
-                    val newIdx = if (cfg.loop) {
-                        (cfg.currentIndex + 1) % cfg.imageList.size
-                    } else {
-                        (cfg.currentIndex + 1).coerceAtMost(cfg.imageList.size - 1)
-                    }
-                    log(context, "ADVANCE: ${cfg.currentIndex} -> $newIdx (fxType=${cfg.fxType})")
+                    if (cfg.imageList.isEmpty()) { scheduleAdvance(context, cfg.intervalSec); return }
+                    val newIdx = if (cfg.loop) (cfg.currentIndex + 1) % cfg.imageList.size
+                                 else (cfg.currentIndex + 1).coerceAtMost(cfg.imageList.size - 1)
+                    log(context, "ADVANCE ${cfg.currentIndex}→$newIdx fxType=${cfg.fxType}")
                     writeCfgLong(context, PROP_CURRENT_INDEX, newIdx.toLong())
                     val newCfg = cfg.copy(currentIndex = newIdx)
-                    if (cfg.fxType == 2 || cfg.fxType == 3) {
-                        performFadeTransition(context, newCfg)
-                    } else {
-                        updateAll(context, newCfg)
-                    }
+                    if (cfg.fxType == 2 || cfg.fxType == 3) performFadeTransition(context, newCfg)
+                    else updateAll(context, newCfg)
                     scheduleAdvance(context, cfg.intervalSec)
                 }
                 ACTION_PREV -> {
-                    if (cfg.imageList.isEmpty()) { log(context, "PREV: lista vacía"); return }
+                    if (cfg.imageList.isEmpty()) return
                     val newIdx = (cfg.currentIndex - 1 + cfg.imageList.size) % cfg.imageList.size
-                    log(context, "PREV: ${cfg.currentIndex} -> $newIdx")
+                    log(context, "PREV ${cfg.currentIndex}→$newIdx")
                     writeCfgLong(context, PROP_CURRENT_INDEX, newIdx.toLong())
                     updateAll(context, cfg.copy(currentIndex = newIdx))
                     scheduleAdvance(context, cfg.intervalSec)
                     scheduleHideControls(context, cfg.controlsHideDelaySec)
                 }
                 ACTION_NEXT -> {
-                    if (cfg.imageList.isEmpty()) { log(context, "NEXT: lista vacía"); return }
+                    if (cfg.imageList.isEmpty()) return
                     val newIdx = (cfg.currentIndex + 1) % cfg.imageList.size
-                    log(context, "NEXT: ${cfg.currentIndex} -> $newIdx")
+                    log(context, "NEXT ${cfg.currentIndex}→$newIdx")
                     writeCfgLong(context, PROP_CURRENT_INDEX, newIdx.toLong())
                     updateAll(context, cfg.copy(currentIndex = newIdx))
                     scheduleAdvance(context, cfg.intervalSec)
@@ -247,29 +174,15 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 }
                 ACTION_TOGGLE_CONTROLS -> {
                     val newVisible = !cfg.controlsVisible
-                    val tA = ts()
-                    log(context, "TOGGLE_CONTROLS t=$tA → newVisible=$newVisible cachedIdx=$cachedBitmapIndex currentIdx=${cfg.currentIndex} cacheValid=${cachedBitmap?.isRecycled == false && cachedBitmapIndex == cfg.currentIndex}")
+                    log(context, "TOGGLE_CONTROLS → $newVisible")
                     writeCfgBool(context, PROP_CONTROLS_VISIBLE, newVisible)
-                    val tB = ts()
-                    log(context, "TOGGLE_CONTROLS writeCfgBool=${tB-tA}ms")
-                    if (newVisible) {
-                        scheduleHideControls(context, cfg.controlsHideDelaySec)
-                        log(context, "TOGGLE_CONTROLS scheduleHideControls delaySec=${cfg.controlsHideDelaySec}")
-                    } else {
-                        cancelHideControls(context)
-                        log(context, "TOGGLE_CONTROLS cancelHideControls")
-                    }
-                    val tC = ts()
-                    quickUpdateControlVisibility(context, cfg.copy(controlsVisible = newVisible))
-                    val tD = ts()
-                    log(context, "TOGGLE_CONTROLS quickUpdate total=${tD-tA}ms (writeCfg=${tB-tA}ms schedule=${tC-tB}ms update=${tD-tC}ms)")
+                    if (newVisible) scheduleHideControls(context, cfg.controlsHideDelaySec)
+                    else cancelHideControls(context)
+                    updateAll(context, cfg.copy(controlsVisible = newVisible))
                 }
                 ACTION_HIDE_CONTROLS -> {
-                    val tA = ts()
-                    log(context, "HIDE_CONTROLS t=$tA cachedIdx=$cachedBitmapIndex currentIdx=${cfg.currentIndex}")
                     writeCfgBool(context, PROP_CONTROLS_VISIBLE, false)
-                    quickUpdateControlVisibility(context, cfg.copy(controlsVisible = false))
-                    log(context, "HIDE_CONTROLS done=${ts()-tA}ms")
+                    updateAll(context, cfg.copy(controlsVisible = false))
                 }
             }
         }
@@ -282,63 +195,59 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 (0 until arr.length()).map { arr.getString(it) }
             } catch (_: Exception) { emptyList() }
             val safeIdx = if (imageList.isEmpty()) 0
-                else fInt(p, PF + PROP_CURRENT_INDEX, 0).coerceIn(0, imageList.size - 1)
+                          else fInt(p, PF + PROP_CURRENT_INDEX, 0).coerceIn(0, imageList.size - 1)
 
             return ImageWidgetCfg(
                 imageList            = imageList,
                 currentIndex         = safeIdx,
                 loop                 = readFlutterBool(p, PF + "loop", true),
-                intervalSec          = fInt(p, PF + "interval_sec", DEF_INTERVAL_SEC).coerceIn(3, 300),
-                controlsHideDelaySec = fInt(p, PF + "controls_hide_delay_sec", DEF_CONTROLS_HIDE_DELAY).coerceIn(2, 30),
+                intervalSec          = fInt(p, PF + "interval_sec", 10).coerceIn(3, 300),
+                controlsHideDelaySec = fInt(p, PF + "controls_hide_delay_sec", 5).coerceIn(2, 30),
                 controlsVisible      = readFlutterBool(p, PF + PROP_CONTROLS_VISIBLE, false),
                 fxType               = fInt(p, PF + "fx_type", 0).coerceIn(0, 3),
-                fxZoomPct            = fInt(p, PF + "fx_zoom_pct", DEF_FX_ZOOM_PCT).coerceIn(100, 160),
+                fxZoomPct            = fInt(p, PF + "fx_zoom_pct", 115).coerceIn(100, 160),
                 fxColor              = fColor(p, PF + "fx_color", 0xFF000000L),
-                cornerRadiusDp       = fInt(p, PF + "corner_radius_dp", DEF_CORNER_RADIUS_DP).coerceIn(0, 80),
+                cornerRadiusDp       = fInt(p, PF + "corner_radius_dp", 16).coerceIn(0, 80),
                 paddingDp            = fInt(p, PF + "padding_dp", 0).coerceIn(0, 32),
                 borderShow           = readFlutterBool(p, PF + "border_show", false),
                 borderColor          = fColor(p, PF + "border_color", 0xFFFFFFFFL),
-                borderThicknessDp    = fInt(p, PF + "border_thickness_dp", DEF_BORDER_THICKNESS_DP).coerceIn(0, 16),
+                borderThicknessDp    = fInt(p, PF + "border_thickness_dp", 2).coerceIn(0, 16),
                 scaleType            = fInt(p, PF + "scale_type", 0).coerceIn(0, 4),
                 bgColor              = fColor(p, PF + "bg_color", 0xFF000000L),
                 scrimShow            = readFlutterBool(p, PF + "scrim_show", false),
                 scrimColor           = fColor(p, PF + "scrim_color", 0x80000000L),
-                scrimOpacity         = fInt(p, PF + "scrim_opacity", DEF_SCRIM_OPACITY).coerceIn(0, 100),
+                scrimOpacity         = fInt(p, PF + "scrim_opacity", 50).coerceIn(0, 100),
                 captionShow          = readFlutterBool(p, PF + "caption_show", false),
                 captionSource        = fInt(p, PF + "caption_source", 0).coerceIn(0, 1),
                 captionColor         = fColor(p, PF + "caption_color", 0xFFFFFFFFL),
-                captionSizeSp        = fInt(p, PF + "caption_size_sp", DEF_CAPTION_SIZE_SP).coerceIn(8, 36),
+                captionSizeSp        = fInt(p, PF + "caption_size_sp", 14).coerceIn(8, 36),
                 captionBold          = readFlutterBool(p, PF + "caption_bold", false),
-                captionPosition      = fInt(p, PF + "caption_position", DEF_CAPTION_POSITION).coerceIn(0, 1),
+                captionPosition      = fInt(p, PF + "caption_position", 1).coerceIn(0, 1),
                 captionBg            = fColor(p, PF + "caption_bg", 0x99000000L),
-                captionPadDp         = fInt(p, PF + "caption_pad_dp", DEF_CAPTION_PAD_DP).coerceIn(0, 24),
+                captionPadDp         = fInt(p, PF + "caption_pad_dp", 8).coerceIn(0, 24),
                 dotsShow             = readFlutterBool(p, PF + "dots_show", false),
                 dotsActiveColor      = fColor(p, PF + "dots_active_color", 0xFFFFFFFFL),
                 dotsInactiveColor    = fColor(p, PF + "dots_inactive_color", 0x80FFFFFFL),
-                dotsSizeDp           = fInt(p, PF + "dots_size_dp", DEF_DOTS_SIZE_DP).coerceIn(4, 16),
-                dotsSpacingDp        = fInt(p, PF + "dots_spacing_dp", DEF_DOTS_SPACING_DP).coerceIn(2, 16),
-                dotsPosition         = fInt(p, PF + "dots_position", DEF_DOTS_POSITION).coerceIn(0, 1),
-                ctrlIconColor        = fColor(p, PF + "ctrl_icon_color", 0xFFFFFFFFL),
-                ctrlBgColor          = fColor(p, PF + "ctrl_bg_color", 0x66000000L),
-                ctrlCornerRadiusDp   = fInt(p, PF + "ctrl_corner_radius_dp", DEF_CTRL_CORNER_RADIUS_DP).coerceIn(0, 40),
-                ctrlHorizPos         = fInt(p, PF + "ctrl_horiz_pos", DEF_CTRL_HORIZ_POS).coerceIn(0, 1),
-                ctrlVertPos          = fInt(p, PF + "ctrl_vert_pos", DEF_CTRL_VERT_POS).coerceIn(0, 2)
+                dotsSizeDp           = fInt(p, PF + "dots_size_dp", 8).coerceIn(4, 16),
+                dotsSpacingDp        = fInt(p, PF + "dots_spacing_dp", 6).coerceIn(2, 16),
+                dotsPosition         = fInt(p, PF + "dots_position", 1).coerceIn(0, 1),
+                arrowColor           = fColor(p, PF + "arrow_color", 0xFFFFFFFFL),
+                arrowBgColor         = fColor(p, PF + "arrow_bg_color", 0x66000000L),
+                arrowSizeDp          = fInt(p, PF + "arrow_size_dp", 24).coerceIn(12, 44),
+                arrowPosition        = fInt(p, PF + "arrow_position", 1).coerceIn(0, 2),
+                arrowBgRoundDp       = fInt(p, PF + "arrow_bg_round_dp", 6).coerceIn(0, 24)
             )
         }
 
         fun updateAll(context: Context, cfg: ImageWidgetCfg? = null) {
             val mgr = AppWidgetManager.getInstance(context)
             val ids = mgr.getAppWidgetIds(ComponentName(context, ImageSlideShowWidgetProvider::class.java))
-            if (ids.isEmpty()) {
-                log(context, "updateAll: sin widget IDs registrados")
-                return
-            }
+            if (ids.isEmpty()) { log(context, "updateAll: sin widgets"); return }
             val c = cfg ?: readCfg(context)
             log(context, "updateAll ids=${ids.toList()} imgCount=${c.imageList.size} idx=${c.currentIndex}")
             for (id in ids) {
                 try {
-                    val rv = buildRemoteViews(context, mgr, c, id)
-                    mgr.updateAppWidget(id, rv)
+                    mgr.updateAppWidget(id, buildRemoteViews(context, mgr, c, id))
                     log(context, "updateAll id=$id OK")
                 } catch (e: Throwable) {
                     log(context, "updateAll id=$id ERROR: ${e.message}")
@@ -346,184 +255,81 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             }
         }
 
-        // ── Layout y toggle rápido de controles ────────────────────────────────
-
-        private fun layoutForPos(horizPos: Int, vertPos: Int): Int = when {
-            horizPos == 0 && vertPos == 0 -> R.layout.widget_image_slideshow_exp_top
-            horizPos == 0 && vertPos == 2 -> R.layout.widget_image_slideshow_exp_bot
-            horizPos == 1 && vertPos == 0 -> R.layout.widget_image_slideshow_ctr_top
-            horizPos == 1 && vertPos == 1 -> R.layout.widget_image_slideshow_ctr_ctr
-            horizPos == 1 && vertPos == 2 -> R.layout.widget_image_slideshow_ctr_bot
-            else                          -> R.layout.widget_image_slideshow // expanded+center (default)
-        }
-
-        /**
-         * Actualiza la visibilidad de los controles reutilizando el bitmap cacheado.
-         * Evita re-decodificar la imagen desde disco. Si no hay caché, hace render completo.
-         */
-        private fun quickUpdateControlVisibility(context: Context, cfg: ImageWidgetCfg) {
-            val t0 = ts()
-            if (cfg.imageList.isEmpty()) { log(context, "quickToggle: imageList vacía, skip"); return }
-
-            val mgr = AppWidgetManager.getInstance(context)
-            val ids = mgr.getAppWidgetIds(ComponentName(context, ImageSlideShowWidgetProvider::class.java))
-            if (ids.isEmpty()) { log(context, "quickToggle: sin widget IDs, skip"); return }
-
-            val vis = if (cfg.controlsVisible) View.VISIBLE else View.GONE
-            val layout = layoutForPos(cfg.ctrlHorizPos, cfg.ctrlVertPos)
-
-            // Intentar reusar bitmap cacheado del índice actual
-            val cached = cachedBitmap
-            val cacheHit = cached != null && !cached.isRecycled && cachedBitmapIndex == cfg.currentIndex
-            log(context, "quickToggle: visible=${cfg.controlsVisible} vis=$vis layout=$layout cacheHit=$cacheHit cachedIdx=$cachedBitmapIndex currentIdx=${cfg.currentIndex} cachedIsNull=${cached==null} cachedRecycled=${cached?.isRecycled}")
-
-            if (cacheHit) {
-                val bmp = cached!!
-                log(context, "quickToggle: usando caché ${bmp.width}x${bmp.height}px ids=${ids.toList()}")
-                for (id in ids) {
-                    val tId = ts()
-                    try {
-                        val rv = RemoteViews(context.packageName, layout)
-                        rv.setOnClickPendingIntent(R.id.widget_image_root,
-                            makePi(context, ACTION_TOGGLE_CONTROLS, 200 + id))
-                        rv.setOnClickPendingIntent(R.id.widget_image_prev_btn,
-                            makePi(context, ACTION_PREV, 300 + id))
-                        rv.setOnClickPendingIntent(R.id.widget_image_next_btn,
-                            makePi(context, ACTION_NEXT, 400 + id))
-                        rv.setViewVisibility(R.id.widget_image_prev_btn, vis)
-                        rv.setViewVisibility(R.id.widget_image_next_btn, vis)
-                        rv.setInt(R.id.widget_image_prev_btn, "setColorFilter", cfg.ctrlIconColor)
-                        rv.setInt(R.id.widget_image_next_btn, "setColorFilter", cfg.ctrlIconColor)
-                        rv.setInt(R.id.widget_image_prev_btn, "setBackgroundColor", cfg.ctrlBgColor)
-                        rv.setInt(R.id.widget_image_next_btn, "setBackgroundColor", cfg.ctrlBgColor)
-                        rv.setImageViewBitmap(R.id.widget_image_main, bmp)
-                        mgr.updateAppWidget(id, rv)
-                        log(context, "quickToggle id=$id updateAppWidget cached OK ${ts()-tId}ms")
-                    } catch (e: Throwable) {
-                        log(context, "quickToggle id=$id ERROR: ${e.message}")
-                    }
-                }
-                log(context, "quickToggle total (cached) ${ts()-t0}ms")
-            } else {
-                // Sin caché: render completo (primera vez o caché invalidada)
-                log(context, "quickToggle: SIN CACHÉ → render completo (esto es lento) idx=${cfg.currentIndex}")
-                for (id in ids) {
-                    val tId = ts()
-                    try {
-                        mgr.updateAppWidget(id, buildRemoteViews(context, mgr, cfg, id))
-                        log(context, "quickToggle fullRender id=$id OK ${ts()-tId}ms")
-                    } catch (e: Throwable) {
-                        log(context, "quickToggle fullRender id=$id ERROR: ${e.message}")
-                    }
-                }
-                log(context, "quickToggle total (fullRender) ${ts()-t0}ms")
-            }
-        }
-
-        // ── RemoteViews ────────────────────────────────────────────────────────
-
+        // ── RemoteViews ───────────────────────────────────────────────────────
         private fun buildRemoteViews(
-            context: Context,
-            mgr: AppWidgetManager,
-            cfg: ImageWidgetCfg,
-            appWidgetId: Int
+            context: Context, mgr: AppWidgetManager,
+            cfg: ImageWidgetCfg, appWidgetId: Int
         ): RemoteViews {
-            val layout = layoutForPos(cfg.ctrlHorizPos, cfg.ctrlVertPos)
-            val rv = RemoteViews(context.packageName, layout)
+            val rv = RemoteViews(context.packageName, R.layout.widget_image_slideshow)
 
-            // El click en la RAÍZ alterna controles.
-            // Los botones prev/next son hijos con mayor z-order → capturan sus propios taps.
+            // Click en root → toggle controles
             rv.setOnClickPendingIntent(R.id.widget_image_root,
                 makePi(context, ACTION_TOGGLE_CONTROLS, 200 + appWidgetId))
-            rv.setOnClickPendingIntent(R.id.widget_image_prev_btn,
+            // Zonas de tap prev/next (FrameLayouts transparentes)
+            rv.setOnClickPendingIntent(R.id.widget_image_prev_zone,
                 makePi(context, ACTION_PREV, 300 + appWidgetId))
-            rv.setOnClickPendingIntent(R.id.widget_image_next_btn,
+            rv.setOnClickPendingIntent(R.id.widget_image_next_zone,
                 makePi(context, ACTION_NEXT, 400 + appWidgetId))
 
-            val vis = if (cfg.controlsVisible) View.VISIBLE else View.GONE
-            rv.setViewVisibility(R.id.widget_image_prev_btn, vis)
-            rv.setViewVisibility(R.id.widget_image_next_btn, vis)
-            // Aplicar estilo de controles (se aplica aunque estén GONE para que al mostrarse tengan el estilo correcto)
-            rv.setInt(R.id.widget_image_prev_btn, "setColorFilter", cfg.ctrlIconColor)
-            rv.setInt(R.id.widget_image_next_btn, "setColorFilter", cfg.ctrlIconColor)
-            rv.setInt(R.id.widget_image_prev_btn, "setBackgroundColor", cfg.ctrlBgColor)
-            rv.setInt(R.id.widget_image_next_btn, "setBackgroundColor", cfg.ctrlBgColor)
+            val zoneVis = if (cfg.controlsVisible) View.VISIBLE else View.GONE
+            rv.setViewVisibility(R.id.widget_image_prev_zone, zoneVis)
+            rv.setViewVisibility(R.id.widget_image_next_zone, zoneVis)
 
             if (cfg.imageList.isEmpty()) {
-                // Sin imágenes: toque lleva a la app para configurar
                 rv.setImageViewResource(R.id.widget_image_main, android.R.drawable.ic_menu_gallery)
                 val openIntent = Intent(context, MainActivity::class.java).apply {
                     action = ACTION_OPEN_EDITOR
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 }
-                val openPi = PendingIntent.getActivity(context, 500 + appWidgetId, openIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                rv.setOnClickPendingIntent(R.id.widget_image_root, openPi)
-                log(context, "buildRemoteViews id=$appWidgetId placeholder (sin imágenes)")
+                rv.setOnClickPendingIntent(R.id.widget_image_root,
+                    PendingIntent.getActivity(context, 500 + appWidgetId, openIntent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+                log(context, "buildRV id=$appWidgetId sin imágenes → placeholder")
                 return rv
             }
 
-            val (widthDp, heightDp) = widgetDpSize(context, mgr, appWidgetId)
+            val (wDp, hDp) = widgetDpSize(context, mgr, appWidgetId)
             val density = context.resources.displayMetrics.density
-            val targetW = (widthDp * density).toInt().coerceAtMost(MAX_BITMAP_PX).coerceAtLeast(100)
-            val targetH = (heightDp * density).toInt().coerceAtMost(MAX_BITMAP_PX).coerceAtLeast(100)
+            val rawW = (wDp * density).toInt().coerceAtLeast(100)
+            val rawH = (hDp * density).toInt().coerceAtLeast(100)
+            val bmpScale = minOf(1f, MAX_BITMAP_PX.toFloat() / maxOf(rawW, rawH))
+            val tW = (rawW * bmpScale).toInt()
+            val tH = (rawH * bmpScale).toInt()
+            log(context, "buildRV id=$appWidgetId ${wDp}x${hDp}dp → bitmap ${tW}x${tH}px idx=${cfg.currentIndex}")
 
-            log(context, "buildRemoteViews id=$appWidgetId size=${widthDp}x${heightDp}dp => bitmap=${targetW}x${targetH}px idx=${cfg.currentIndex} scaleType=${cfg.scaleType} ctrlH=${cfg.ctrlHorizPos} ctrlV=${cfg.ctrlVertPos}")
-
-            val tRender = ts()
-            val bmp = renderFrame(context, cfg, cfg.currentIndex, targetW, targetH, widthDp, heightDp)
-            val renderMs = ts() - tRender
-            if (bmp != null) {
-                // Cachear el bitmap para toggle rápido de controles
-                cachedBitmap = bmp
-                cachedBitmapIndex = cfg.currentIndex
-                log(context, "buildRemoteViews id=$appWidgetId renderFrame OK ${bmp.width}x${bmp.height}px en ${renderMs}ms → cacheado idx=${cfg.currentIndex}")
-                rv.setImageViewBitmap(R.id.widget_image_main, bmp)
-            } else {
-                // Invalidar caché si el render falla
-                cachedBitmap = null
-                cachedBitmapIndex = -1
-                rv.setImageViewResource(R.id.widget_image_main, android.R.drawable.ic_menu_gallery)
-                log(context, "buildRemoteViews id=$appWidgetId renderFrame devolvió null en ${renderMs}ms")
-            }
+            val bmp = renderFrame(context, cfg, cfg.currentIndex, tW, tH, wDp, hDp)
+            if (bmp != null) rv.setImageViewBitmap(R.id.widget_image_main, bmp)
+            else rv.setImageViewResource(R.id.widget_image_main, android.R.drawable.ic_menu_gallery)
             return rv
         }
 
-        /** Dimensiones del widget en dp según AppWidgetOptions. */
-        private fun widgetDpSize(context: Context, mgr: AppWidgetManager, id: Int): Pair<Int, Int> {
-            return try {
+        private fun widgetDpSize(context: Context, mgr: AppWidgetManager, id: Int): Pair<Int, Int> =
+            try {
                 val opts = mgr.getAppWidgetOptions(id)
                 val w = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 200).coerceAtLeast(60)
                 val h = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 200).coerceAtLeast(60)
                 w to h
             } catch (_: Exception) { 200 to 200 }
-        }
 
-        // ── Transición de fundido ─────────────────────────────────────────────
-
+        // ── Fade transition ───────────────────────────────────────────────────
         private fun performFadeTransition(context: Context, cfg: ImageWidgetCfg) {
             val mgr = AppWidgetManager.getInstance(context)
             val ids = mgr.getAppWidgetIds(ComponentName(context, ImageSlideShowWidgetProvider::class.java))
-            if (ids.isEmpty()) { log(context, "fade: sin widgets"); return }
-
+            if (ids.isEmpty()) return
             val firstId = ids.first()
             val (wDp, hDp) = widgetDpSize(context, mgr, firstId)
             val density = context.resources.displayMetrics.density
-            val tW = (wDp * density).toInt().coerceAtMost(MAX_BITMAP_PX).coerceAtLeast(100)
-            val tH = (hDp * density).toInt().coerceAtMost(MAX_BITMAP_PX).coerceAtLeast(100)
+            val rawW = (wDp * density).toInt().coerceAtLeast(100)
+            val rawH = (hDp * density).toInt().coerceAtLeast(100)
+            val bmpScale = minOf(1f, MAX_BITMAP_PX.toFloat() / maxOf(rawW, rawH))
+            val tW = (rawW * bmpScale).toInt()
+            val tH = (rawH * bmpScale).toInt()
             val fadeColor = if (cfg.fxType == 3) Color.WHITE else Color.BLACK
+            log(context, "fade idx=${cfg.currentIndex} ${tW}x${tH}")
 
-            log(context, "fade inicio idx=${cfg.currentIndex} size=${tW}x${tH}px color=$fadeColor")
-
-            // Renderizar el frame destino UNA vez
             val baseBmp = renderFrame(context, cfg, cfg.currentIndex, tW, tH, wDp, hDp)
-            if (baseBmp == null) {
-                log(context, "fade: renderFrame null, actualizando directo")
-                updateAll(context, cfg)
-                return
-            }
+                ?: run { updateAll(context, cfg); return }
 
-            // 3 pasos de overlay: opaco → semi → sin overlay
             for (alpha in listOf(210, 100, 0)) {
                 try {
                     val frameBmp = if (alpha > 0) {
@@ -533,74 +339,43 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                         out
                     } else baseBmp
 
-                    val fadeLayout = layoutForPos(cfg.ctrlHorizPos, cfg.ctrlVertPos)
                     for (id in ids) {
                         try {
-                            val rv = RemoteViews(context.packageName, fadeLayout)
-                            rv.setOnClickPendingIntent(R.id.widget_image_root,
-                                makePi(context, ACTION_TOGGLE_CONTROLS, 200 + id))
-                            rv.setOnClickPendingIntent(R.id.widget_image_prev_btn,
-                                makePi(context, ACTION_PREV, 300 + id))
-                            rv.setOnClickPendingIntent(R.id.widget_image_next_btn,
-                                makePi(context, ACTION_NEXT, 400 + id))
+                            val rv = RemoteViews(context.packageName, R.layout.widget_image_slideshow)
+                            rv.setOnClickPendingIntent(R.id.widget_image_root, makePi(context, ACTION_TOGGLE_CONTROLS, 200 + id))
+                            rv.setOnClickPendingIntent(R.id.widget_image_prev_zone, makePi(context, ACTION_PREV, 300 + id))
+                            rv.setOnClickPendingIntent(R.id.widget_image_next_zone, makePi(context, ACTION_NEXT, 400 + id))
                             val vis = if (cfg.controlsVisible) View.VISIBLE else View.GONE
-                            rv.setViewVisibility(R.id.widget_image_prev_btn, vis)
-                            rv.setViewVisibility(R.id.widget_image_next_btn, vis)
-                            rv.setInt(R.id.widget_image_prev_btn, "setColorFilter", cfg.ctrlIconColor)
-                            rv.setInt(R.id.widget_image_next_btn, "setColorFilter", cfg.ctrlIconColor)
-                            rv.setInt(R.id.widget_image_prev_btn, "setBackgroundColor", cfg.ctrlBgColor)
-                            rv.setInt(R.id.widget_image_next_btn, "setBackgroundColor", cfg.ctrlBgColor)
+                            rv.setViewVisibility(R.id.widget_image_prev_zone, vis)
+                            rv.setViewVisibility(R.id.widget_image_next_zone, vis)
                             rv.setImageViewBitmap(R.id.widget_image_main, frameBmp)
                             mgr.updateAppWidget(id, rv)
                         } catch (_: Throwable) {}
                     }
-
                     if (alpha > 0) Thread.sleep(110)
                 } catch (_: Throwable) {}
             }
-
             updateAll(context, cfg)
             try { baseBmp.recycle() } catch (_: Throwable) {}
-            log(context, "fade completado idx=${cfg.currentIndex}")
         }
 
-        // ── Pipeline de render ─────────────────────────────────────────────────
-
-        /**
-         * Renderiza un frame completo.
-         * [widthDp] / [heightDp]: dimensiones del widget en dp (para escalar dots correctamente).
-         */
+        // ── Pipeline de render ────────────────────────────────────────────────
         private fun renderFrame(
-            context: Context,
-            cfg: ImageWidgetCfg,
-            index: Int,
-            targetW: Int,
-            targetH: Int,
-            widthDp: Int,
-            heightDp: Int
+            context: Context, cfg: ImageWidgetCfg,
+            index: Int, targetW: Int, targetH: Int,
+            widthDp: Int, heightDp: Int
         ): Bitmap? {
             return try {
                 val path = cfg.imageList.getOrNull(index) ?: run {
-                    log(context, "renderFrame idx=$index fuera de rango (size=${cfg.imageList.size})")
-                    return null
+                    log(context, "renderFrame idx=$index fuera de rango size=${cfg.imageList.size}"); return null
                 }
-                val fileExists = try { File(path).exists() } catch (_: Exception) { false }
-                if (!fileExists) {
-                    log(context, "renderFrame file NOT found: $path")
-                    return null
-                }
-                log(context, "renderFrame idx=$index path=$path target=${targetW}x${targetH}px scaleType=${cfg.scaleType}")
-
                 val density = context.resources.displayMetrics.density
                 val tDecode = ts()
                 var bmp = decodeSampled(context, path, targetW, targetH) ?: run {
-                    log(context, "renderFrame decodeSampled null en ${ts()-tDecode}ms")
-                    return null
+                    log(context, "renderFrame decodeSampled null path=$path"); return null
                 }
-                log(context, "renderFrame decoded ${bmp.width}x${bmp.height}px en ${ts()-tDecode}ms")
-                val tScale = ts()
+                log(context, "renderFrame idx=$index decoded ${bmp.width}x${bmp.height} → target ${targetW}x${targetH}")
                 bmp = applyScaleType(bmp, targetW, targetH, cfg.scaleType, cfg.bgColor)
-                log(context, "renderFrame applyScaleType=${ts()-tScale}ms resultado=${bmp.width}x${bmp.height}px")
                 if (cfg.fxType == 1) bmp = applyKenBurns(bmp, index, cfg.fxZoomPct)
                 if (cfg.scrimShow) bmp = applyScrim(bmp, cfg.scrimColor, cfg.scrimOpacity)
                 if (cfg.captionShow) {
@@ -608,19 +383,15 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                     if (text.isNotEmpty()) bmp = applyCaption(bmp, text, cfg, density)
                 }
                 if (cfg.dotsShow && cfg.imageList.size > 1) {
-                    // Fórmula correcta: dotR_px = (dotsSizeDp/2) * bitmapWidth / widgetWidthDp
-                    // Así el dot se ve igual de grande independientemente del cap de px.
-                    bmp = applyDots(bmp, cfg.imageList.size, index, cfg, widthDp, heightDp)
+                    bmp = applyDots(bmp, cfg.imageList.size, index, cfg, widthDp)
                 }
-                bmp = applyFraming(
-                    bmp,
-                    padPx = (cfg.paddingDp * density).toInt(),
-                    radiusPx = cfg.cornerRadiusDp * density,
-                    bgColor = cfg.bgColor,
-                    showBorder = cfg.borderShow,
-                    borderColor = cfg.borderColor,
-                    borderThickPx = cfg.borderThicknessDp * density
-                )
+                // Flechas dibujadas en el bitmap para control total de apariencia
+                if (cfg.controlsVisible) {
+                    bmp = applyArrows(bmp, cfg, widthDp, heightDp)
+                }
+                bmp = applyFraming(bmp, (cfg.paddingDp * density).toInt(),
+                    cfg.cornerRadiusDp * density, cfg.bgColor,
+                    cfg.borderShow, cfg.borderColor, cfg.borderThicknessDp * density)
                 bmp
             } catch (e: Throwable) {
                 log(context, "renderFrame CRASH idx=$index: ${e.message}")
@@ -637,21 +408,17 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 opts.inJustDecodeBounds = false
                 opts.inPreferredConfig = Bitmap.Config.ARGB_8888
                 openImageStream(context, path)?.use { BitmapFactory.decodeStream(it, null, opts) }
-            } catch (e: Throwable) {
-                log(null, "decodeSampled error: ${e.message}")
-                null
-            }
+            } catch (e: Throwable) { log(null, "decodeSampled error: ${e.message}"); null }
         }
 
         private fun openImageStream(context: Context, path: String): InputStream? {
             try { val f = File(path); if (f.exists()) return f.inputStream() } catch (_: Exception) {}
             return try { context.contentResolver.openInputStream(Uri.fromFile(File(path))) }
-                catch (_: Exception) { null }
+                   catch (_: Exception) { null }
         }
 
         private fun calcSampleSize(opts: BitmapFactory.Options, reqW: Int, reqH: Int): Int {
-            val h = opts.outHeight; val w = opts.outWidth
-            var s = 1
+            val h = opts.outHeight; val w = opts.outWidth; var s = 1
             if (h > reqH || w > reqW) {
                 val hh = h / 2; val hw = w / 2
                 while ((hh / s) >= reqH && (hw / s) >= reqW) s *= 2
@@ -659,19 +426,36 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             return s
         }
 
+        /**
+         * Escalado de imagen con fórmula simétrica basada en el centro.
+         * Usa half-widths para garantizar que ambos márgenes sean idénticos
+         * (evita el error de redondeo float de la fórmula (dw±sw*s)/2).
+         */
         private fun applyScaleType(src: Bitmap, tw: Int, th: Int, scaleType: Int, bgColor: Int): Bitmap {
             val out = Bitmap.createBitmap(tw, th, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(out)
             canvas.drawColor(bgColor)
             val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
             val sw = src.width.toFloat(); val sh = src.height.toFloat()
-            val dw = tw.toFloat();       val dh = th.toFloat()
-            val dst = when (scaleType) {
-                0 -> { val s = maxOf(dw / sw, dh / sh); RectF((dw - sw*s)/2, (dh - sh*s)/2, (dw + sw*s)/2, (dh + sh*s)/2) }
-                1 -> { val s = minOf(dw / sw, dh / sh); RectF((dw - sw*s)/2, (dh - sh*s)/2, (dw + sw*s)/2, (dh + sh*s)/2) }
-                2 -> RectF(0f, 0f, dw, dh)
-                3 -> RectF((dw - sw)/2, (dh - sh)/2, (dw + sw)/2, (dh + sh)/2)
-                4 -> { val s = dw/sw; RectF(0f, (dh - sh*s)/2, dw, (dh + sh*s)/2) }
+            val dw = tw.toFloat(); val dh = th.toFloat()
+            val cx = dw / 2f; val cy = dh / 2f
+
+            val dst: RectF = when (scaleType) {
+                0, 1 -> { // cover (1=contain eliminado, se trata como cover)
+                    val s = maxOf(dw / sw, dh / sh)
+                    val hw = sw * s / 2f; val hh = sh * s / 2f
+                    RectF(cx - hw, cy - hh, cx + hw, cy + hh)
+                }
+                2 -> RectF(0f, 0f, dw, dh) // stretch
+                3 -> { // none: tamaño original centrado
+                    val hw = sw / 2f; val hh = sh / 2f
+                    RectF(cx - hw, cy - hh, cx + hw, cy + hh)
+                }
+                4 -> { // fitWidth
+                    val s = dw / sw
+                    val hh = sh * s / 2f
+                    RectF(0f, cy - hh, dw, cy + hh)
+                }
                 else -> RectF(0f, 0f, dw, dh)
             }
             // LOG: dimensiones de escalado para diagnosticar centrado
@@ -707,13 +491,12 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             return out
         }
 
-        private fun captionText(path: String, cfg: ImageWidgetCfg): String {
-            return if (cfg.captionSource == 0) File(path).nameWithoutExtension
+        private fun captionText(path: String, cfg: ImageWidgetCfg): String =
+            if (cfg.captionSource == 0) File(path).nameWithoutExtension
             else {
                 val ms = try { File(path).lastModified() } catch (_: Exception) { 0L }
                 if (ms > 0) SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(ms)) else ""
             }
-        }
 
         private fun applyCaption(src: Bitmap, text: String, cfg: ImageWidgetCfg, density: Float): Bitmap {
             val out = src.copy(Bitmap.Config.ARGB_8888, true)
@@ -731,50 +514,95 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
             val maxW = w - padPx * 2
             var displayText = text
             while (displayText.isNotEmpty() && textPaint.measureText(displayText) > maxW) displayText = displayText.dropLast(1)
-            val textX = ((w - textPaint.measureText(displayText)) / 2).coerceAtLeast(padPx)
-            val textY = bgRect.top + padPx + textH - fm.descent
-            canvas.drawText(displayText, textX, textY, textPaint)
+            canvas.drawText(displayText, ((w - textPaint.measureText(displayText)) / 2).coerceAtLeast(padPx),
+                bgRect.top + padPx + textH - fm.descent, textPaint)
             return out
         }
 
-        /**
-         * Dots con fórmula correcta de escala:
-         * dotR_px = (dotsSizeDp / 2) × (bitmapWidth_px / widgetWidth_dp)
-         * Esto garantiza que el dot aparezca como dotsSizeDp dp en pantalla,
-         * independientemente del cap de píxeles aplicado al bitmap.
-         */
-        private fun applyDots(
-            src: Bitmap, total: Int, current: Int, cfg: ImageWidgetCfg,
-            widthDp: Int, heightDp: Int
-        ): Bitmap {
+        /** Dots con fórmula de escala correcta: dotR_px = (sizeDp/2) × (bitmapPx / widgetDp). */
+        private fun applyDots(src: Bitmap, total: Int, current: Int, cfg: ImageWidgetCfg, widthDp: Int): Bitmap {
             val out = src.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(out)
-            val bmpW = out.width.toFloat()
-            val bmpH = out.height.toFloat()
-
-            // Ratio bitmap→dp: cuántos px del bitmap equivalen a 1dp en pantalla
+            val bmpW = out.width.toFloat(); val bmpH = out.height.toFloat()
             val pxPerDp = bmpW / widthDp.toFloat()
-
             val dotR = ((cfg.dotsSizeDp / 2f) * pxPerDp).coerceAtLeast(4f)
             val spacing = cfg.dotsSpacingDp * pxPerDp
             val margin = dotR + 8 * pxPerDp
-
             val maxDots = 12
             val display = minOf(total, maxDots)
-            val windowStart = if (total <= maxDots) 0
-                else (current - maxDots / 2).coerceIn(0, total - maxDots)
+            val windowStart = if (total <= maxDots) 0 else (current - maxDots / 2).coerceIn(0, total - maxDots)
             val rowW = display * (dotR * 2 + spacing) - spacing
             var x = (bmpW - rowW) / 2 + dotR
             val y = if (cfg.dotsPosition == 0) margin else bmpH - margin
-
             for (i in 0 until display) {
-                val actualIdx = windowStart + i
                 canvas.drawCircle(x, y, dotR, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = if (actualIdx == current) cfg.dotsActiveColor else cfg.dotsInactiveColor
+                    color = if (windowStart + i == current) cfg.dotsActiveColor else cfg.dotsInactiveColor
                 })
                 x += dotR * 2 + spacing
             }
             return out
+        }
+
+        /**
+         * Dibuja las flechas prev/next directamente sobre el bitmap.
+         * Tamaño, color, fondo y posición vertical completamente configurables.
+         * La escala usa pxPerDp igual que los dots para coherencia visual.
+         */
+        private fun applyArrows(src: Bitmap, cfg: ImageWidgetCfg, widthDp: Int, heightDp: Int): Bitmap {
+            val out = src.copy(Bitmap.Config.ARGB_8888, true)
+            val canvas = Canvas(out)
+            val bmpW = out.width.toFloat(); val bmpH = out.height.toFloat()
+            val pxPerDp = bmpW / widthDp.toFloat()
+
+            val arrowPx = (cfg.arrowSizeDp * pxPerDp).coerceAtLeast(12f)
+            val bgPad = arrowPx * 0.4f
+            val bgHalf = (arrowPx + bgPad) / 2f
+            val bgRadius = cfg.arrowBgRoundDp * pxPerDp
+            val margin = bgHalf + 6 * pxPerDp
+
+            val cy = when (cfg.arrowPosition) {
+                0 -> margin + bgHalf         // top
+                2 -> bmpH - margin - bgHalf  // bottom
+                else -> bmpH / 2f            // center
+            }
+
+            drawArrow(canvas, margin + bgHalf, cy, arrowPx, bgHalf, bgRadius,
+                cfg.arrowBgColor, cfg.arrowColor, isNext = false)
+            drawArrow(canvas, bmpW - margin - bgHalf, cy, arrowPx, bgHalf, bgRadius,
+                cfg.arrowBgColor, cfg.arrowColor, isNext = true)
+
+            return out
+        }
+
+        private fun drawArrow(
+            canvas: Canvas, cx: Float, cy: Float,
+            arrowPx: Float, bgHalf: Float, bgRadius: Float,
+            bgColor: Int, iconColor: Int, isNext: Boolean
+        ) {
+            // Fondo
+            val bgRect = RectF(cx - bgHalf, cy - bgHalf, cx + bgHalf, cy + bgHalf)
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bgColor }
+            if (bgRadius > 0f) canvas.drawRoundRect(bgRect, bgRadius, bgRadius, bgPaint)
+            else canvas.drawRect(bgRect, bgPaint)
+
+            // Chevron
+            val arm = arrowPx * 0.36f
+            val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = iconColor; style = Paint.Style.STROKE
+                strokeWidth = (arrowPx * 0.18f).coerceAtLeast(2f)
+                strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+            }
+            val path = Path()
+            if (isNext) {
+                path.moveTo(cx - arm * 0.5f, cy - arm)
+                path.lineTo(cx + arm * 0.5f, cy)
+                path.lineTo(cx - arm * 0.5f, cy + arm)
+            } else {
+                path.moveTo(cx + arm * 0.5f, cy - arm)
+                path.lineTo(cx - arm * 0.5f, cy)
+                path.lineTo(cx + arm * 0.5f, cy + arm)
+            }
+            canvas.drawPath(path, iconPaint)
         }
 
         private fun applyFraming(
@@ -793,69 +621,59 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 canvas.save(); canvas.clipPath(path)
                 canvas.drawBitmap(src, padPx.toFloat(), padPx.toFloat(), null)
                 canvas.restore()
-            } else {
-                canvas.drawBitmap(src, padPx.toFloat(), padPx.toFloat(), null)
-            }
+            } else canvas.drawBitmap(src, padPx.toFloat(), padPx.toFloat(), null)
             if (showBorder && borderThickPx > 0f) {
                 val half = borderThickPx / 2
-                val borderRect = RectF(half, half, tw - half, th - half)
+                val br = RectF(half, half, tw - half, th - half)
                 val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = borderColor; style = Paint.Style.STROKE; strokeWidth = borderThickPx
                 }
-                if (radiusPx > 0f) canvas.drawRoundRect(borderRect, radiusPx, radiusPx, p)
-                else canvas.drawRect(borderRect, p)
+                if (radiusPx > 0f) canvas.drawRoundRect(br, radiusPx, radiusPx, p) else canvas.drawRect(br, p)
             }
             try { src.recycle() } catch (_: Exception) {}
             return out
         }
 
-        // ── AlarmManager ───────────────────────────────────────────────────────
-
+        // ── AlarmManager ─────────────────────────────────────────────────────
         fun scheduleAdvance(context: Context, intervalSec: Int) {
             val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pi = makePi(context, ACTION_ADVANCE, 100)
             val at = System.currentTimeMillis() + intervalSec * 1000L
-
-            val canSchedule = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                am.canScheduleExactAlarms()
-            } else true
-
-            if (canSchedule) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) am.canScheduleExactAlarms() else true
+            if (canExact) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
                     am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
-                } else {
-                    am.setExact(AlarmManager.RTC_WAKEUP, at, pi)
-                }
-                log(context, "scheduleAdvance exact in ${intervalSec}s")
+                else am.setExact(AlarmManager.RTC_WAKEUP, at, pi)
+                log(context, "scheduleAdvance exact ${intervalSec}s")
             } else {
-                // Fallback: alarma inexacta (menos precisa pero funciona sin el permiso)
                 am.set(AlarmManager.RTC_WAKEUP, at, pi)
-                log(context, "scheduleAdvance inexacto in ~${intervalSec}s (canScheduleExactAlarms=false)")
+                log(context, "scheduleAdvance inexacto ~${intervalSec}s (canScheduleExactAlarms=false)")
             }
         }
 
-        fun cancelAdvance(context: Context) {
+        fun cancelAdvance(context: Context) =
             (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
                 .cancel(makePi(context, ACTION_ADVANCE, 100))
-            log(context, "cancelAdvance")
-        }
 
         fun scheduleHideControls(context: Context, delaySec: Int) {
             val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pi = makePi(context, ACTION_HIDE_CONTROLS, 101)
             val at = System.currentTimeMillis() + delaySec * 1000L
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) am.canScheduleExactAlarms() else true
+            if (canExact) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+                else am.setExact(AlarmManager.RTC_WAKEUP, at, pi)
+                log(context, "scheduleHideControls exact ${delaySec}s")
             } else {
-                am.setExact(AlarmManager.RTC_WAKEUP, at, pi)
+                am.set(AlarmManager.RTC_WAKEUP, at, pi)
+                log(context, "scheduleHideControls inexacto ~${delaySec}s (canScheduleExactAlarms=false)")
             }
-            log(context, "scheduleHideControls in ${delaySec}s")
         }
 
-        fun cancelHideControls(context: Context) {
+        fun cancelHideControls(context: Context) =
             (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
                 .cancel(makePi(context, ACTION_HIDE_CONTROLS, 101))
-        }
 
         private fun makePi(context: Context, action: String, reqCode: Int): PendingIntent {
             val intent = Intent(context, ImageSlideShowWidgetProvider::class.java).apply { this.action = action }
@@ -863,17 +681,14 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         }
 
-        // ── SharedPreferences helpers ──────────────────────────────────────────
-
-        fun writeCfgLong(context: Context, prop: String, value: Long) {
+        // ── SharedPreferences ─────────────────────────────────────────────────
+        fun writeCfgLong(context: Context, prop: String, value: Long) =
             context.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
                 .edit().putLong("flutter.widget_cfg_img_$prop", value).apply()
-        }
 
-        fun writeCfgBool(context: Context, prop: String, value: Boolean) {
+        fun writeCfgBool(context: Context, prop: String, value: Boolean) =
             context.getSharedPreferences(PREFS_FLUTTER, Context.MODE_PRIVATE)
                 .edit().putBoolean("flutter.widget_cfg_img_$prop", value).apply()
-        }
 
         private fun readFlutterBool(p: android.content.SharedPreferences, k: String, d: Boolean): Boolean =
             try { when (val v = p.all[k]) {
@@ -887,12 +702,8 @@ class ImageSlideShowWidgetProvider : AppWidgetProvider() {
                 is Double -> v.toLong(); is String -> v.toLongOrNull() ?: d; else -> d
             }} catch (_: Exception) { d }
 
-        private fun fInt(p: android.content.SharedPreferences, k: String, d: Int): Int =
-            fLong(p, k, d.toLong()).toInt()
-
-        private fun fColor(p: android.content.SharedPreferences, k: String, d: Long): Int =
-            fLong(p, k, d).toInt()
-
+        private fun fInt(p: android.content.SharedPreferences, k: String, d: Int): Int = fLong(p, k, d.toLong()).toInt()
+        private fun fColor(p: android.content.SharedPreferences, k: String, d: Long): Int = fLong(p, k, d).toInt()
         private fun fStr(p: android.content.SharedPreferences, k: String, d: String): String =
             try { (p.all[k] as? String)?.takeIf { it.isNotEmpty() } ?: d } catch (_: Exception) { d }
     }

@@ -337,8 +337,8 @@ class StopwatchTimerFgService : Service() {
             override fun run() {
                 if (state != STATE_RUNNING) return
                 if (mode == MODE_STOPWATCH) {
-                    val elapsed = accumulated + (System.currentTimeMillis() - startEpoch)
-                    prefs.edit().putLong(KEY_ACCUM, elapsed).apply()
+                    // No escribimos KEY_ACCUM aquí: tanto el widget como Flutter calculan
+                    // (accumulated + now - startEpoch) dinámicamente para evitar doble conteo
                 } else {
                     val elapsed   = System.currentTimeMillis() - startEpoch
                     val remaining = (timerTarget - elapsed).coerceAtLeast(0L)
@@ -349,7 +349,6 @@ class StopwatchTimerFgService : Service() {
                     }
                 }
                 broadcastTick()
-                // Actualizar widget y notificación cada ~1 segundo para no saturar IPC
                 tickCount++
                 if (tickCount >= 20) {
                     tickCount = 0
@@ -472,46 +471,74 @@ class StopwatchTimerFgService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val timeText = when {
-            mode == MODE_STOPWATCH -> formatElapsed(accumulated)
-            mode == MODE_TIMER     -> formatElapsed(prefs.getLong(KEY_TIMER_REM, timerTarget))
-            else                   -> "00:00.000"
+        val now = System.currentTimeMillis()
+        val timeMs = when {
+            state == STATE_RUNNING && mode == MODE_STOPWATCH ->
+                accumulated + (now - startEpoch)
+            state == STATE_RUNNING && mode == MODE_TIMER ->
+                (timerTarget - (now - startEpoch)).coerceAtLeast(0L)
+            state == STATE_FINISHED ->
+                0L
+            mode == MODE_STOPWATCH ->
+                accumulated
+            else ->
+                prefs.getLong(KEY_TIMER_REM, timerTarget).coerceAtLeast(0L)
         }
+
+        val timeText  = formatNotifTime(timeMs)
+        val modeLabel = if (mode == MODE_STOPWATCH) "Cronómetro" else "Temporizador"
         val stateText = when (state) {
-            STATE_RUNNING  -> if (mode == MODE_STOPWATCH) "Cronómetro corriendo" else "Temporizador corriendo"
-            STATE_PAUSED   -> "Pausado"
-            STATE_FINISHED -> "Tiempo terminado"
-            else           -> if (mode == MODE_STOPWATCH) "Cronómetro listo" else "Temporizador listo"
+            STATE_RUNNING  -> "$modeLabel en curso"
+            STATE_PAUSED   -> "$modeLabel pausado"
+            STATE_FINISHED -> "¡Tiempo terminado!"
+            else           -> "$modeLabel listo"
         }
 
-        val toggleAction = if (state == STATE_RUNNING) {
-            val pi = PendingIntent.getService(this, 1,
-                Intent(this, StopwatchTimerFgService::class.java).setAction(ACTION_PAUSE),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            NotificationCompat.Action(android.R.drawable.ic_media_pause, "Pausar", pi)
-        } else {
-            val pi = PendingIntent.getService(this, 1,
-                Intent(this, StopwatchTimerFgService::class.java).setAction(ACTION_START),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            NotificationCompat.Action(android.R.drawable.ic_media_play, "Iniciar", pi)
-        }
-
-        val resetPi = PendingIntent.getService(this, 2,
+        val stopPi = PendingIntent.getService(this, 2,
             Intent(this, StopwatchTimerFgService::class.java).setAction(ACTION_RESET),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val resetAction = NotificationCompat.Action(android.R.drawable.ic_menu_close_clear_cancel, "Reiniciar", resetPi)
 
-        return NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, NOTIF_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(timeText)
             .setContentText(stateText)
             .setContentIntent(openIntent)
-            .addAction(toggleAction)
-            .addAction(resetAction)
-            .setOngoing(state == STATE_RUNNING)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+
+        when (state) {
+            STATE_FINISHED -> {
+                // Alarma activa: solo botón para detenerla, notificación persistente
+                builder.addAction(NotificationCompat.Action(
+                    android.R.drawable.ic_menu_close_clear_cancel, "Detener alarma", stopPi))
+                builder.setOngoing(true)
+            }
+            STATE_RUNNING -> {
+                val pausePi = PendingIntent.getService(this, 1,
+                    Intent(this, StopwatchTimerFgService::class.java).setAction(ACTION_PAUSE),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                builder.addAction(NotificationCompat.Action(
+                    android.R.drawable.ic_media_pause, "Pausar", pausePi))
+                builder.addAction(NotificationCompat.Action(
+                    android.R.drawable.ic_menu_close_clear_cancel, "Detener", stopPi))
+                builder.setOngoing(true)
+            }
+            STATE_PAUSED -> {
+                val resumePi = PendingIntent.getService(this, 1,
+                    Intent(this, StopwatchTimerFgService::class.java).setAction(ACTION_START),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                builder.addAction(NotificationCompat.Action(
+                    android.R.drawable.ic_media_play, "Continuar", resumePi))
+                builder.addAction(NotificationCompat.Action(
+                    android.R.drawable.ic_menu_close_clear_cancel, "Detener", stopPi))
+                builder.setOngoing(false)
+            }
+            else -> {
+                builder.setOngoing(false)
+            }
+        }
+
+        return builder.build()
     }
 
     private fun updateNotification() {
@@ -607,6 +634,15 @@ class StopwatchTimerFgService : Service() {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────────
+
+    private fun formatNotifTime(ms: Long): String {
+        val total = ms.coerceAtLeast(0L)
+        val h = total / 3_600_000L
+        val m = (total % 3_600_000L) / 60_000L
+        val s = (total % 60_000L) / 1_000L
+        return if (h > 0) "%02d:%02d:%02d".format(h, m, s)
+               else       "%02d:%02d".format(m, s)
+    }
 
     private fun formatElapsed(ms: Long): String {
         val total = ms.coerceAtLeast(0L)

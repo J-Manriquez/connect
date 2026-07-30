@@ -13,6 +13,141 @@ import kotlin.math.*
  */
 internal object WeatherFrameRenderer {
 
+    // =========================================================================
+    // Iconos de clima (estilo Material Design) para el widget nativo.
+    // Reemplazan los emojis del sistema, que varían por dispositivo/versión.
+    // =========================================================================
+
+    /** Renderiza un icono de clima al estilo Material Design en un [Bitmap] cuadrado. */
+    fun renderIconBitmap(category: String, isDay: Boolean, sizePx: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        bmp.eraseColor(0)
+        val canvas = Canvas(bmp)
+        val s = sizePx.toFloat()
+        val cx = s / 2f
+        val cy = s / 2f
+        val p = Paint(Paint.ANTI_ALIAS_FLAG)
+
+        // Colores espejo de WeatherCodeInfo.from() en Dart (lib/models/weather_models.dart).
+        p.color = when (category) {
+            "clear"   -> if (isDay) 0xFFFFB300.toInt() else 0xFF5C6BC0.toInt()
+            "clouds"  -> 0xFF90A4AE.toInt()
+            "fog"     -> 0xFFB0BEC5.toInt()
+            "rain"    -> 0xFF29B6F6.toInt()
+            "snow"    -> 0xFF81D4FA.toInt()
+            "thunder" -> 0xFF5C6BC0.toInt()
+            else      -> 0xFF90A4AE.toInt()
+        }
+
+        when (category) {
+            "clear"   -> if (isDay) iconSun(canvas, cx, cy, s, p) else iconMoon(canvas, cx, cy, s, p)
+            "clouds"  -> iconCloud(canvas, cx, cy, s, p)
+            "fog"     -> iconFog(canvas, cx, cy, s, p)
+            "rain"    -> iconRain(canvas, cx, cy, s, p)
+            "snow"    -> iconSnow(canvas, cx, cy, s, p)
+            "thunder" -> iconThunder(canvas, cx, cy, s, p)
+            else      -> iconCloud(canvas, cx, cy, s, p)
+        }
+        return bmp
+    }
+
+    // --- Sol (wb_sunny): círculo + 8 rayos ------------------------------------
+    private fun iconSun(canvas: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        p.style = Paint.Style.FILL
+        canvas.drawCircle(cx, cy, s * 0.22f, p)
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.07f
+        p.strokeCap = Paint.Cap.ROUND
+        for (i in 0 until 8) {
+            val a = i * PI.toFloat() / 4f
+            canvas.drawLine(cx + cos(a)*s*0.29f, cy + sin(a)*s*0.29f,
+                            cx + cos(a)*s*0.42f, cy + sin(a)*s*0.42f, p)
+        }
+    }
+
+    // --- Luna creciente (nightlight_round) ------------------------------------
+    private fun iconMoon(canvas: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val path = Path().apply { addCircle(cx, cy, s * 0.34f, Path.Direction.CW) }
+        path.op(Path().apply { addCircle(cx + s*0.21f, cy - s*0.15f, s * 0.28f, Path.Direction.CW) },
+                Path.Op.DIFFERENCE)
+        p.style = Paint.Style.FILL
+        canvas.drawPath(path, p)
+    }
+
+    // --- Nube (cloud) ---------------------------------------------------------
+    private fun iconCloud(canvas: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        p.style = Paint.Style.FILL
+        canvas.drawCircle(cx - s*0.14f, cy + s*0.05f, s*0.20f, p)
+        canvas.drawCircle(cx + s*0.14f, cy + s*0.05f, s*0.17f, p)
+        canvas.drawCircle(cx,           cy - s*0.05f, s*0.23f, p)
+        canvas.drawRoundRect(RectF(cx-s*0.28f, cy+s*0.02f, cx+s*0.28f, cy+s*0.22f), s*0.12f, s*0.12f, p)
+    }
+
+    // --- Niebla (foggy): bandas horizontales ----------------------------------
+    private fun iconFog(canvas: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.09f
+        p.strokeCap = Paint.Cap.ROUND
+        for (i in 0 until 3) {
+            val y = cy - s*0.13f + i * s*0.14f
+            val xOff = if (i == 1) s*0.04f else 0f
+            canvas.drawLine(cx - s*0.35f + xOff, y, cx + s*0.35f - xOff, y, p)
+        }
+    }
+
+    // --- Lluvia (umbrella/grain): nube + gotas --------------------------------
+    private fun iconRain(canvas: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        // Nube pequeña en parte superior
+        p.style = Paint.Style.FILL
+        canvas.drawCircle(cx - s*0.11f, cy - s*0.10f, s*0.17f, p)
+        canvas.drawCircle(cx + s*0.11f, cy - s*0.08f, s*0.15f, p)
+        canvas.drawCircle(cx,           cy - s*0.20f, s*0.19f, p)
+        canvas.drawRoundRect(RectF(cx-s*0.22f, cy-s*0.13f, cx+s*0.22f, cy+s*0.01f), s*0.09f, s*0.09f, p)
+        // Gotas inclinadas
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.07f
+        p.strokeCap = Paint.Cap.ROUND
+        for (i in -1..1) {
+            val dx = i * s * 0.13f
+            canvas.drawLine(cx+dx-s*0.03f, cy+s*0.08f, cx+dx+s*0.03f, cy+s*0.22f, p)
+        }
+    }
+
+    // --- Nieve (ac_unit): copo de nieve de 6 brazos --------------------------
+    private fun iconSnow(canvas: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.08f
+        p.strokeCap = Paint.Cap.ROUND
+        val r = s * 0.37f
+        for (i in 0 until 6) {
+            val a = i * PI.toFloat() / 3f
+            canvas.drawLine(cx, cy, cx + cos(a)*r, cy + sin(a)*r, p)
+        }
+        p.style = Paint.Style.FILL
+        canvas.drawCircle(cx, cy, s * 0.07f, p)
+    }
+
+    // --- Tormenta (thunderstorm): nube + rayo --------------------------------
+    private fun iconThunder(canvas: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        // Nube
+        p.style = Paint.Style.FILL
+        canvas.drawCircle(cx - s*0.10f, cy - s*0.12f, s*0.16f, p)
+        canvas.drawCircle(cx + s*0.10f, cy - s*0.10f, s*0.14f, p)
+        canvas.drawCircle(cx,           cy - s*0.22f, s*0.17f, p)
+        canvas.drawRoundRect(RectF(cx-s*0.20f, cy-s*0.14f, cx+s*0.20f, cy-s*0.01f), s*0.08f, s*0.08f, p)
+        // Rayo
+        val bolt = Path().apply {
+            moveTo(cx + s*0.05f, cy + s*0.01f)
+            lineTo(cx - s*0.08f, cy + s*0.18f)
+            lineTo(cx + s*0.02f, cy + s*0.18f)
+            lineTo(cx - s*0.05f, cy + s*0.40f)
+            lineTo(cx + s*0.12f, cy + s*0.16f)
+            lineTo(cx + s*0.02f, cy + s*0.16f)
+            close()
+        }
+        canvas.drawPath(bolt, p)
+    }
+
     data class Particle(val x: Float, val phase: Float, val speed: Float, val size: Float)
 
     /** Duración de un ciclo de animación por categoría (segundos virtuales). */
@@ -129,9 +264,27 @@ internal object WeatherFrameRenderer {
     // -------------------------------------------------------------------------
 
     private fun paintSun(canvas: Canvas, w: Float, h: Float, t: Float) {
-        val cx = w * 0.80f
+        val cx = w * 0.20f  // sol en la izquierda
         val cy = h * 0.28f
         val pulse = 0.5f + 0.5f * sin(t * 1.2f)
+
+        // Rayos de barrido horizontal (de izquierda a derecha).
+        val sweepPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 18f
+            strokeCap = Paint.Cap.BUTT
+            maskFilter = BlurMaskFilter(24f, BlurMaskFilter.Blur.NORMAL)
+        }
+        for (i in 0 until 4) {
+            val angle = (-0.30f + i * 0.20f)
+            val phase = i * 0.28f
+            val travel = ((t * 0.10f + phase) % 1.0f)
+            val alpha = (0.10f * sin(travel * PI.toFloat())).coerceAtLeast(0f)
+            if (alpha < 0.01f) continue
+            sweepPaint.color = argb(alpha, 0xFFE08A)
+            val len = w * 1.3f
+            canvas.drawLine(cx + 28f, cy, cx + 28f + len * cos(angle), cy + len * sin(angle), sweepPaint)
+        }
 
         // Halo radial.
         canvas.drawCircle(cx, cy, 46f + pulse * 6f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -217,8 +370,11 @@ internal object WeatherFrameRenderer {
     }
 
     private fun drawCloud(canvas: Canvas, cx: Float, cy: Float, cw: Float, alpha: Float) {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = argb(alpha, 0xFFFFFF) }
         val h = cw * 0.42f
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = argb(alpha, 0xFFFFFF)
+            maskFilter = BlurMaskFilter((h * 0.38f).coerceAtLeast(4f), BlurMaskFilter.Blur.NORMAL)
+        }
         canvas.drawCircle(cx,                  cy,             h * 0.6f,  paint)
         canvas.drawCircle(cx + cw * 0.28f,     cy + h * 0.08f, h * 0.5f,  paint)
         canvas.drawCircle(cx - cw * 0.28f,     cy + h * 0.1f,  h * 0.45f, paint)
@@ -234,19 +390,27 @@ internal object WeatherFrameRenderer {
 
     private fun paintFog(canvas: Canvas, w: Float, h: Float, t: Float, particles: List<Particle>) {
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            maskFilter = BlurMaskFilter(14f, BlurMaskFilter.Blur.NORMAL)
+            maskFilter = BlurMaskFilter(22f, BlurMaskFilter.Blur.NORMAL)
         }
         for (i in particles.indices) {
-            val p    = particles[i]
-            val py   = h * (0.2f + i.toFloat() / particles.size * 0.7f)
-            val trav = (t * 0.03f * p.speed + p.phase) % 1.4f - 0.2f
-            val px   = trav * w
-            val bandH = 26f + p.size * 18f
-            paint.color = argb(0.10f + p.size * 0.06f, 0xFFFFFF)
+            val p     = particles[i]
+            val py    = h * (0.15f + i.toFloat() / particles.size * 0.75f)
+            val bandH = 32f + p.size * 24f
+            // Capa primaria (movimiento hacia la derecha)
+            val trav1 = (t * 0.025f * p.speed + p.phase) % 1.5f - 0.25f
+            paint.color = argb(0.12f + p.size * 0.07f, 0xFFFFFF)
             canvas.drawRoundRect(
-                RectF(px + w * 0.3f - w * 0.6f, py - bandH / 2f,
-                      px + w * 0.3f + w * 0.6f, py + bandH / 2f),
-                40f, 40f, paint,
+                RectF(trav1 * w - w * 0.25f, py - bandH / 2f,
+                      trav1 * w + w * 0.95f, py + bandH / 2f),
+                50f, 50f, paint,
+            )
+            // Capa secundaria (movimiento más lento, fase opuesta)
+            val trav2 = (t * 0.018f * p.speed + p.phase + 0.65f) % 1.5f - 0.25f
+            paint.color = argb(0.07f + p.size * 0.04f, 0xFFFFFF)
+            canvas.drawRoundRect(
+                RectF(trav2 * w - w * 0.25f, py - bandH * 0.55f,
+                      trav2 * w + w * 0.95f, py + bandH * 0.55f),
+                50f, 50f, paint,
             )
         }
     }

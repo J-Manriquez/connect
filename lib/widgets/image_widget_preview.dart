@@ -95,79 +95,50 @@ class ImageWidgetPreview extends StatelessWidget {
       );
     }
 
-    // Controls overlay (preview always shows them as a hint)
+    // Flechas con la configuración actual (espejo exacto de applyArrows en Kotlin)
     if (cfg.controlsVisible) {
-      final iconColor = Color(cfg.ctrlIconColor);
-      final bgColor = Color(cfg.ctrlBgColor);
-      final radius = cfg.ctrlCornerRadiusDp.toDouble();
-
-      final prevBtn = _ControlBtn(
-        icon: Icons.chevron_left,
-        iconColor: iconColor,
-        bgColor: bgColor,
-        radius: radius,
-      );
-      final nextBtn = _ControlBtn(
-        icon: Icons.chevron_right,
-        iconColor: iconColor,
-        bgColor: bgColor,
-        radius: radius,
-      );
-
-      Widget controls;
-      if (cfg.ctrlHorizPos == 1) {
-        // Centrado: ambos botones juntos en el centro horizontal
-        controls = Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [prevBtn, const SizedBox(width: 8), nextBtn],
-          ),
-        );
-        if (cfg.ctrlVertPos == 0) controls = Align(alignment: Alignment.topCenter, child: Padding(padding: const EdgeInsets.only(top: 6), child: Row(mainAxisSize: MainAxisSize.min, children: [prevBtn, const SizedBox(width: 8), nextBtn])));
-        if (cfg.ctrlVertPos == 2) controls = Align(alignment: Alignment.bottomCenter, child: Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(mainAxisSize: MainAxisSize.min, children: [prevBtn, const SizedBox(width: 8), nextBtn])));
-      } else {
-        // Expandido: prev a la izquierda, next a la derecha
-        final vertAlignEnum = switch (cfg.ctrlVertPos) {
-          0 => Alignment.topLeft,
-          2 => Alignment.bottomLeft,
-          _ => Alignment.centerLeft,
-        };
-        final vertAlignEnumR = switch (cfg.ctrlVertPos) {
-          0 => Alignment.topRight,
-          2 => Alignment.bottomRight,
-          _ => Alignment.centerRight,
-        };
-        controls = Stack(
-          children: [
-            Align(
-              alignment: vertAlignEnum,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 6,
-                  top: cfg.ctrlVertPos == 0 ? 6 : 0,
-                  bottom: cfg.ctrlVertPos == 2 ? 6 : 0,
-                ),
-                child: prevBtn,
-              ),
-            ),
-            Align(
-              alignment: vertAlignEnumR,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  right: 6,
-                  top: cfg.ctrlVertPos == 0 ? 6 : 0,
-                  bottom: cfg.ctrlVertPos == 2 ? 6 : 0,
-                ),
-                child: nextBtn,
-              ),
-            ),
-          ],
-        );
-      }
-
+      final arrowSize = cfg.arrowSizeDp.toDouble();
+      final bgPad = arrowSize * 0.4;
+      final btnSize = arrowSize + bgPad;
+      final margin = btnSize / 2 + 6;
       imageContent = Stack(
         fit: StackFit.expand,
-        children: [imageContent, controls],
+        children: [
+          imageContent,
+          LayoutBuilder(builder: (_, constraints) {
+            final h = constraints.maxHeight;
+            final cy = switch (cfg.arrowPosition) {
+              0 => margin,            // top: pegado arriba
+              2 => h - margin,        // bottom: pegado abajo
+              _ => h / 2,             // center
+            };
+            final top = cy - btnSize / 2;
+            return Stack(children: [
+              Positioned(
+                left: 6,
+                top: top,
+                child: _ArrowBtn(
+                  isNext: false,
+                  color: Color(cfg.arrowColor),
+                  bgColor: Color(cfg.arrowBgColor),
+                  sizeDp: arrowSize,
+                  bgRoundDp: cfg.arrowBgRoundDp.toDouble(),
+                ),
+              ),
+              Positioned(
+                right: 6,
+                top: top,
+                child: _ArrowBtn(
+                  isNext: true,
+                  color: Color(cfg.arrowColor),
+                  bgColor: Color(cfg.arrowBgColor),
+                  sizeDp: arrowSize,
+                  bgRoundDp: cfg.arrowBgRoundDp.toDouble(),
+                ),
+              ),
+            ]);
+          }),
+        ],
       );
     }
 
@@ -219,7 +190,6 @@ class ImageWidgetPreview extends StatelessWidget {
     BoxFit fit;
     switch (cfg.scaleType) {
       case 0: fit = BoxFit.cover; break;
-      case 1: fit = BoxFit.contain; break;
       case 2: fit = BoxFit.fill; break;
       case 3: fit = BoxFit.none; break;
       case 4: fit = BoxFit.fitWidth; break;
@@ -318,29 +288,38 @@ class _DotsRow extends StatelessWidget {
   }
 }
 
-class _ControlBtn extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
+// Espejo Flutter de drawArrow() en Kotlin — misma lógica de tamaño/color/fondo
+class _ArrowBtn extends StatelessWidget {
+  final bool isNext;
+  final Color color;
   final Color bgColor;
-  final double radius;
+  final double sizeDp;
+  final double bgRoundDp;
 
-  const _ControlBtn({
-    required this.icon,
-    required this.iconColor,
+  const _ArrowBtn({
+    required this.isNext,
+    required this.color,
     required this.bgColor,
-    required this.radius,
+    required this.sizeDp,
+    required this.bgRoundDp,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bgPad = sizeDp * 0.4;
+    final total = sizeDp + bgPad;
     return Container(
-      width: 32,
-      height: 32,
+      width: total,
+      height: total,
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(radius),
+        borderRadius: BorderRadius.circular(bgRoundDp),
       ),
-      child: Icon(icon, color: iconColor, size: 20),
+      child: Icon(
+        isNext ? Icons.chevron_right : Icons.chevron_left,
+        color: color,
+        size: sizeDp,
+      ),
     );
   }
 }

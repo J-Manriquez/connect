@@ -41,7 +41,11 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="📍"
-                    android:textSize="13sp" />
+                    android:textSize="13sp"
+                    android:shadowColor="#CC000000"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4" />
 
                 <TextView
                     android:id="@+id/weather_city"
@@ -53,7 +57,11 @@
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:maxLines="1"
-                    android:ellipsize="end" />
+                    android:ellipsize="end"
+                    android:shadowColor="#CC000000"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4" />
 
                 <TextView
                     android:id="@+id/weather_city_caret"
@@ -61,7 +69,11 @@
                     android:layout_height="wrap_content"
                     android:text=" ▾"
                     android:textColor="#FFFFFF"
-                    android:textSize="14sp" />
+                    android:textSize="14sp"
+                    android:shadowColor="#CC000000"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4" />
             </LinearLayout>
 
             <TextView
@@ -70,7 +82,29 @@
                 android:layout_height="wrap_content"
                 android:text="Ahora"
                 android:textColor="#B3FFFFFF"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                android:shadowColor="#CC000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4" />
+
+            <TextView
+                android:id="@+id/weather_refresh"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="↺"
+                android:textColor="#B3FFFFFF"
+                android:textSize="16sp"
+                android:background="?android:attr/selectableItemBackground"
+                android:shadowColor="#CC000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4" />
         </LinearLayout>
 
         <!-- ===== Contenido (una de las 3 vistas visible a la vez) ===== -->
@@ -100,7 +134,11 @@
                         android:layout_height="wrap_content"
                         android:text="--°"
                         android:textColor="#FFFFFF"
-                        android:textSize="48sp" />
+                        android:textSize="48sp"
+                        android:shadowColor="#CC000000"
+                        android:shadowDx="0"
+                        android:shadowDy="1"
+                        android:shadowRadius="6" />
 
                     <TextView
                         android:id="@+id/weather_desc"
@@ -110,7 +148,11 @@
                         android:textColor="#FFFFFF"
                         android:textSize="15sp"
                         android:maxLines="1"
-                        android:ellipsize="end" />
+                        android:ellipsize="end"
+                        android:shadowColor="#CC000000"
+                        android:shadowDx="0"
+                        android:shadowDy="1"
+                        android:shadowRadius="4" />
 
                     <TextView
                         android:id="@+id/weather_apparent"
@@ -118,7 +160,11 @@
                         android:layout_height="wrap_content"
                         android:text=""
                         android:textColor="#B3FFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:shadowColor="#CC000000"
+                        android:shadowDx="0"
+                        android:shadowDy="1"
+                        android:shadowRadius="4" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -127,12 +173,12 @@
                     android:orientation="vertical"
                     android:gravity="center_horizontal">
 
-                    <TextView
+                    <ImageView
                         android:id="@+id/weather_emoji"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="🌡️"
-                        android:textSize="50sp" />
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="@null" />
 
                     <TextView
                         android:id="@+id/weather_humidity"
@@ -141,7 +187,11 @@
                         android:layout_marginTop="6dp"
                         android:text=""
                         android:textColor="#FFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:shadowColor="#CC000000"
+                        android:shadowDx="0"
+                        android:shadowDy="1"
+                        android:shadowRadius="4" />
 
                     <TextView
                         android:id="@+id/weather_wind"
@@ -150,7 +200,11 @@
                         android:layout_marginTop="2dp"
                         android:text=""
                         android:textColor="#FFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:shadowColor="#CC000000"
+                        android:shadowDx="0"
+                        android:shadowDy="1"
+                        android:shadowRadius="4" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -170,25 +224,25 @@
 
                     <LinearLayout android:id="@+id/hr0" style="@style/WeatherRow">
                         <TextView android:id="@+id/hr0_time" style="@style/WeatherRowLabel" />
-                        <TextView android:id="@+id/hr0_emoji" style="@style/WeatherRowEmoji" />
+                        <ImageView android:id="@+id/hr0_emoji" style="@style/WeatherRowIcon" android:contentDescription="@null" />
                         <TextView android:id="@+id/hr0_pp" style="@style/WeatherRowPp" />
                         <TextView android:id="@+id/hr0_temp" style="@style/WeatherRowVal" />
                     </LinearLayout>
                     <LinearLayout android:id="@+id/hr1" style="@style/WeatherRow">
                         <TextView android:id="@+id/hr1_time" style="@style/WeatherRowLabel" />
-                        <TextView android:id="@+id/hr1_emoji" style="@style/WeatherRowEmoji" />
+                        <ImageView android:id="@+id/hr1_emoji" style="@style/WeatherRowIcon" android:contentDescription="@null" />
                         <TextView android:id="@+id/hr1_pp" style="@style/WeatherRowPp" />
                         <TextView android:id="@+id/hr1_temp" style="@style/WeatherRowVal" />
                     </LinearLayout>
                     <LinearLayout android:id="@+id/hr2" style="@style/WeatherRow">
                         <TextView android:id="@+id/hr2_time" style="@style/WeatherRowLabel" />
-                        <TextView android:id="@+id/hr2_emoji" style="@style/WeatherRowEmoji" />
+                        <ImageView android:id="@+id/hr2_emoji" style="@style/WeatherRowIcon" android:contentDescription="@null" />
                         <TextView android:id="@+id/hr2_pp" style="@style/WeatherRowPp" />
                         <TextView android:id="@+id/hr2_temp" style="@style/WeatherRowVal" />
                     </LinearLayout>
                     <LinearLayout android:id="@+id/hr3" style="@style/WeatherRow">
                         <TextView android:id="@+id/hr3_time" style="@style/WeatherRowLabel" />
-                        <TextView android:id="@+id/hr3_emoji" style="@style/WeatherRowEmoji" />
+                        <ImageView android:id="@+id/hr3_emoji" style="@style/WeatherRowIcon" android:contentDescription="@null" />
                         <TextView android:id="@+id/hr3_pp" style="@style/WeatherRowPp" />
                         <TextView android:id="@+id/hr3_temp" style="@style/WeatherRowVal" />
                     </LinearLayout>
@@ -216,25 +270,25 @@
 
                     <LinearLayout android:id="@+id/dy0" style="@style/WeatherRow">
                         <TextView android:id="@+id/dy0_day" style="@style/WeatherRowLabel" />
-                        <TextView android:id="@+id/dy0_emoji" style="@style/WeatherRowEmoji" />
+                        <ImageView android:id="@+id/dy0_emoji" style="@style/WeatherRowIcon" android:contentDescription="@null" />
                         <TextView android:id="@+id/dy0_pp" style="@style/WeatherRowPp" />
                         <TextView android:id="@+id/dy0_temp" style="@style/WeatherRowVal" />
                     </LinearLayout>
                     <LinearLayout android:id="@+id/dy1" style="@style/WeatherRow">
                         <TextView android:id="@+id/dy1_day" style="@style/WeatherRowLabel" />
-                        <TextView android:id="@+id/dy1_emoji" style="@style/WeatherRowEmoji" />
+                        <ImageView android:id="@+id/dy1_emoji" style="@style/WeatherRowIcon" android:contentDescription="@null" />
                         <TextView android:id="@+id/dy1_pp" style="@style/WeatherRowPp" />
                         <TextView android:id="@+id/dy1_temp" style="@style/WeatherRowVal" />
                     </LinearLayout>
                     <LinearLayout android:id="@+id/dy2" style="@style/WeatherRow">
                         <TextView android:id="@+id/dy2_day" style="@style/WeatherRowLabel" />
-                        <TextView android:id="@+id/dy2_emoji" style="@style/WeatherRowEmoji" />
+                        <ImageView android:id="@+id/dy2_emoji" style="@style/WeatherRowIcon" android:contentDescription="@null" />
                         <TextView android:id="@+id/dy2_pp" style="@style/WeatherRowPp" />
                         <TextView android:id="@+id/dy2_temp" style="@style/WeatherRowVal" />
                     </LinearLayout>
                     <LinearLayout android:id="@+id/dy3" style="@style/WeatherRow">
                         <TextView android:id="@+id/dy3_day" style="@style/WeatherRowLabel" />
-                        <TextView android:id="@+id/dy3_emoji" style="@style/WeatherRowEmoji" />
+                        <ImageView android:id="@+id/dy3_emoji" style="@style/WeatherRowIcon" android:contentDescription="@null" />
                         <TextView android:id="@+id/dy3_pp" style="@style/WeatherRowPp" />
                         <TextView android:id="@+id/dy3_temp" style="@style/WeatherRowVal" />
                     </LinearLayout>
@@ -255,7 +309,11 @@
                 android:text="Abre la app para elegir una ciudad"
                 android:textColor="#B3FFFFFF"
                 android:textSize="13sp"
-                android:visibility="gone" />
+                android:visibility="gone"
+                android:shadowColor="#CC000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4" />
         </FrameLayout>
 
         <!-- ===== Pie: ◀ · indicadores · ▶ ===== -->
@@ -278,7 +336,11 @@
                 android:text="◀"
                 android:textColor="#FFFFFF"
                 android:textSize="16sp"
-                android:background="?android:attr/selectableItemBackground" />
+                android:background="?android:attr/selectableItemBackground"
+                android:shadowColor="#CC000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -303,7 +365,11 @@
                 android:text="▶"
                 android:textColor="#FFFFFF"
                 android:textSize="16sp"
-                android:background="?android:attr/selectableItemBackground" />
+                android:background="?android:attr/selectableItemBackground"
+                android:shadowColor="#CC000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="4" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

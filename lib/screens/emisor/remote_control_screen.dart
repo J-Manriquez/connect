@@ -5,8 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/remote_control_service.dart';
 import '../../theme_colors.dart';
 import 'remote_apps_screen.dart';
-// ignore: unused_import — RemoteDebugScreen se usa desde el icono de debug
-// (actualmente oculto) para detectar errores del receptor. No eliminar.
 import 'remote_debug_screen.dart';
 
 class RemoteControlScreen extends StatefulWidget {
